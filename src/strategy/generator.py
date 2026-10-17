@@ -19,6 +19,7 @@ from src.core.types import (
     SetupCandidate,
     SMCEvent,
     SMCEventType,
+    StrategyDiagnostic,
     StructureState,
     SwingPoint,
     SwingType,
@@ -91,6 +92,7 @@ class SetupGenerator:
         self.bull_breakout_ret_48h = bull_breakout_ret_48h
         self.bull_breakout_ret_168h = bull_breakout_ret_168h
         self.bull_variance_ratio_min = bull_variance_ratio_min
+        self.last_diagnostic: Optional[StrategyDiagnostic] = None
 
     def generate_candidate(
         self,
@@ -107,12 +109,20 @@ class SetupGenerator:
         sub_1h = candles_1h[start_idx:limit]
 
         if len(sub_1h) < 170:
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code="INSUFFICIENT_DATA",
+                reason_detail=f"1H candle count ({len(sub_1h)}) below minimum 170 bars required for 7D macro baseline.",
+            )
             return None
 
         current_candle = sub_1h[-1]
         now_ts = current_candle.timestamp_ms
         current_price = current_candle.close
         if current_price <= 0:
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code="INVALID_DATA",
+                reason_detail=f"Current candle close price ({current_price}) is non-positive.",
+            )
             return None
 
         # 0. Fast All-Weather SMC 72H Dealing Range & Regime Pre-Screen (Zero Lookahead)
@@ -121,6 +131,10 @@ class SetupGenerator:
         lo_72 = min(c.low for c in window_72)
         span_72 = hi_72 - lo_72
         if span_72 <= 1e-8:
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code="INSUFFICIENT_DATA",
+                reason_detail="72H dealing range span is zero or invalid.",
+            )
             return None
 
         pos_in_range_72 = (current_price - lo_72) / span_72
@@ -175,6 +189,33 @@ class SetupGenerator:
                     in_bull_expansion = True
 
         if not (in_premium_exhaustion or in_discount_rejection or in_bull_expansion):
+            if self.discount_threshold < pos_in_range_72 < self.premium_threshold:
+                code = "EQUILIBRIUM_ZONE_72H"
+                detail = (
+                    f"Dealing range 72H position ({pos_in_range_72:.4f}) inside equilibrium "
+                    f"[{self.discount_threshold:.2f}, {self.premium_threshold:.2f}]."
+                )
+            elif pos_in_range_72 >= self.premium_threshold:
+                code = "NO_SMC_CONFLUENCE"
+                detail = f"Price in premium ({pos_in_range_72:.4f} >= {self.premium_threshold:.2f}), but short exhaustion momentum/candle criteria not met."
+            elif pos_in_range_72 <= self.discount_threshold:
+                code = "NO_SMC_CONFLUENCE"
+                detail = f"Price in discount ({pos_in_range_72:.4f} <= {self.discount_threshold:.2f}), but discount rejection momentum/candle criteria not met."
+            else:
+                code = "NO_SMC_CONFLUENCE"
+                detail = "Failed all dealing range momentum and regime criteria."
+
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code=code,
+                reason_detail=detail,
+                metadata={
+                    "pos_72": round(pos_in_range_72, 4),
+                    "span_72": span_72,
+                    "ret_48": round(ret_48, 4),
+                    "ret_12": round(ret_12, 4),
+                    "ret_168": round(ret_168, 4),
+                },
+            )
             return None
 
         # 1. Higher Timeframe 4H Bias (no lookahead: evaluated at 1H candle close_time_ms)
@@ -282,8 +323,18 @@ class SetupGenerator:
         # Bull Regime Expansion requires confirmed 4H BULLISH bias;
         # Discount Rejection allows non-BEARISH or macro uptrend bounce.
         if is_bull_expansion and bias_4h != MarketBias.BULLISH:
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code="HTF_BIAS_MISMATCH",
+                reason_detail=f"Bull expansion requires BULLISH 4H bias, got {bias_4h.value}.",
+                metadata={"bias_4h": bias_4h.value, "regime": "BULL_EXPANSION"},
+            )
             return None
         if not is_bull_expansion and bias_4h == MarketBias.BEARISH:
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code="HTF_BIAS_MISMATCH",
+                reason_detail="Discount rejection requires non-BEARISH 4H bias, got BEARISH.",
+                metadata={"bias_4h": bias_4h.value, "regime": "DISCOUNT_REJECTION"},
+            )
             return None
 
         now_ts = current_candle.timestamp_ms
@@ -322,6 +373,11 @@ class SetupGenerator:
         )
 
         if sl is None or tp1 is None or gross_rr < self.min_reward_to_risk:
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code="INSUFFICIENT_RISK_REWARD",
+                reason_detail=f"Planned Gross R:R ({gross_rr:.2f}) below {self.min_reward_to_risk:.2f} or opposing wall within 1.2R buffer.",
+                metadata={"gross_rr": gross_rr, "min_rr": self.min_reward_to_risk},
+            )
             return None
 
         active_ob = active_obs[-1] if active_obs else None
@@ -373,6 +429,7 @@ class SetupGenerator:
             has_active_fvg=bool(active_fvg),
         )
 
+        self.last_diagnostic = None
         return SetupCandidate(
             candidate_id=candidate_id,
             symbol=symbol,
@@ -450,6 +507,11 @@ class SetupGenerator:
         )
 
         if sl is None or tp1 is None or gross_rr < self.min_reward_to_risk:
+            self.last_diagnostic = StrategyDiagnostic(
+                reason_code="INSUFFICIENT_RISK_REWARD",
+                reason_detail=f"Planned Gross R:R ({gross_rr:.2f}) below {self.min_reward_to_risk:.2f} or opposing wall within 1.2R buffer.",
+                metadata={"gross_rr": gross_rr, "min_rr": self.min_reward_to_risk},
+            )
             return None
 
         active_ob = active_obs[-1] if active_obs else None
@@ -495,6 +557,7 @@ class SetupGenerator:
             has_active_fvg=bool(active_fvg),
         )
 
+        self.last_diagnostic = None
         return SetupCandidate(
             candidate_id=candidate_id,
             symbol=symbol,

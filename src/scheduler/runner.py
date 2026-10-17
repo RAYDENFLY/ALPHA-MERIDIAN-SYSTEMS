@@ -7,7 +7,7 @@ applies local ML probability scoring and risk gating, and journals results.
 
 from datetime import datetime, timezone
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from src.backtest.engine import BacktestEngine
 from src.core.logger import logger
 from src.core.types import CandidateStatus, Direction, ExecutionStatus, MarketBias, SetupCandidate, StructureState
@@ -109,6 +109,8 @@ class ScannerRunner:
         paper_config: Optional[PaperExecutionConfig] = None,
         paper_engine: Optional[PaperExecutionEngine] = None,
         event_dispatcher: Optional[PaperEventDispatcher] = None,
+        synchronizer: Optional[Any] = None,
+        generator: Optional[Any] = None,
     ) -> None:
         self.exchange = exchange
         self.db = db
@@ -143,8 +145,8 @@ class ScannerRunner:
                 self.paper_engine.event_dispatcher = self.event_dispatcher
 
 
-        self.synchronizer = CandleSynchronizer(exchange, db)
-        self.generator = SetupGenerator()
+        self.synchronizer = synchronizer or CandleSynchronizer(exchange, db)
+        self.generator = generator or SetupGenerator()
         self.model_registry = ModelRegistry(models_dir) if models_dir else ModelRegistry()
         self.evaluator = SetupEvaluator(self.model_registry)
 
@@ -276,12 +278,28 @@ class ScannerRunner:
     ) -> List[SetupCandidate]:
         """Execute a full scan cycle across symbols."""
         now_ms = int(time.time() * 1000)
+        cycle_id = f"SCAN_{now_ms}"
         self.last_scan_utc = datetime.now(timezone.utc).isoformat()
         self.scanner_state = "RUNNING"
         self.last_scan_status = "RUNNING"
         self.last_symbols_attempted = list(symbols)
         self.last_error = None
         logger.info(f"Running scanner cycle for {len(symbols)} symbols...")
+
+        # Phase 5 Lifecycle: SCAN_STARTED
+        if hasattr(self.journal, "save_lifecycle_event"):
+            try:
+                self.journal.save_lifecycle_event(
+                    candidate_id=cycle_id,
+                    symbol="ALL",
+                    stage="SCAN_STARTED",
+                    timestamp_ms=now_ms,
+                    reason_code="SCAN_INITIATED",
+                    reason_detail=f"Scan cycle started for {len(symbols)} symbols: {', '.join(symbols)}",
+                    metadata={"symbols": list(symbols), "sync_live": sync_live},
+                )
+            except Exception as lc_err:
+                logger.debug(f"Lifecycle event log skipped: {lc_err}")
 
         try:
             # 1. Optionally synchronize latest closed candles from exchange
@@ -320,6 +338,19 @@ class ScannerRunner:
                     c4_list = self.db.get_candles(sym, "4h")
 
                     if len(c1_list) < 40:
+                        if hasattr(self.journal, "save_lifecycle_event"):
+                            try:
+                                self.journal.save_lifecycle_event(
+                                    candidate_id=f"NO_DATA_{sym}_{now_ms}",
+                                    symbol=sym,
+                                    stage="SETUP_REJECTED",
+                                    timestamp_ms=now_ms,
+                                    reason_code="SYNC_FAILED" if sym in sync_errors else "INSUFFICIENT_DATA",
+                                    reason_detail=f"Candle count ({len(c1_list)}) below minimum 40.",
+                                    metadata={"candle_count": len(c1_list), "sync_error": sync_errors.get(sym)},
+                                )
+                            except Exception as lc_err:
+                                logger.debug(f"Lifecycle event log skipped: {lc_err}")
                         continue
 
                     latest_c1 = c1_list[-1]
@@ -338,7 +369,61 @@ class ScannerRunner:
                     )
 
                     if candidate is None:
+                        diag = getattr(self.generator, "last_diagnostic", None)
+                        reason_code = diag.reason_code if diag else "NO_SMC_CONFLUENCE"
+                        reason_detail = (
+                            diag.reason_detail
+                            if diag
+                            else "No SMC/SnR structural setup found in dealing range and order blocks."
+                        )
+                        event_metadata = {"candle_time_ms": latest_c1.timestamp_ms}
+                        if diag and diag.metadata:
+                            event_metadata.update(diag.metadata)
+
+                        if hasattr(self.journal, "save_lifecycle_event"):
+                            try:
+                                self.journal.save_lifecycle_event(
+                                    candidate_id=f"NO_SETUP_{sym}_{now_ms}",
+                                    symbol=sym,
+                                    stage="SETUP_REJECTED",
+                                    timestamp_ms=now_ms,
+                                    reason_code=reason_code,
+                                    reason_detail=reason_detail,
+                                    metadata=event_metadata,
+                                )
+                            except Exception as lc_err:
+                                logger.debug(f"Lifecycle event log skipped: {lc_err}")
                         continue
+
+                    # Phase 5 Lifecycle Stage 1 & 2: SCAN -> SETUP_DETECTED
+                    if hasattr(self.journal, "save_lifecycle_event"):
+                        try:
+                            self.journal.save_lifecycle_event(
+                                candidate_id=candidate.candidate_id,
+                                symbol=sym,
+                                stage="SCAN",
+                                timestamp_ms=now_ms,
+                                reason_code="BAR_EVALUATED",
+                                reason_detail=f"Evaluated closed 1H candle at {latest_c1.timestamp_ms}",
+                            )
+                            self.journal.save_lifecycle_event(
+                                candidate_id=candidate.candidate_id,
+                                symbol=sym,
+                                stage="SETUP_DETECTED",
+                                timestamp_ms=now_ms,
+                                reason_code="SMC_SNR_CONFLUENCE",
+                                reason_detail=f"{candidate.direction.value} {candidate.entry_category} setup at {candidate.entry_price}",
+                                metadata={
+                                    "direction": candidate.direction.value,
+                                    "entry_category": str(candidate.entry_category),
+                                    "entry_price": candidate.entry_price,
+                                    "stop_loss": candidate.stop_loss,
+                                    "take_profit_1": candidate.take_profit_1,
+                                    "take_profit_2": candidate.take_profit_2,
+                                },
+                            )
+                        except Exception as lc_err:
+                            logger.debug(f"Lifecycle event log skipped: {lc_err}")
 
                     # Fetch recent funding rate
                     rates = self.db.get_funding_rates(sym)
@@ -441,6 +526,47 @@ class ScannerRunner:
                             candidate.rejection_reasons.append(
                                 f"Immediate candle high ({latest_c1.high}) breached invalidation level ({candidate.invalidation_price})."
                             )
+
+                    # Phase 5 Lifecycle Stage 3 & 4: RISK_VALIDATION -> ELIGIBLE (or blocked reason code)
+                    if hasattr(self.journal, "save_lifecycle_event"):
+                        try:
+                            if candidate.status in (CandidateStatus.READY, CandidateStatus.VALID):
+                                self.journal.save_lifecycle_event(
+                                    candidate_id=candidate.candidate_id,
+                                    symbol=sym,
+                                    stage="RISK_VALIDATION",
+                                    timestamp_ms=now_ms,
+                                    reason_code="RISK_PASSED",
+                                    reason_detail="Sizing feasible and account risk limits satisfied.",
+                                )
+                                self.journal.save_lifecycle_event(
+                                    candidate_id=candidate.candidate_id,
+                                    symbol=sym,
+                                    stage="ELIGIBLE",
+                                    timestamp_ms=now_ms,
+                                    reason_code="ELIGIBLE_FOR_PAPER_ORDER",
+                                    reason_detail="Candidate qualified as READY for paper order creation.",
+                                )
+                            else:
+                                rej_text = "; ".join(candidate.rejection_reasons) if candidate.rejection_reasons else candidate.status.value
+                                self.journal.save_lifecycle_event(
+                                    candidate_id=candidate.candidate_id,
+                                    symbol=sym,
+                                    stage="RISK_VALIDATION",
+                                    timestamp_ms=now_ms,
+                                    reason_code=f"BLOCKED_{candidate.status.value}",
+                                    reason_detail=rej_text,
+                                )
+                                self.journal.save_lifecycle_event(
+                                    candidate_id=candidate.candidate_id,
+                                    symbol=sym,
+                                    stage="SETUP_REJECTED",
+                                    timestamp_ms=now_ms,
+                                    reason_code=f"REJECTED_{candidate.status.value}",
+                                    reason_detail=rej_text,
+                                )
+                        except Exception as lc_err:
+                            logger.debug(f"Lifecycle event log skipped: {lc_err}")
 
                     # Save to Journal (preserves full historical record)
                     self.journal.save_setup(candidate)
@@ -564,6 +690,33 @@ class ScannerRunner:
             for cand in ranked:
                 self.sync_candidate_execution_status(cand)
 
+            # Phase 5 Lifecycle: SCAN_COMPLETED
+            if hasattr(self.journal, "save_lifecycle_event"):
+                try:
+                    ready_candidates = [c for c in ranked if c.status == CandidateStatus.READY]
+                    reason_code = "SETUPS_FOUND" if ready_candidates else "NO_TRADE"
+                    reason_detail = (
+                        f"Scan cycle completed: {len(current_cycle_candidates)} evaluated, "
+                        f"{len(ready_candidates)} READY, {len(ranked)} tracked."
+                    )
+                    self.journal.save_lifecycle_event(
+                        candidate_id=cycle_id,
+                        symbol="ALL",
+                        stage="SCAN_COMPLETED",
+                        timestamp_ms=now_ms,
+                        reason_code=reason_code,
+                        reason_detail=reason_detail,
+                        metadata={
+                            "candidate_count": len(current_cycle_candidates),
+                            "ready_count": len(ready_candidates),
+                            "total_tracked": len(ranked),
+                            "symbols_scanned": list(symbols),
+                            "status": "SUCCESS",
+                        },
+                    )
+                except Exception as lc_err:
+                    logger.debug(f"Lifecycle event log skipped: {lc_err}")
+
             return ranked
 
         except Exception as top_err:
@@ -571,4 +724,17 @@ class ScannerRunner:
             self.scanner_state = "ERROR"
             self.last_scan_status = "FAILED"
             self.last_error = str(top_err)
+            if hasattr(self.journal, "save_lifecycle_event"):
+                try:
+                    self.journal.save_lifecycle_event(
+                        candidate_id=cycle_id,
+                        symbol="ALL",
+                        stage="SCAN_FAILED",
+                        timestamp_ms=now_ms,
+                        reason_code="SCAN_EXCEPTION",
+                        reason_detail=str(top_err),
+                        metadata={"symbols": list(symbols), "status": "FAILED"},
+                    )
+                except Exception:
+                    pass
             raise

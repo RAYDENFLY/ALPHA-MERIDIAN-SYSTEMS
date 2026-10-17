@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS paper_orders (
     price REAL NOT NULL,
     stop_price REAL,
     take_profit REAL,
+    take_profit_2 REAL,
     quantity REAL NOT NULL,
     notional_usdt REAL NOT NULL,
     margin_usdt REAL NOT NULL,
@@ -142,6 +143,23 @@ CREATE TABLE IF NOT EXISTS paper_orders (
 
 CREATE INDEX IF NOT EXISTS idx_paper_orders_sym_status
 ON paper_orders (symbol, status);
+
+CREATE TABLE IF NOT EXISTS paper_lifecycle_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    reason_code TEXT NOT NULL DEFAULT 'OK',
+    reason_detail TEXT NOT NULL DEFAULT '',
+    order_id TEXT DEFAULT '',
+    trade_id TEXT DEFAULT '',
+    timestamp_ms INTEGER NOT NULL,
+    created_at_utc TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_lifecycle_cand_time
+ON paper_lifecycle_events (candidate_id, timestamp_ms);
 """
 
 
@@ -200,6 +218,8 @@ class DatabaseManager:
         po_columns = {row["name"] for row in cur.fetchall()}
         if "entry_category" not in po_columns:
             cur.execute("ALTER TABLE paper_orders ADD COLUMN entry_category TEXT DEFAULT 'Unclassified';")
+        if "take_profit_2" not in po_columns:
+            cur.execute("ALTER TABLE paper_orders ADD COLUMN take_profit_2 REAL;")
 
 
     def init_db(self) -> None:

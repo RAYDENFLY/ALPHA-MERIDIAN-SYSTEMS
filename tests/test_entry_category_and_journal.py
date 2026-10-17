@@ -650,6 +650,7 @@ class TestPaperExecutionEngineLifecycle:
             tp=62000.0,
             entry_category=EntryCategory.BREAKOUT,
         )
+        cand.take_profit_2 = None
 
         # 1. Submit candidate -> PaperOrder created with category
         order = paper_engine.submit_candidate(cand, now_ms=1700000000000)

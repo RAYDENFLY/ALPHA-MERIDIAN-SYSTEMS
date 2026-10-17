@@ -45,6 +45,53 @@ ALLOWED_TRANSITIONS: Dict[PaperOrderStatus, Set[PaperOrderStatus]] = {
 }
 
 
+class PaperLifecycleStage(str, Enum):
+    """Explicit paper trading signal-to-journal lifecycle and scan observability states."""
+    SCAN = "SCAN"
+    SCAN_STARTED = "SCAN_STARTED"
+    SCAN_COMPLETED = "SCAN_COMPLETED"
+    SCAN_FAILED = "SCAN_FAILED"
+    SETUP_DETECTED = "SETUP_DETECTED"
+    SETUP_REJECTED = "SETUP_REJECTED"
+    RISK_VALIDATION = "RISK_VALIDATION"
+    ELIGIBLE = "ELIGIBLE"
+    PAPER_ORDER_CREATED = "PAPER_ORDER_CREATED"
+    ENTRY_FILLED = "ENTRY_FILLED"
+    POSITION_OPEN = "POSITION_OPEN"
+    EXIT_TRIGGERED = "EXIT_TRIGGERED"
+    POSITION_CLOSED = "POSITION_CLOSED"
+    JOURNAL_FINALIZED = "JOURNAL_FINALIZED"
+
+
+@dataclass
+class PaperLifecycleEvent:
+    """Represents a timestamped state transition along the 10-stage paper trading lifecycle."""
+    candidate_id: str
+    symbol: str
+    stage: PaperLifecycleStage
+    timestamp_ms: int
+    reason_code: str = "OK"
+    reason_detail: str = ""
+    order_id: str = ""
+    trade_id: str = ""
+    created_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "candidate_id": self.candidate_id,
+            "symbol": self.symbol,
+            "stage": self.stage.value if hasattr(self.stage, "value") else str(self.stage),
+            "timestamp_ms": self.timestamp_ms,
+            "reason_code": self.reason_code,
+            "reason_detail": self.reason_detail,
+            "order_id": self.order_id,
+            "trade_id": self.trade_id,
+            "created_at_utc": self.created_at_utc,
+            "metadata": dict(self.metadata),
+        }
+
+
 @dataclass
 class PaperOrder:
     """Represents a simulated paper order with strict state transitions."""
@@ -198,4 +245,42 @@ class PaperPosition:
     lowest_favorable_price: Optional[float] = None
     trailing_distance: Optional[float] = None
     breakeven_stop_price: Optional[float] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize PaperPosition to dictionary for SQLite persistence and crash recovery."""
+        return {
+            "trade_id": self.trade_id,
+            "order_id": self.order_id,
+            "setup_id": self.setup_id,
+            "symbol": self.symbol,
+            "direction": self.direction.value if hasattr(self.direction, "value") else str(self.direction),
+            "entry_timestamp_ms": self.entry_timestamp_ms,
+            "entry_price": self.entry_price,
+            "stop_loss": self.stop_loss,
+            "take_profit": self.take_profit,
+            "quantity": self.quantity,
+            "notional_usdt": self.notional_usdt,
+            "margin_usdt": self.margin_usdt,
+            "leverage": self.leverage,
+            "entry_fee": self.entry_fee,
+            "funding_paid": self.funding_paid,
+            "funding_data_missing": self.funding_data_missing,
+            "is_open": self.is_open,
+            "settled_funding_timestamps": list(self.settled_funding_timestamps),
+            "entry_category": self.entry_category,
+            "initial_stop_loss": self.initial_stop_loss,
+            "initial_quantity": self.initial_quantity,
+            "take_profit_1": self.take_profit_1,
+            "take_profit_2": self.take_profit_2,
+            "tp1_hit": self.tp1_hit,
+            "tp1_hit_timestamp_ms": self.tp1_hit_timestamp_ms,
+            "realized_partial_pnl_gross": self.realized_partial_pnl_gross,
+            "realized_partial_fee_paid": self.realized_partial_fee_paid,
+            "trailing_active": self.trailing_active,
+            "highest_favorable_price": self.highest_favorable_price,
+            "lowest_favorable_price": self.lowest_favorable_price,
+            "trailing_distance": self.trailing_distance,
+            "breakeven_stop_price": self.breakeven_stop_price,
+        }
+
 

@@ -1,0 +1,7 @@
+Scenario_ID,Description,Input_PnL_Gross,Fee_Paid,Slippage_Paid,Funding_Paid,Expected_PnL_Net,Restored_Daily_Loss,Restored_Weekly_Loss,Restored_Equity,Restored_Weekly_Entries,Can_Open_Position,Status,Evidence
+REC-RISK-01,Net realized PnL accounting includes maker fee and slippage,-0.1,0.04,0.04,0.0,-0.18,0.18,0.18,15.82,1,False,PASS,"daily_loss=0.18, weekly_loss=0.18, can_open=False, reason=Daily loss limit ($0.18) reached ($0.18 loss)."
+REC-RISK-02,"UTC midnight reset: daily loss resets to 0, weekly loss 0.18 persists",-0.1,0.04,0.04,0.0,-0.18,0.0,0.18,15.82,1,True,PASS,"daily_loss=0.0, weekly_loss=0.18, eff_risk=0.09, can_open=True"
+REC-RISK-03,Hard SL (.50) breaches weekly cap (.54) and blocks mid-week entries,-1.4875,0.0075,0.005,0.0,-1.5,0.0,1.68,14.32,2,False,PASS,"daily_loss=0.0, weekly_loss=1.68, can_open=False, reason=Weekly loss limit ($0.54) reached ($1.68 loss)."
+REC-RISK-04,Monday 00:00 UTC weekly reset: weekly loss and entries reset to 0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,14.32,0,True,PASS,"daily_loss=0.0, weekly_loss=0.0, entries=0, can_open=True"
+REC-RISK-05,Idempotent deduplication: repeated saves and sync calls do not double-count,-0.1,0.04,0.04,0.0,-0.18,1.68,1.68,14.32,2,False,PASS,"daily_loss=1.68 (0.18 + 1.50 exactly), equity=14.32"
+REC-RISK-06,Open trade restoration from journal enforces max_open_positions=1,0.0,0.0,0.0,0.0,0.0,1.68,1.68,14.32,3,False,PASS,"open_trades=1, can_open=False, reason=Maximum open position limit (1) reached."

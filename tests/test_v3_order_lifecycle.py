@@ -541,4 +541,149 @@ class TestV3OrderLifecycleAndFailureScenarios:
         # Only order 801 should have been cancelled
         adapter.cancel_order.assert_called_once_with(symbol="BTCUSDT", order_id="801")
 
+    def test_22_tp1_transition_to_breakeven_and_tp2_atomic_replacement(self, risk_mgr):
+        """22. TP1 partial fill -> places & verifies new break-even SL BEFORE cancelling old SL, and sets TP2."""
+        adapter = MagicMock()
+        call_sequence = []
+
+        def mock_create_order(**kwargs):
+            cid = kwargs.get("client_order_id", "")
+            if cid.startswith("SLBE_"):
+                call_sequence.append("CREATE_NEW_BE_SL")
+                return {"orderId": 302, "status": "NEW"}
+            elif cid.startswith("TP2_"):
+                call_sequence.append("CREATE_NEW_TP2")
+                return {"orderId": 303, "status": "NEW"}
+            return {"orderId": 300, "status": "NEW"}
+
+        def mock_cancel_order(symbol, order_id=None, **kwargs):
+            call_sequence.append(f"CANCEL_{order_id}")
+            return {"status": "CANCELED"}
+
+        def mock_get_order(symbol, order_id=None, client_order_id=None):
+            if str(order_id) == "302":
+                return {"orderId": 302, "status": "NEW", "side": "SELL", "origQty": "0.0025", "stopPrice": str(60000.0 * 1.0014)}
+            if str(order_id) == "303":
+                return {"orderId": 303, "status": "NEW", "side": "SELL", "origQty": "0.0025", "stopPrice": "64000.0"}
+            return None
+
+        adapter.create_order.side_effect = mock_create_order
+        adapter.cancel_order.side_effect = mock_cancel_order
+        adapter.get_order.side_effect = mock_get_order
+        adapter.get_open_orders.return_value = None
+
+        manager = V3OrderLifecycleManager(adapter=adapter, risk_manager=risk_mgr)
+        pos = ManagedPosition(
+            candidate_id="SETUP_BTC_TP1_001",
+            symbol="BTCUSDT",
+            direction=Direction.LONG,
+            intended_quantity=0.005,
+            filled_quantity=0.005,
+            entry_price=60000.0,
+            stop_loss_price=59000.0,
+            take_profit_price=61500.0,
+            take_profit_2_price=64000.0,
+            initial_stop_loss_price=59000.0,
+            sl_order_id="102",
+            tp_order_id="103",
+            protection_state=ProtectionState.PROTECTED,
+            is_open=True,
+        )
+
+        ok, msg = manager.transition_to_tp1_breakeven(pos, executed_tp1_qty=0.0025, fee_buffer_pct=0.0014)
+        assert ok is True
+        assert pos.tp1_hit is True
+        assert pos.trailing_active is True
+        assert pos.filled_quantity == pytest.approx(0.0025)
+        assert pos.stop_loss_price == pytest.approx(60000.0 * 1.0014)
+        assert pos.take_profit_price == pytest.approx(64000.0)
+        assert pos.sl_order_id == "302"
+        assert pos.tp_order_id == "303"
+        # Prove atomic order: CREATE_NEW_BE_SL happened BEFORE CANCEL_102
+        assert call_sequence.index("CREATE_NEW_BE_SL") < call_sequence.index("CANCEL_102")
+
+    def test_23_update_trailing_stop_ratchets_monotonically(self, risk_mgr):
+        """23. update_trailing_stop ratchets SL up on higher highs and ignores lower highs."""
+        adapter = MagicMock()
+        adapter.create_order.return_value = {"orderId": 402, "status": "NEW"}
+        adapter.get_open_orders.return_value = None
+        adapter.get_order.return_value = {
+            "orderId": 402,
+            "status": "NEW",
+            "side": "SELL",
+            "origQty": "0.0025",
+            "stopPrice": "61800.0",
+        }
+
+        manager = V3OrderLifecycleManager(adapter=adapter, risk_manager=risk_mgr)
+        pos = ManagedPosition(
+            candidate_id="SETUP_BTC_TRAIL_001",
+            symbol="BTCUSDT",
+            direction=Direction.LONG,
+            intended_quantity=0.005,
+            filled_quantity=0.0025,
+            entry_price=60000.0,
+            stop_loss_price=60084.0,
+            take_profit_price=64000.0,
+            initial_stop_loss_price=59000.0,
+            sl_order_id="302",
+            tp_order_id="303",
+            tp1_hit=True,
+            trailing_active=True,
+            trailing_distance=1000.0,
+            breakeven_stop_price=60084.0,
+            highest_favorable_price=61500.0,
+            protection_state=ProtectionState.PROTECTED,
+            is_open=True,
+        )
+
+        # High reaches 62800 -> new SL should ratchet to 61800.0
+        updated, msg = manager.update_trailing_stop(pos, current_high=62800.0, current_low=61400.0)
+        assert updated is True
+        assert pos.stop_loss_price == pytest.approx(61800.0)
+        assert pos.sl_order_id == "402"
+        adapter.cancel_order.assert_called_once_with(symbol="BTCUSDT", order_id="302")
+
+        # Subsequent bar with lower high (62200) must NOT lower the trailing stop
+        adapter.create_order.reset_mock()
+        updated_again, _ = manager.update_trailing_stop(pos, current_high=62200.0, current_low=61900.0)
+        assert updated_again is False
+        assert pos.stop_loss_price == pytest.approx(61800.0)
+        adapter.create_order.assert_not_called()
+
+    def test_24_atomic_sl_replacement_preserves_old_sl_if_new_sl_rejected(self, risk_mgr):
+        """24. If new trailing SL submission fails on exchange, old SL is NEVER cancelled."""
+        adapter = MagicMock()
+        adapter.create_order.side_effect = Exception("Exchange busy (-1001)")
+
+        manager = V3OrderLifecycleManager(adapter=adapter, risk_manager=risk_mgr)
+        pos = ManagedPosition(
+            candidate_id="SETUP_BTC_TRAIL_FAIL_001",
+            symbol="BTCUSDT",
+            direction=Direction.LONG,
+            intended_quantity=0.005,
+            filled_quantity=0.0025,
+            entry_price=60000.0,
+            stop_loss_price=60084.0,
+            take_profit_price=64000.0,
+            initial_stop_loss_price=59000.0,
+            sl_order_id="302",
+            tp_order_id="303",
+            tp1_hit=True,
+            trailing_active=True,
+            trailing_distance=1000.0,
+            breakeven_stop_price=60084.0,
+            highest_favorable_price=61500.0,
+            protection_state=ProtectionState.PROTECTED,
+            is_open=True,
+        )
+
+        updated, msg = manager.update_trailing_stop(pos, current_high=63000.0, current_low=61500.0)
+        assert updated is False
+        # Old SL 302 at 60084.0 must remain untouched!
+        assert pos.sl_order_id == "302"
+        assert pos.stop_loss_price == pytest.approx(60084.0)
+        adapter.cancel_order.assert_not_called()
+
+
 

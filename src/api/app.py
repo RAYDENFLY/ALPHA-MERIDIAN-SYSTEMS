@@ -51,6 +51,7 @@ risk_mgr = RiskManager(
     max_open_positions=cfg.risk.max_open_positions,
     max_entries_per_week=cfg.risk.max_entries_per_week,
 )
+risk_mgr.sync_state_from_journal(journal)
 
 specs_map: Dict[str, Any] = {}
 runner: Optional[ScannerRunner] = None
@@ -361,8 +362,11 @@ def get_system_status() -> Dict[str, Any]:
             "open_positions": len(runner.paper_engine.open_positions) if (runner and runner.paper_engine) else 0,
             "pending_orders": len(runner.paper_engine.pending_orders) if (runner and runner.paper_engine) else 0,
             "slippage_rate": cfg.paper.slippage_rate,
+            "maker_fee_rate": cfg.paper.maker_fee_rate,
+            "taker_fee_rate": cfg.paper.taker_fee_rate,
             "discord_monitoring": bool(cfg.paper.discord_webhook_url),
         },
+        "forward_validation": journal.compute_forward_validation_cohort(),
         "discord": {
             "enabled": bool(cfg.paper.discord_webhook_url and validate_webhook_url(cfg.paper.discord_webhook_url)),
             "webhook_configured": bool(cfg.paper.discord_webhook_url),
@@ -772,6 +776,7 @@ def get_journal(limit: int = 50) -> Dict[str, Any]:
         "setups": setups,
         "trades": trades,
         "metrics": metrics,
+        "forward_validation": journal.compute_forward_validation_cohort(),
     }
 
 
@@ -811,6 +816,8 @@ def get_trades(
     filtered_metrics = journal.compute_trade_metrics(trades)
 
     orders = journal.get_paper_orders(symbol=symbol)
+    lifecycle_events = journal.get_lifecycle_events(symbol=symbol, limit=limit)
+    forward_cohort = journal.compute_forward_validation_cohort()
     return {
         "count": len(trades),
         "trades": trades,
@@ -818,22 +825,24 @@ def get_trades(
         "filtered_metrics": filtered_metrics,
         "paper_orders_count": len(orders),
         "paper_orders": orders[:limit],
+        "lifecycle_events_count": len(lifecycle_events),
+        "lifecycle_events": lifecycle_events,
+        "forward_validation": forward_cohort,
     }
 
 
 @app.get("/api/backtest")
-
 def run_backtest_report(symbols: Optional[str] = None) -> Dict[str, Any]:
-    """Run event-driven backtest comparing Deterministic SMC/SnR vs ML-Filtered on historical data."""
+    """Run event-driven backtest comparing Deterministic SMC/SnR vs ML-Filtered across watchlist with chronological OOS decomposition."""
     if symbols:
         active_symbols = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     else:
-        active_symbols = [s for s in cfg.watchlist if s in enabled_symbols][:3]
+        active_symbols = [s for s in cfg.watchlist if s in enabled_symbols]
 
     if not active_symbols:
-        active_symbols = ["ADAUSDT", "BTCUSDT"]
+        active_symbols = list(cfg.watchlist)
 
-    # 1. Deterministic baseline (No ML filter)
+    # 1. Deterministic baseline (No ML filter) across all active symbols
     engine_deterministic = BacktestEngine(
         db=db,
         symbol_specs_map=specs_map,
@@ -863,7 +872,57 @@ def run_backtest_report(symbols: Optional[str] = None) -> Dict[str, Any]:
         min_ml_confidence=cfg.ml.min_confidence_threshold,
     )
 
+    # 3. Compute chronological Train / Validation / Out-of-Sample Test split metrics with 48h purge
+    train_end_ms = 1787011200000    # 2026-08-18 00:00 UTC (48h before 2026-08-20)
+    val_start_ms = 1787184000000    # 2026-08-20 00:00 UTC
+    val_end_ms = 1788220800000      # 2026-09-01 00:00 UTC (48h before 2026-09-03)
+    test_start_ms = 1788393600000   # 2026-09-03 00:00 UTC
+
+    def _split_summary(trades_list):
+        if not trades_list:
+            return {"trades": 0, "win_rate_pct": 0.0, "net_pnl": 0.0, "expectancy_per_trade": 0.0}
+        n = len(trades_list)
+        wins = sum(1 for t in trades_list if t.pnl_net > 0)
+        net = sum(t.pnl_net for t in trades_list)
+        return {
+            "trades": n,
+            "win_rate_pct": round((wins / n) * 100.0, 2),
+            "net_pnl": round(net, 4),
+            "expectancy_per_trade": round(net / n, 4),
+        }
+
+    det_closed = list(engine_deterministic.risk_manager.closed_trades)
+    det_train = [t for t in det_closed if t.entry_timestamp_ms < train_end_ms]
+    det_val = [t for t in det_closed if val_start_ms <= t.entry_timestamp_ms < val_end_ms]
+    det_oos = [t for t in det_closed if t.entry_timestamp_ms >= test_start_ms]
+    oos_split = _split_summary(det_oos)
+
+    if oos_split["trades"] < 30:
+        oos_status = (
+            f"INSUFFICIENT_OOS_SAMPLE ({oos_split['trades']}/30 portfolio OOS trades; "
+            f"OOS Net PnL ${oos_split['net_pnl']:+.2f}, Expectancy ${oos_split['expectancy_per_trade']:+.4f}/trade)"
+        )
+    elif oos_split["expectancy_per_trade"] <= 0:
+        oos_status = f"NEGATIVE_OOS_EXPECTANCY (${oos_split['expectancy_per_trade']:+.4f}/trade)"
+    else:
+        oos_status = f"VALIDATED_OOS_POSITIVE (${oos_split['expectancy_per_trade']:+.4f}/trade)"
+
     return {
+        "symbols_evaluated": active_symbols,
+        "cost_assumptions": {
+            "maker_fee_rate": engine_deterministic.maker_fee,
+            "taker_fee_rate": engine_deterministic.taker_fee,
+            "slippage_rate": engine_deterministic.slippage,
+            "target_isolated_margin_usdt": engine_deterministic.target_isolated_margin,
+            "hard_sl_loss_limit_usdt": engine_deterministic.hard_risk_limit_usdt,
+        },
+        "chronological_splits": {
+            "in_sample_train": _split_summary(det_train),
+            "validation": _split_summary(det_val),
+            "out_of_sample_test": oos_split,
+            "purge_embargo_hours": 48,
+            "historical_validation_status": oos_status,
+        },
         "deterministic": {
             "initial_equity": report_det.initial_equity,
             "final_equity": report_det.final_equity,

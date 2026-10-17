@@ -284,6 +284,12 @@ class BacktestEngine:
                             fee_paid=entry_fee,
                             funding_paid=0.0,
                             is_open=True,
+                            setup_id=candidate.candidate_id,
+                            entry_category=(
+                                candidate.entry_category.value
+                                if hasattr(candidate.entry_category, "value")
+                                else str(candidate.entry_category)
+                            ),
                         )
                         self.risk_manager.record_entry(active_trade)
                         break  # Max 1 open position across account
@@ -381,7 +387,7 @@ class BacktestEngine:
                 trade.is_open = False
                 return True
             elif hit_tp:
-                exit_price = trade.take_profit * (1.0 - self.slippage)
+                exit_price = trade.take_profit * (1.0 + self.slippage)
                 exit_fee = (trade.quantity * exit_price) * self.taker_fee
                 trade.fee_paid += exit_fee
                 trade.exit_timestamp_ms = candle.timestamp_ms

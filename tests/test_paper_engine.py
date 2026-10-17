@@ -437,3 +437,129 @@ class TestRunnerIntegration:
             runner.mode = ExecutionMode.RESEARCH
             # In RESEARCH mode, paper_engine.submit_candidate is never invoked
             mock_paper_engine.submit_candidate.assert_not_called()
+
+
+class TestTP1ToTrailingStopReadiness:
+    """Verifies TP1 partial close, fee-adjusted break-even SL transition, and trailing stop toward TP2."""
+
+    def test_long_tp1_partial_close_breakeven_and_trailing_stop_exit(self, paper_engine):
+        """LONG position hits TP1 (closes 50%, moves SL to fee-adjusted BE), ratchets trailing stop, then exits at TRAILING_STOP."""
+        events = []
+        paper_engine.event_dispatcher.subscribe(lambda ev: events.append(ev))
+
+        cand = make_sample_candidate(symbol="BTCUSDT", direction=Direction.LONG, entry=60000.0, sl=59000.0, tp=61500.0)
+        cand.take_profit_2 = 64000.0
+        cand.risk_assessment.quantity = 0.001
+        cand.risk_assessment.position_notional_usdt = 60.0
+
+        order = paper_engine.submit_candidate(cand, now_ms=1700000000000)
+        assert order is not None
+        assert order.take_profit_2 == 64000.0
+
+        # Bar 1: Fill LONG at 60000.0
+        fill_bar = make_candle("BTCUSDT", 1700003600000, 60100.0, 60100.0, 59850.0, 59950.0)
+        paper_engine.evaluate_pending_orders({"BTCUSDT": [fill_bar]}, now_ms=1700003600000)
+        assert "BTCUSDT" in paper_engine.open_positions
+
+        # Bar 2: Price reaches TP1 (61500.0) with high=61600.0 (does not hit SL=59000)
+        tp1_bar = make_candle("BTCUSDT", 1700007200000, 60000.0, 61600.0, 59900.0, 61550.0)
+        closed_at_tp1 = paper_engine.evaluate_open_positions({"BTCUSDT": [tp1_bar]}, now_ms=1700007200000)
+
+        # Position remains open for the 50% runner leg!
+        assert len(closed_at_tp1) == 0
+        assert "BTCUSDT" in paper_engine.open_positions
+        pos = paper_engine.open_positions["BTCUSDT"]
+        assert pos.tp1_hit is True
+        assert pos.trailing_active is True
+        assert pos.quantity == pytest.approx(0.0005)
+        assert pos.take_profit == 64000.0
+        assert pos.breakeven_stop_price > 60000.0  # Fee-buffered break-even above entry
+        # High was 61600, trailing_distance = 1R = 1000 -> ratcheted SL = 60600 > breakeven (~60072)
+        assert pos.stop_loss == pytest.approx(60600.0)
+        assert any(e.event_type == PaperEventType.TP1_PARTIAL_HIT for e in events)
+
+        # Bar 3: Price extends higher to 62800.0 (below TP2=64000) -> trailing stop ratchets up to 61800.0
+        ratchet_bar = make_candle("BTCUSDT", 1700010800000, 61550.0, 62800.0, 61200.0, 62500.0)
+        closed_on_ratchet = paper_engine.evaluate_open_positions({"BTCUSDT": [ratchet_bar]}, now_ms=1700010800000)
+        assert len(closed_on_ratchet) == 0
+        assert pos.stop_loss == pytest.approx(61800.0)
+        assert any(e.event_type == PaperEventType.TRAILING_STOP_UPDATED for e in events)
+
+        # Bar 4: Price pulls back to 61700.0, hitting ratcheted trailing stop at 61800.0
+        trail_hit_bar = make_candle("BTCUSDT", 1700014400000, 62500.0, 62600.0, 61700.0, 61750.0)
+        closed_runner = paper_engine.evaluate_open_positions({"BTCUSDT": [trail_hit_bar]}, now_ms=1700014400000)
+        assert len(closed_runner) == 1
+        trade = closed_runner[0]
+        assert trade.exit_reason == "TRAILING_STOP"
+        assert trade.pnl_net > 0.0
+        assert trade.quantity == pytest.approx(0.001)
+        assert "BTCUSDT" not in paper_engine.open_positions
+
+    def test_short_tp1_partial_close_and_tp2_full_target(self, paper_engine):
+        """SHORT position hits TP1 (closes 50%, moves SL below entry to fee-adjusted BE), then hits TP2."""
+        cand = make_sample_candidate(
+            symbol="ETHUSDT",
+            direction=Direction.SHORT,
+            entry=3000.0,
+            sl=3100.0,
+            tp=2850.0,
+        )
+        cand.take_profit_2 = 2700.0
+        cand.risk_assessment.quantity = 0.02
+        cand.risk_assessment.position_notional_usdt = 60.0
+
+        paper_engine.submit_candidate(cand, now_ms=1700000000000)
+        fill_bar = make_candle("ETHUSDT", 1700003600000, 2990.0, 3010.0, 2980.0, 2995.0)
+        paper_engine.evaluate_pending_orders({"ETHUSDT": [fill_bar]}, now_ms=1700003600000)
+        assert "ETHUSDT" in paper_engine.open_positions
+
+        # Bar 2: SHORT hits TP1 (2850.0) with low=2840.0
+        tp1_bar = make_candle("ETHUSDT", 1700007200000, 2995.0, 3010.0, 2840.0, 2860.0)
+        closed_tp1 = paper_engine.evaluate_open_positions({"ETHUSDT": [tp1_bar]}, now_ms=1700007200000)
+        assert len(closed_tp1) == 0
+        pos = paper_engine.open_positions["ETHUSDT"]
+        assert pos.tp1_hit is True
+        assert pos.quantity == pytest.approx(0.01)
+        assert pos.breakeven_stop_price < 3000.0
+        # Low was 2840, 1R=100 -> trailed SL = 2940.0 < breakeven (~2996.4)
+        assert pos.stop_loss == pytest.approx(2940.0)
+        assert pos.take_profit == 2700.0
+
+        # Bar 3: SHORT reaches TP2 (2700.0) with low=2690.0
+        tp2_bar = make_candle("ETHUSDT", 1700010800000, 2860.0, 2880.0, 2690.0, 2710.0)
+        closed_tp2 = paper_engine.evaluate_open_positions({"ETHUSDT": [tp2_bar]}, now_ms=1700010800000)
+        assert len(closed_tp2) == 1
+        trade = closed_tp2[0]
+        assert trade.exit_reason == "TAKE_PROFIT_2"
+        # Weighted average exit of 50% at 2850 + 50% at 2700 = 2775.0
+        assert trade.exit_price == pytest.approx(2775.0)
+        assert trade.pnl_net > 0.0
+
+    def test_post_tp1_crash_recovery_preserves_runner_and_trailing_state(self, temp_db, journal_repo, risk_mgr, paper_cfg):
+        """Restarting PaperExecutionEngine after TP1 partial hit restores runner qty, tp1_hit, and trailed SL."""
+        engine1 = PaperExecutionEngine(temp_db, journal_repo, risk_mgr, paper_cfg)
+        cand = make_sample_candidate(symbol="BTCUSDT", direction=Direction.LONG, entry=60000.0, sl=59000.0, tp=61200.0)
+        cand.take_profit_2 = 63500.0
+        cand.risk_assessment.quantity = 0.001
+        cand.risk_assessment.position_notional_usdt = 60.0
+
+        engine1.submit_candidate(cand, now_ms=1700000000000)
+        fill_bar = make_candle("BTCUSDT", 1700003600000, 60100.0, 60100.0, 59850.0, 59950.0)
+        engine1.evaluate_pending_orders({"BTCUSDT": [fill_bar]}, now_ms=1700003600000)
+
+        tp1_bar = make_candle("BTCUSDT", 1700007200000, 60000.0, 61250.0, 59950.0, 61100.0)
+        engine1.evaluate_open_positions({"BTCUSDT": [tp1_bar]}, now_ms=1700007200000)
+
+        # Simulate process restart
+        new_risk_mgr = RiskManager()
+        engine2 = PaperExecutionEngine(temp_db, journal_repo, new_risk_mgr, paper_cfg)
+        assert "BTCUSDT" in engine2.open_positions
+        recovered_pos = engine2.open_positions["BTCUSDT"]
+        assert recovered_pos.tp1_hit is True
+        assert recovered_pos.trailing_active is True
+        assert recovered_pos.quantity == pytest.approx(0.0005)
+        assert recovered_pos.initial_quantity == pytest.approx(0.001)
+        assert recovered_pos.take_profit == 63500.0
+        assert recovered_pos.stop_loss == pytest.approx(60250.0)
+        assert recovered_pos.realized_partial_pnl_gross == pytest.approx(0.60)
+

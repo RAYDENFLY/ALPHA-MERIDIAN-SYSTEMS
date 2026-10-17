@@ -82,26 +82,30 @@ class CalibratedModelWrapper:
 
     @property
     def calibration_status(self) -> str:
-        if self.reliability_report is not None:
-            return self.reliability_report.calibration_status
-        return "DEGRADED" if self.used_fallback else "OK"
+        rel = getattr(self, "reliability_report", None)
+        if rel is not None:
+            return rel.calibration_status
+        return "DEGRADED" if getattr(self, "used_fallback", False) else "OK"
 
     @property
     def ranking_status(self) -> str:
-        if self.reliability_report is not None:
-            return self.reliability_report.ranking_status
+        rel = getattr(self, "reliability_report", None)
+        if rel is not None:
+            return rel.ranking_status
         return "RANK_UNKNOWN"
 
     @property
     def probability_valid(self) -> bool:
-        if self.reliability_report is not None:
-            return self.reliability_report.probability_valid
-        return not self.used_fallback
+        rel = getattr(self, "reliability_report", None)
+        if rel is not None:
+            return rel.probability_valid
+        return not getattr(self, "used_fallback", False)
 
     @property
     def abstain(self) -> bool:
-        if self.reliability_report is not None:
-            return self.reliability_report.abstain
+        rel = getattr(self, "reliability_report", None)
+        if rel is not None:
+            return rel.abstain
         return False
 
     def _extract_positive_raw_probs(self, x: np.ndarray) -> np.ndarray:
@@ -115,7 +119,7 @@ class CalibratedModelWrapper:
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         raw_probs = self._extract_positive_raw_probs(x)
-        if self.used_fallback or self.calibrator is None:
+        if getattr(self, "used_fallback", False) or getattr(self, "calibrator", None) is None:
             cal_probs = raw_probs
         else:
             try:

@@ -1,0 +1,13 @@
+config,symbol,total_1h_bars,warmup_bars_lt_170,evaluated_bars,raw_momentum_setups_before_dr72,rejected_dr72_with_active_momentum,rejected_dr72_equilibrium_no_momentum,bars_in_dr72_extreme_zone,rejected_momentum_or_candle_dir,rejected_4h_bias,rejected_opposing_snr_wall_1_2r,rejected_risk_sizing_infeasible,eligible_setups,paper_limit_filled,paper_expired_non_fill,paper_invalidated_pre_fill,paper_completed_trades_standalone
+A_Baseline_0.12_0.88,ADAUSDT,8836,169,8667,81,31,6700,1936,1888,5,25,0,18,16,0,2,16
+A_Baseline_0.12_0.88,XRPUSDT,8836,169,8667,55,16,7064,1587,1548,2,22,0,15,12,0,3,12
+A_Baseline_0.12_0.88,BTCUSDT,8836,169,8667,14,5,7052,1610,1601,0,5,4,0,0,0,0,0
+A_Baseline_0.12_0.88,BNBUSDT,8836,169,8667,13,3,7074,1590,1581,0,3,0,6,5,0,1,5
+A_Baseline_0.12_0.88,ETHUSDT,8836,169,8667,43,27,7302,1338,1322,2,9,0,5,5,0,0,5
+A_Baseline_0.12_0.88,SOLUSDT,8836,169,8667,43,11,6998,1658,1628,5,16,0,9,9,0,0,9
+A_Baseline_0.12_0.88,AVAXUSDT,8836,169,8667,63,27,6977,1663,1628,1,21,0,13,10,1,2,10
+A_Baseline_0.12_0.88,LINKUSDT,8836,169,8667,46,16,6944,1707,1678,5,19,0,5,4,0,1,4
+A_Baseline_0.12_0.88,XMRUSDT,6647,169,6478,21,6,5234,1238,1223,2,11,0,2,1,0,1,1
+A_Baseline_0.12_0.88,DOGEUSDT,8836,169,8667,67,35,7246,1386,1354,2,19,0,11,10,0,1,10
+A_Baseline_0.12_0.88,LTCUSDT,8836,169,8667,21,11,6779,1877,1867,0,6,0,4,2,0,2,2
+A_Baseline_0.12_0.88,ALL_11_SYMBOLS,95007,1859,93148,467,188,75370,17590,17318,24,156,4,88,74,1,13,74

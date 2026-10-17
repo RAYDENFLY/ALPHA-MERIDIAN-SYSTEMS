@@ -100,6 +100,24 @@
             </div>
         </div>
 
+        <!-- Forward Paper Validation & Execution Pipeline Truthfulness Banner -->
+        <div class="card-bg p-4 rounded-xl border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Forward Paper Validation:</span>
+                <span id="forwardValidationBadge" class="px-2.5 py-0.5 text-xs font-bold rounded badge-yellow">UNPROVEN_NO_COMPLETED_FORWARD_TRADES</span>
+                <span id="forwardValidationNote" class="text-xs text-slate-400">0/30 completed forward paper trades recorded. Strategy edge is unproven in forward execution.</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-4 text-xs font-mono text-slate-300">
+                <span>Paper Orders: <strong id="paperOrdersCreatedCount" class="text-white">0</strong> (<span id="paperOrdersPendingCount" class="text-amber-400">0</span> pending / <span id="paperOrdersFilledCount" class="text-emerald-400">0</span> filled)</span>
+                <span class="text-slate-600">|</span>
+                <span>Completed Trades: <strong id="paperTradesCompletedCount" class="text-white">0</strong></span>
+                <span class="text-slate-600">|</span>
+                <span>Forward Net Expectancy: <strong id="forwardExpectancyDisplay" class="text-slate-300">$0.00/trade</strong></span>
+                <span class="text-slate-600">|</span>
+                <span id="costAssumptionsHeader" class="text-slate-400">Assumptions: 0.02% maker / 0.05% taker / 0.05% slip</span>
+            </div>
+        </div>
+
         <!-- Tab Navigation -->
         <div class="flex border-b border-slate-800 space-x-6 text-sm font-medium">
             <button onclick="switchTab('setups')" id="tabBtn-setups" class="pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold">Candidate Setups</button>
@@ -223,10 +241,35 @@
             <div class="card-bg p-6 rounded-xl space-y-4">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h2 class="text-lg font-bold text-white">1-Year Out-Of-Sample Backtest Comparison</h2>
-                        <p class="text-xs text-slate-400 mt-0.5">365 Days of 1H/4H Candles &bull; Realistic Fees (0.05% taker), Slippage (0.05%), and Historical Funding</p>
+                        <h2 class="text-lg font-bold text-white">1-Year Portfolio & Chronological Out-Of-Sample Backtest</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">365 Days of 1H/4H Candles &bull; Realistic Fees (0.02% maker / 0.05% taker), Slippage (0.05%), and Historical Funding</p>
                     </div>
                     <button onclick="loadBacktest()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-medium">Re-Run Backtest</button>
+                </div>
+
+                <!-- Chronological Out-of-Sample Validation Banner -->
+                <div class="p-3.5 rounded-lg bg-amber-950/50 border border-amber-700/70 text-xs space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="font-bold text-amber-300 flex items-center gap-2">
+                            <span>⚠️ Chronological Out-of-Sample Validation (48h Purge Embargo):</span>
+                            <span id="bt-oos-status-badge" class="px-2 py-0.5 rounded bg-amber-900/80 text-amber-200 font-mono">EVALUATING...</span>
+                        </div>
+                        <span class="text-[11px] font-mono text-slate-400" id="bt-cost-summary">Fees: 0.05% taker | Slippage: 0.05% | Margin: $6.00</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 font-mono text-[11px]">
+                        <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                            <span class="text-slate-400">In-Sample Train (70%):</span>
+                            <strong id="bt-split-train" class="text-white ml-1">--</strong>
+                        </div>
+                        <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                            <span class="text-slate-400">Validation Split (15%):</span>
+                            <strong id="bt-split-val" class="text-white ml-1">--</strong>
+                        </div>
+                        <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                            <span class="text-slate-400">Out-of-Sample Test (15%):</span>
+                            <strong id="bt-split-oos" class="text-amber-300 ml-1">--</strong>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Backtest Comparison Cards -->
@@ -234,7 +277,7 @@
                     <!-- Deterministic Baseline -->
                     <div class="card-inner p-4 rounded-lg border border-slate-700">
                         <div class="flex items-center justify-between">
-                            <span class="text-sm font-semibold text-slate-200">1. Deterministic SMC/SnR Baseline</span>
+                            <span class="text-sm font-semibold text-slate-200">1. Full-Year Deterministic Portfolio (All Enabled Symbols)</span>
                             <span class="px-2 py-0.5 text-xs rounded badge-blue">Deterministic</span>
                         </div>
                         <div class="grid grid-cols-3 gap-3 mt-4 text-center">
@@ -255,8 +298,8 @@
                                 <div class="text-base font-bold text-emerald-400" id="det-pnl">--</div>
                             </div>
                             <div>
-                                <div class="text-xs text-slate-400">Return on Capital</div>
-                                <div class="text-base font-bold text-emerald-400" id="det-roc">--%</div>
+                                <div class="text-xs text-slate-400">Net Expectancy</div>
+                                <div class="text-base font-bold text-emerald-400" id="det-roc">--</div>
                             </div>
                             <div>
                                 <div class="text-xs text-slate-400">Max Drawdown</div>
@@ -289,8 +332,8 @@
                                 <div class="text-base font-bold text-emerald-400" id="ml-pnl">--</div>
                             </div>
                             <div>
-                                <div class="text-xs text-slate-400">Return on Capital</div>
-                                <div class="text-base font-bold text-emerald-400" id="ml-roc">--%</div>
+                                <div class="text-xs text-slate-400">Net Expectancy</div>
+                                <div class="text-base font-bold text-emerald-400" id="ml-roc">--</div>
                             </div>
                             <div>
                                 <div class="text-xs text-slate-400">Max Drawdown</div>
@@ -587,6 +630,38 @@
                         if (freshEl) {
                             freshEl.innerText = `Candle Age: ${m}m ago (${data.scanner.is_stale ? 'STALE' : 'Fresh'})`;
                         }
+                    }
+                }
+
+                // Forward Paper Validation Cohort & Execution Pipeline Counters
+                if (data.forward_validation) {
+                    const fv = data.forward_validation;
+                    const fvBadge = document.getElementById('forwardValidationBadge');
+                    const fvNote = document.getElementById('forwardValidationNote');
+                    if (fvBadge) {
+                        fvBadge.innerText = fv.validation_status || 'UNPROVEN_NO_COMPLETED_FORWARD_TRADES';
+                        fvBadge.className = `px-2.5 py-0.5 text-xs font-bold rounded ${
+                            fv.validation_status === 'PRELIMINARY_POSITIVE_NOT_VALIDATED' ? 'badge-blue' :
+                            fv.validation_status === 'NEGATIVE_NET_EXPECTANCY' ? 'badge-red' :
+                            'badge-yellow'
+                        }`;
+                    }
+                    if (fvNote && fv.validation_note) {
+                        fvNote.innerText = fv.validation_note;
+                    }
+                    const ordCreatedEl = document.getElementById('paperOrdersCreatedCount');
+                    if (ordCreatedEl) ordCreatedEl.innerText = fv.orders_created !== undefined ? fv.orders_created : 0;
+                    const ordPendingEl = document.getElementById('paperOrdersPendingCount');
+                    if (ordPendingEl) ordPendingEl.innerText = fv.orders_pending !== undefined ? fv.orders_pending : 0;
+                    const ordFilledEl = document.getElementById('paperOrdersFilledCount');
+                    if (ordFilledEl) ordFilledEl.innerText = fv.orders_filled !== undefined ? fv.orders_filled : 0;
+                    const trdClosedEl = document.getElementById('paperTradesCompletedCount');
+                    if (trdClosedEl) trdClosedEl.innerText = fv.closed_trades_count !== undefined ? fv.closed_trades_count : 0;
+                    const expEl = document.getElementById('forwardExpectancyDisplay');
+                    if (expEl && fv.net_expectancy_per_trade !== undefined) {
+                        const expVal = Number(fv.net_expectancy_per_trade);
+                        expEl.innerText = `${expVal >= 0 ? '+$' : '-$'}${Math.abs(expVal).toFixed(4)}/trade`;
+                        expEl.className = expVal > 0 ? 'text-emerald-400' : (expVal < 0 ? 'text-red-400' : 'text-slate-300');
                     }
                 }
             } catch (err) {
@@ -1453,7 +1528,7 @@
                 document.getElementById('det-winrate').innerText = `${d.win_rate_pct}%`;
                 document.getElementById('det-pf').innerText = d.profit_factor;
                 document.getElementById('det-pnl').innerText = `$${d.total_net_pnl.toFixed(2)}`;
-                document.getElementById('det-roc').innerText = `${d.return_on_capital_pct}%`;
+                document.getElementById('det-roc').innerText = `$${(d.expectancy_per_trade || 0).toFixed(2)}/trd (${d.return_on_capital_pct}%)`;
                 document.getElementById('det-dd').innerText = `$${d.max_drawdown_usdt.toFixed(2)} (${d.max_drawdown_pct}%)`;
 
                 const m = data.ml_filtered;
@@ -1461,8 +1536,26 @@
                 document.getElementById('ml-winrate').innerText = `${m.win_rate_pct}%`;
                 document.getElementById('ml-pf').innerText = m.profit_factor;
                 document.getElementById('ml-pnl').innerText = `$${m.total_net_pnl.toFixed(2)}`;
-                document.getElementById('ml-roc').innerText = `${m.return_on_capital_pct}%`;
+                document.getElementById('ml-roc').innerText = `$${(m.expectancy_per_trade || 0).toFixed(2)}/trd (${m.return_on_capital_pct}%)`;
                 document.getElementById('ml-dd').innerText = `$${m.max_drawdown_usdt.toFixed(2)} (${m.max_drawdown_pct}%)`;
+
+                if (data.chronological_splits) {
+                    const cs = data.chronological_splits;
+                    const badge = document.getElementById('bt-oos-status-badge');
+                    if (badge) badge.innerText = cs.historical_validation_status || 'UNVALIDATED';
+                    const trEl = document.getElementById('bt-split-train');
+                    if (trEl && cs.in_sample_train) {
+                        trEl.innerText = `${cs.in_sample_train.trades} trades | ${cs.in_sample_train.win_rate_pct}% WR | $${cs.in_sample_train.net_pnl.toFixed(2)} ($${cs.in_sample_train.expectancy_per_trade.toFixed(2)}/trd)`;
+                    }
+                    const vlEl = document.getElementById('bt-split-val');
+                    if (vlEl && cs.validation) {
+                        vlEl.innerText = `${cs.validation.trades} trades | ${cs.validation.win_rate_pct}% WR | $${cs.validation.net_pnl.toFixed(2)} ($${cs.validation.expectancy_per_trade.toFixed(2)}/trd)`;
+                    }
+                    const oosEl = document.getElementById('bt-split-oos');
+                    if (oosEl && cs.out_of_sample_test) {
+                        oosEl.innerText = `${cs.out_of_sample_test.trades} trades | ${cs.out_of_sample_test.win_rate_pct}% WR | $${cs.out_of_sample_test.net_pnl.toFixed(2)} ($${cs.out_of_sample_test.expectancy_per_trade.toFixed(2)}/trd)`;
+                    }
+                }
 
                 renderEquityChart(d.equity_curve, m.equity_curve);
             } catch (err) {

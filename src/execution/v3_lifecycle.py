@@ -50,9 +50,18 @@ class ManagedPosition:
     
     stop_loss_price: float = 0.0
     take_profit_price: float = 0.0
+    take_profit_2_price: Optional[float] = None
+    initial_stop_loss_price: Optional[float] = None
     sl_order_id: Optional[str] = None
     tp_order_id: Optional[str] = None
     
+    tp1_hit: bool = False
+    trailing_active: bool = False
+    trailing_distance: float = 0.0
+    breakeven_stop_price: Optional[float] = None
+    highest_favorable_price: Optional[float] = None
+    lowest_favorable_price: Optional[float] = None
+
     protection_state: ProtectionState = ProtectionState.NONE
     is_open: bool = False
     alerts: List[str] = field(default_factory=list)
@@ -110,6 +119,7 @@ class V3OrderLifecycleManager:
             logger.warning(f"Duplicate candidate submission ignored: {candidate.candidate_id}")
             return self.managed_positions[candidate.candidate_id]
 
+        initial_r = abs(candidate.entry_price - candidate.stop_loss)
         pos = ManagedPosition(
             candidate_id=candidate.candidate_id,
             symbol=symbol,
@@ -117,6 +127,9 @@ class V3OrderLifecycleManager:
             intended_quantity=candidate.risk_assessment.quantity if candidate.risk_assessment else 0.0,
             stop_loss_price=candidate.stop_loss,
             take_profit_price=candidate.take_profit_1,
+            take_profit_2_price=candidate.take_profit_2,
+            initial_stop_loss_price=candidate.stop_loss,
+            trailing_distance=initial_r,
         )
         self.managed_positions[candidate.candidate_id] = pos
 
@@ -618,7 +631,7 @@ class V3OrderLifecycleManager:
                     for p in self.managed_positions.values()
                 )
                 is_bot_owned = (
-                    client_id.startswith(("SL_", "TP_", "ENT_"))
+                    client_id.startswith(("SL_", "TP_", "ENT_", "SLBE_", "SLTR_", "TP2_"))
                     or client_id in self.active_client_order_ids
                     or any(cand_id in client_id for cand_id in self.managed_positions)
                     or is_known_order_id
@@ -640,3 +653,217 @@ class V3OrderLifecycleManager:
             logger.warning(f"Could not query open orders for orphan purge on {symbol}: {e}")
 
         return cancelled_orders
+
+    def _replace_stop_loss_atomically(
+        self,
+        pos: ManagedPosition,
+        new_stop_price: float,
+        new_qty: float,
+        prefix: str = "SLTR",
+    ) -> Tuple[bool, str]:
+        """Atomically replace exchange STOP_MARKET order:
+        1. Place & verify NEW STOP_MARKET order on exchange FIRST.
+        2. Only AFTER new SL is verified active, cancel old sl_order_id.
+        3. Never leave an open position naked without an active SL.
+        """
+        _, close_side = self._determine_sides(pos.direction)
+        old_sl_id = pos.sl_order_id
+        new_client_id = self._generate_client_order_id(pos.candidate_id, prefix)
+        self.active_client_order_ids.add(new_client_id)
+
+        try:
+            sl_resp = self.adapter.create_order(
+                symbol=pos.symbol,
+                side=close_side,
+                order_type="STOP_MARKET",
+                quantity=new_qty,
+                stop_price=new_stop_price,
+                reduce_only=True,
+                client_order_id=new_client_id,
+            )
+            new_sl_id = str(sl_resp.get("orderId", ""))
+
+            is_verified, verify_msg = self._verify_protective_order_on_exchange(
+                symbol=pos.symbol,
+                order_id=new_sl_id,
+                client_order_id=new_client_id,
+                expected_side=close_side,
+                expected_qty=new_qty,
+                expected_stop_price=new_stop_price,
+            )
+            if not is_verified:
+                warn_msg = (
+                    f"New SL ({new_stop_price}) failed exchange verification ({verify_msg}). "
+                    f"Preserving existing SL ({old_sl_id}) at {pos.stop_loss_price}."
+                )
+                logger.error(warn_msg)
+                pos.alerts.append(f"SL_REPLACE_VERIFY_FAILED: {warn_msg}")
+                if new_sl_id and hasattr(self.adapter, "cancel_order"):
+                    try:
+                        self.adapter.cancel_order(symbol=pos.symbol, order_id=new_sl_id)
+                    except Exception:
+                        pass
+                return False, warn_msg
+
+            # New SL is confirmed active; now safely cancel old SL order
+            if old_sl_id and old_sl_id != new_sl_id and hasattr(self.adapter, "cancel_order"):
+                try:
+                    self.adapter.cancel_order(symbol=pos.symbol, order_id=old_sl_id)
+                except Exception as cancel_err:
+                    warn_cancel = (
+                        f"WARNING: New SL {new_sl_id} active at {new_stop_price}, "
+                        f"but old SL {old_sl_id} cancellation failed: {cancel_err}"
+                    )
+                    logger.warning(warn_cancel)
+                    pos.alerts.append(warn_cancel)
+
+            pos.sl_order_id = new_sl_id
+            pos.stop_loss_price = new_stop_price
+            return True, f"Stop-Loss atomically replaced with {new_sl_id} at {new_stop_price}."
+
+        except Exception as err:
+            err_msg = f"Atomic SL replacement failed at {new_stop_price} (keeping old SL {old_sl_id}): {err}"
+            logger.error(err_msg)
+            pos.alerts.append(f"SL_REPLACE_ERROR: {err_msg}")
+            return False, err_msg
+
+    def transition_to_tp1_breakeven(
+        self,
+        pos: ManagedPosition,
+        executed_tp1_qty: float,
+        fee_buffer_pct: float = 0.0014,
+        tp2_price: Optional[float] = None,
+    ) -> Tuple[bool, str]:
+        """Transition an open ManagedPosition after TP1 partial fill:
+        1. Reduce filled_quantity by executed_tp1_qty.
+        2. Compute fee-adjusted break-even stop price.
+        3. Atomically place & verify new break-even STOP_MARKET before cancelling old SL.
+        4. Place or update runner TAKE_PROFIT_MARKET at TP2 and arm trailing stop.
+        """
+        if not pos.is_open:
+            return False, "Position is not open."
+
+        remaining_qty = round(max(0.0, pos.filled_quantity - executed_tp1_qty), 8)
+        if remaining_qty <= 0:
+            self.handle_bracket_fill(pos, "TAKE_PROFIT_MARKET")
+            return True, "Full position closed at TP1; brackets cleaned up."
+
+        _, close_side = self._determine_sides(pos.direction)
+        initial_sl = pos.initial_stop_loss_price if pos.initial_stop_loss_price is not None else pos.stop_loss_price
+        initial_r = abs(pos.entry_price - initial_sl)
+        if pos.trailing_distance <= 0 and initial_r > 0:
+            pos.trailing_distance = initial_r
+
+        if pos.direction == Direction.LONG:
+            be_price = pos.entry_price * (1.0 + fee_buffer_pct)
+            target_sl = max(pos.stop_loss_price, be_price)
+            pos.highest_favorable_price = max(pos.take_profit_price, pos.entry_price)
+        else:
+            be_price = pos.entry_price * (1.0 - fee_buffer_pct)
+            target_sl = min(pos.stop_loss_price, be_price)
+            pos.lowest_favorable_price = min(pos.take_profit_price, pos.entry_price)
+
+        pos.filled_quantity = remaining_qty
+        pos.breakeven_stop_price = be_price
+
+        # Atomically replace SL with break-even SL for remaining runner quantity
+        sl_ok, sl_msg = self._replace_stop_loss_atomically(
+            pos=pos,
+            new_stop_price=target_sl,
+            new_qty=remaining_qty,
+            prefix="SLBE",
+        )
+        if not sl_ok:
+            return False, sl_msg
+
+        pos.tp1_hit = True
+        pos.trailing_active = True
+
+        # Place TP2 order for remaining runner quantity if TP2 is configured
+        target_tp2 = tp2_price if tp2_price is not None else pos.take_profit_2_price
+        old_tp_id = pos.tp_order_id
+        if target_tp2 is not None and target_tp2 > 0:
+            tp2_client_id = self._generate_client_order_id(pos.candidate_id, "TP2")
+            self.active_client_order_ids.add(tp2_client_id)
+            try:
+                tp2_resp = self.adapter.create_order(
+                    symbol=pos.symbol,
+                    side=close_side,
+                    order_type="TAKE_PROFIT_MARKET",
+                    quantity=remaining_qty,
+                    stop_price=target_tp2,
+                    reduce_only=True,
+                    client_order_id=tp2_client_id,
+                )
+                new_tp2_id = str(tp2_resp.get("orderId", ""))
+                is_tp2_verified, tp2_verify_msg = self._verify_protective_order_on_exchange(
+                    symbol=pos.symbol,
+                    order_id=new_tp2_id,
+                    client_order_id=tp2_client_id,
+                    expected_side=close_side,
+                    expected_qty=remaining_qty,
+                    expected_stop_price=target_tp2,
+                )
+                if is_tp2_verified:
+                    if old_tp_id and old_tp_id != new_tp2_id and hasattr(self.adapter, "cancel_order"):
+                        try:
+                            self.adapter.cancel_order(symbol=pos.symbol, order_id=old_tp_id)
+                        except Exception:
+                            pass
+                    pos.tp_order_id = new_tp2_id
+                    pos.take_profit_price = target_tp2
+                    pos.protection_state = ProtectionState.PROTECTED
+                else:
+                    pos.protection_state = ProtectionState.PARTIALLY_PROTECTED
+                    pos.alerts.append(f"TP2_VERIFICATION_FAILED: {tp2_verify_msg}")
+            except Exception as err:
+                pos.protection_state = ProtectionState.PARTIALLY_PROTECTED
+                pos.alerts.append(f"TP2_SUBMISSION_FAILED: {err}")
+
+        return True, f"TP1 transition complete: SL moved to break-even ({target_sl}) for remaining qty {remaining_qty}."
+
+    def update_trailing_stop(
+        self,
+        pos: ManagedPosition,
+        current_high: float,
+        current_low: float,
+    ) -> Tuple[bool, str]:
+        """Evaluate and ratchet trailing stop on the exchange for an active post-TP1 runner position.
+        Only updates if the new stop price improves monotonically upon the current stop_loss_price.
+        """
+        if not pos.is_open or not pos.tp1_hit or not pos.trailing_active:
+            return False, "Trailing stop is not active for this position."
+
+        trail_dist = pos.trailing_distance
+        if trail_dist <= 0:
+            initial_sl = pos.initial_stop_loss_price if pos.initial_stop_loss_price is not None else pos.stop_loss_price
+            trail_dist = abs(pos.entry_price - initial_sl)
+            pos.trailing_distance = trail_dist
+
+        if trail_dist <= 0:
+            return False, "Invalid trailing distance."
+
+        if pos.direction == Direction.LONG:
+            prev_high = pos.highest_favorable_price if pos.highest_favorable_price is not None else current_high
+            pos.highest_favorable_price = max(prev_high, current_high)
+            candidate_sl = pos.highest_favorable_price - trail_dist
+            min_allowed_sl = pos.breakeven_stop_price if pos.breakeven_stop_price is not None else pos.stop_loss_price
+            target_sl = max(pos.stop_loss_price, min_allowed_sl, candidate_sl)
+            if target_sl <= pos.stop_loss_price + 1e-8:
+                return False, "No favorable ratchet improvement for LONG trailing stop."
+        else:
+            prev_low = pos.lowest_favorable_price if pos.lowest_favorable_price is not None else current_low
+            pos.lowest_favorable_price = min(prev_low, current_low)
+            candidate_sl = pos.lowest_favorable_price + trail_dist
+            max_allowed_sl = pos.breakeven_stop_price if pos.breakeven_stop_price is not None else pos.stop_loss_price
+            target_sl = min(pos.stop_loss_price, max_allowed_sl, candidate_sl)
+            if target_sl >= pos.stop_loss_price - 1e-8:
+                return False, "No favorable ratchet improvement for SHORT trailing stop."
+
+        return self._replace_stop_loss_atomically(
+            pos=pos,
+            new_stop_price=target_sl,
+            new_qty=pos.filled_quantity,
+            prefix="SLTR",
+        )
+

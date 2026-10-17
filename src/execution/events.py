@@ -21,6 +21,8 @@ class PaperEventType(str, Enum):
     ORDER_EXPIRED = "ORDER_EXPIRED"
     POSITION_CLOSED = "POSITION_CLOSED"
     TP_HIT = "TP_HIT"
+    TP1_PARTIAL_HIT = "TP1_PARTIAL_HIT"
+    TRAILING_STOP_UPDATED = "TRAILING_STOP_UPDATED"
     SL_HIT = "SL_HIT"
     RISK_BLOCKED = "RISK_BLOCKED"
     SYSTEM_ERROR = "SYSTEM_ERROR"
@@ -138,9 +140,13 @@ class PaperEventDispatcher:
         elif et in (PaperEventType.ORDER_CREATED, PaperEventType.ORDER_EXPIRED, PaperEventType.ORDER_CANCELLED):
             order_id = d.get("order_id", "")
             return f"{et.value}:{order_id}"
-        elif et in (PaperEventType.ORDER_FILLED, PaperEventType.TP_HIT, PaperEventType.SL_HIT, PaperEventType.POSITION_CLOSED):
+        elif et in (PaperEventType.ORDER_FILLED, PaperEventType.TP_HIT, PaperEventType.TP1_PARTIAL_HIT, PaperEventType.SL_HIT, PaperEventType.POSITION_CLOSED):
             trade_id = d.get("trade_id") or d.get("order_id") or ""
             return f"{et.value}:{trade_id}"
+        elif et == PaperEventType.TRAILING_STOP_UPDATED:
+            trade_id = d.get("trade_id") or ""
+            new_sl = d.get("new_stop_loss") or ""
+            return f"{et.value}:{trade_id}:{new_sl}"
         elif et == PaperEventType.RISK_BLOCKED:
             rule = d.get("rule", "")
             reason = d.get("reason", "")
@@ -372,6 +378,52 @@ class PaperEventDispatcher:
                 fields.append({"name": "Realized R:R", "value": f"`{d['realized_rr']:.2f}R`", "inline": True})
             if "duration" in d:
                 fields.append({"name": "Duration", "value": f"`{d['duration']}`", "inline": True})
+            if "trade_id" in d:
+                fields.append({"name": "Trade ID", "value": f"`{d['trade_id']}`", "inline": False})
+
+        elif et == PaperEventType.TP1_PARTIAL_HIT:
+            direction = d.get("direction", "UNKNOWN")
+            color = 0x27AE60  # Emerald Green
+            title = f"⚡ [TP1 PARTIAL + SL TO BE] {sym}"
+            closed_pct = d.get("closed_pct", 0.5)
+            be_sl = d.get("new_stop_loss")
+            tp2 = d.get("take_profit_2")
+            partial_net = d.get("partial_pnl_net", 0.0)
+            description = (
+                f"**{sym} {direction}** reached TP1 (`{format_price(d.get('tp1_price'))}`)! "
+                f"Closed `{closed_pct:.0%}` (`{format_usdt(partial_net, sign=True)}`). "
+                f"Stop-Loss moved to Break-Even (`{format_price(be_sl)}`) & Trailing Stop armed toward TP2 (`{format_price(tp2)}`)."
+            )
+            fields = [
+                {"name": "Direction", "value": f"`{direction}`", "inline": True},
+                {"name": "TP1 Fill Price", "value": f"`{format_price(d.get('tp1_price'))}`", "inline": True},
+                {"name": "Partial Closed Qty", "value": f"`{d.get('closed_quantity', 0.0)}`", "inline": True},
+                {"name": "Remaining Runner Qty", "value": f"`{d.get('remaining_quantity', 0.0)}`", "inline": True},
+                {"name": "New SL (Break-Even)", "value": f"`{format_price(be_sl)}`", "inline": True},
+                {"name": "Target TP2", "value": f"`{format_price(tp2)}`", "inline": True},
+                {"name": "Locked Partial PnL", "value": f"`{format_usdt(partial_net, sign=True)}`", "inline": True},
+                {"name": "Trailing Distance", "value": f"`{format_price(d.get('trailing_distance'))}`", "inline": True},
+            ]
+            if "trade_id" in d:
+                fields.append({"name": "Trade ID", "value": f"`{d['trade_id']}`", "inline": False})
+
+        elif et == PaperEventType.TRAILING_STOP_UPDATED:
+            direction = d.get("direction", "UNKNOWN")
+            color = 0x2980B9  # Blue
+            title = f"📈 [TRAILING STOP RATCHETED] {sym}"
+            old_sl = d.get("old_stop_loss")
+            new_sl = d.get("new_stop_loss")
+            description = (
+                f"**{sym} {direction}** trailing stop ratcheted from `{format_price(old_sl)}` "
+                f"to `{format_price(new_sl)}`."
+            )
+            fields = [
+                {"name": "Direction", "value": f"`{direction}`", "inline": True},
+                {"name": "Previous SL", "value": f"`{format_price(old_sl)}`", "inline": True},
+                {"name": "New Trailing SL", "value": f"`{format_price(new_sl)}`", "inline": True},
+                {"name": "Best Price Reached", "value": f"`{format_price(d.get('favorable_extreme'))}`", "inline": True},
+                {"name": "Target TP2", "value": f"`{format_price(d.get('take_profit_2'))}`", "inline": True},
+            ]
             if "trade_id" in d:
                 fields.append({"name": "Trade ID", "value": f"`{d['trade_id']}`", "inline": False})
 

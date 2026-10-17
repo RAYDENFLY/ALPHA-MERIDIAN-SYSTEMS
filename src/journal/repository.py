@@ -391,12 +391,12 @@ class JournalRepository:
         query = """
         INSERT OR REPLACE INTO paper_orders (
             order_id, candidate_id, symbol, direction, order_type,
-            price, stop_price, take_profit, quantity, notional_usdt,
+            price, stop_price, take_profit, take_profit_2, quantity, notional_usdt,
             margin_usdt, leverage, status, created_bar_time_ms,
             evaluated_bars_count, filled_time_ms, fill_price,
             slippage_paid, fee_paid, rejection_reason, created_at_utc, updated_at_utc,
             entry_category
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         params = (
             order_dict["order_id"],
@@ -407,6 +407,7 @@ class JournalRepository:
             float(order_dict["price"]),
             float(order_dict["stop_price"]) if order_dict.get("stop_price") is not None else None,
             float(order_dict["take_profit"]) if order_dict.get("take_profit") is not None else None,
+            float(order_dict["take_profit_2"]) if order_dict.get("take_profit_2") is not None else None,
             float(order_dict["quantity"]),
             float(order_dict["notional_usdt"]),
             float(order_dict["margin_usdt"]),
@@ -443,4 +444,168 @@ class JournalRepository:
             cur = conn.cursor()
             cur.execute(query, params)
             return [dict(r) for r in cur.fetchall()]
+
+    def save_lifecycle_event(
+        self,
+        candidate_id: str,
+        symbol: str,
+        stage: str,
+        timestamp_ms: int,
+        reason_code: str = "OK",
+        reason_detail: str = "",
+        order_id: str = "",
+        trade_id: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Persist a state transition in paper_lifecycle_events."""
+        now_utc = datetime.now(timezone.utc).isoformat()
+        stage_val = stage.value if hasattr(stage, "value") else str(stage)
+        meta_json = json.dumps(metadata or {})
+        query = """
+        INSERT INTO paper_lifecycle_events (
+            candidate_id, symbol, stage, reason_code, reason_detail,
+            order_id, trade_id, timestamp_ms, created_at_utc, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        with self.db.get_connection() as conn:
+            conn.execute(
+                query,
+                (
+                    str(candidate_id),
+                    str(symbol),
+                    stage_val,
+                    str(reason_code),
+                    str(reason_detail),
+                    str(order_id or ""),
+                    str(trade_id or ""),
+                    int(timestamp_ms),
+                    now_utc,
+                    meta_json,
+                ),
+            )
+            conn.commit()
+
+    def get_lifecycle_events(
+        self,
+        candidate_id: Optional[str] = None,
+        symbol: Optional[str] = None,
+        stage: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]:
+        """Query recorded paper lifecycle transitions in chronological order."""
+        conditions = []
+        params: List[Any] = []
+        if candidate_id:
+            conditions.append("candidate_id = ?")
+            params.append(candidate_id)
+        if symbol:
+            conditions.append("symbol = ?")
+            params.append(symbol)
+        if stage:
+            stage_val = stage.value if hasattr(stage, "value") else str(stage)
+            conditions.append("stage = ?")
+            params.append(stage_val)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"""
+        SELECT *
+        FROM paper_lifecycle_events
+        {where_clause}
+        ORDER BY timestamp_ms ASC, event_id ASC
+        LIMIT {int(limit)};
+        """
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(query, params)
+            rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            try:
+                r["metadata"] = json.loads(r.get("metadata_json") or "{}")
+            except Exception:
+                r["metadata"] = {}
+        return rows
+
+    def compute_forward_validation_cohort(
+        self,
+        min_required_trades: int = 30,
+        min_sample_size: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Compute truthful forward paper validation cohort metrics and explicit profitability status."""
+        if min_sample_size is not None:
+            min_required_trades = int(min_sample_size)
+        all_trades = self.get_trades(limit=5000)
+        trade_metrics = self.compute_trade_metrics(all_trades)
+        closed_count = int(trade_metrics.get("closed_trades_count", 0))
+        open_count = int(trade_metrics.get("open_trades_count", 0))
+        net_pnl = float(trade_metrics.get("net_pnl", 0.0))
+        avg_net_pnl = float(trade_metrics.get("avg_net_pnl", 0.0))
+
+        all_orders = self.get_paper_orders()
+        orders_by_status: Dict[str, int] = {}
+        for o in all_orders:
+            st = str(o.get("status", "UNKNOWN"))
+            orders_by_status[st] = orders_by_status.get(st, 0) + 1
+
+        all_setups = self.get_latest_setups(limit=5000)
+        setups_by_status: Dict[str, int] = {}
+        for s in all_setups:
+            st = str(s.get("status", "UNKNOWN"))
+            setups_by_status[st] = setups_by_status.get(st, 0) + 1
+
+        if closed_count == 0:
+            validation_status = "UNPROVEN_NO_COMPLETED_FORWARD_TRADES"
+            status_explanation = (
+                f"0 completed forward paper trades recorded (minimum {min_required_trades} required for statistical validation). "
+                "Strategy profitability in forward paper execution is currently UNPROVEN."
+            )
+        elif closed_count < min_required_trades:
+            if net_pnl < 0:
+                validation_status = "NEGATIVE_NET_EXPECTANCY"
+                status_explanation = (
+                    f"Forward paper cohort has negative net expectancy (${avg_net_pnl:+.4f}/trade across {closed_count} completed trades; "
+                    f"target sample >= {min_required_trades})."
+                )
+            else:
+                validation_status = "INSUFFICIENT_FORWARD_EVIDENCE"
+                status_explanation = (
+                    f"Only {closed_count}/{min_required_trades} completed forward paper trades recorded "
+                    f"(net PnL ${net_pnl:+.2f}, avg ${avg_net_pnl:+.4f}/trade). Sample size is insufficient to claim validated edge."
+                )
+        else:
+            if net_pnl <= 0:
+                validation_status = "NEGATIVE_NET_EXPECTANCY"
+                status_explanation = (
+                    f"Forward paper cohort across {closed_count} completed trades shows non-positive net PnL (${net_pnl:+.2f}, "
+                    f"expectancy ${avg_net_pnl:+.4f}/trade)."
+                )
+            else:
+                validation_status = "PRELIMINARY_POSITIVE_NOT_VALIDATED"
+                status_explanation = (
+                    f"Forward paper cohort reached {closed_count} completed trades with positive net PnL (${net_pnl:+.2f}, "
+                    f"expectancy ${avg_net_pnl:+.4f}/trade). Live trading remains locked."
+                )
+
+        return {
+            "validation_status": validation_status,
+            "status_explanation": status_explanation,
+            "validation_note": status_explanation,
+            "min_required_trades": min_required_trades,
+            "is_sample_sufficient": closed_count >= min_required_trades,
+            "completed_forward_trades": closed_count,
+            "closed_trades_count": closed_count,
+            "open_forward_positions": open_count,
+            "total_paper_orders": len(all_orders),
+            "orders_created": len(all_orders),
+            "orders_pending": orders_by_status.get("PENDING", 0),
+            "orders_filled": orders_by_status.get("FILLED", 0),
+            "paper_orders_by_status": orders_by_status,
+            "total_recorded_setups": len(all_setups),
+            "setups_by_status": setups_by_status,
+            "forward_win_rate_pct": trade_metrics.get("win_rate_pct", 0.0),
+            "forward_gross_pnl_usdt": trade_metrics.get("gross_pnl", 0.0),
+            "forward_total_fees_usdt": trade_metrics.get("total_fees", 0.0),
+            "forward_net_pnl_usdt": net_pnl,
+            "forward_expectancy_per_trade_usdt": avg_net_pnl,
+            "net_expectancy_per_trade": avg_net_pnl,
+        }
+
 

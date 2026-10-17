@@ -21,8 +21,14 @@ class CandleSynchronizer:
         self.exchange = exchange
         self.db = db
 
-    def sync_symbol(self, symbol: str, timeframe: str, now_ms: Optional[int] = None) -> List[Candle]:
-        """Fetch latest candles, filter incomplete ones, and insert into DB."""
+    def sync_symbol(
+        self,
+        symbol: str,
+        timeframe: str,
+        now_ms: Optional[int] = None,
+        max_pages: int = 20,
+    ) -> List[Candle]:
+        """Fetch latest candles, paginating forward if behind by >50 bars, filter incomplete ones, and insert into DB."""
         current_time = now_ms or int(time.time() * 1000)
         step_ms = TIMEFRAME_MS.get(timeframe.lower(), 3600 * 1000)
 
@@ -30,36 +36,57 @@ class CandleSynchronizer:
         sync = self.db.get_sync_state(symbol, timeframe)
         start_ts = (sync["latest_timestamp_ms"] + step_ms) if sync and sync["latest_timestamp_ms"] else None
 
-        # Fetch recent candles (up to 50)
-        try:
-            candles = self.exchange.get_klines(
-                symbol=symbol,
-                timeframe=timeframe,
-                start_time_ms=start_ts,
-                limit=50,
-            )
-        except Exception as e:
-            logger.error(f"Sync failed for {symbol} ({timeframe}): {e}")
-            return []
+        all_closed_candles: List[Candle] = []
+        pages_fetched = 0
+        next_start_ts = start_ts
 
-        if not candles:
-            return []
+        while pages_fetched < max(1, max_pages):
+            if next_start_ts is not None and next_start_ts > current_time:
+                break
+            try:
+                batch = self.exchange.get_klines(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time_ms=next_start_ts,
+                    limit=500 if next_start_ts is not None and (current_time - next_start_ts) > 50 * step_ms else 50,
+                )
+            except Exception as e:
+                logger.error(f"Sync failed for {symbol} ({timeframe}): {e}")
+                break
 
-        # Filter out incomplete (still open) candle
-        closed_candles = CandleValidator.filter_closed_candles(candles, now_ms=current_time)
+            pages_fetched += 1
+            if not batch:
+                break
 
-        # Validate series
-        report = CandleValidator.validate_series(closed_candles, expected_timeframe=timeframe, now_ms=current_time)
-        if report.invalid_candles > 0:
-            logger.warning(f"Validation found {report.invalid_candles} invalid candles during sync of {symbol}")
-            # Keep only valid candles
-            closed_candles = [c for c in closed_candles if CandleValidator.validate_single_candle(c)[0]]
+            closed_batch = CandleValidator.filter_closed_candles(batch, now_ms=current_time)
+            if closed_batch:
+                report = CandleValidator.validate_series(
+                    closed_batch, expected_timeframe=timeframe, now_ms=current_time
+                )
+                if report.invalid_candles > 0:
+                    logger.warning(
+                        f"Validation found {report.invalid_candles} invalid candles during sync of {symbol}"
+                    )
+                    closed_batch = [
+                        c for c in closed_batch if CandleValidator.validate_single_candle(c)[0]
+                    ]
+                if closed_batch:
+                    self.db.insert_candles(closed_batch)
+                    all_closed_candles.extend(closed_batch)
 
-        if closed_candles:
-            self.db.insert_candles(closed_candles)
-            logger.info(f"[{symbol} {timeframe}] Synced {len(closed_candles)} closed candles.")
+            if next_start_ts is None:
+                break
+            last_raw_ts = batch[-1].timestamp_ms
+            if last_raw_ts + step_ms <= next_start_ts or last_raw_ts + step_ms > current_time - step_ms:
+                break
+            if len(batch) < 50:
+                break
+            next_start_ts = last_raw_ts + step_ms
 
-        return closed_candles
+        if all_closed_candles:
+            logger.info(f"[{symbol} {timeframe}] Synced {len(all_closed_candles)} closed candles.")
+
+        return all_closed_candles
 
     def sync_watchlist(
         self,
