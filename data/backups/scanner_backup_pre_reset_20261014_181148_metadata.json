@@ -1,0 +1,14 @@
+{
+  "source_path": "C:\\Users\\Administrator\\Documents\\SignalGenerator\\data\\scanner.db",
+  "backup_path": "C:\\Users\\Administrator\\Documents\\SignalGenerator\\data\\backups\\scanner_backup_pre_reset_20261014_181148.db",
+  "backup_size_bytes": 23330816,
+  "backup_created_utc": "2026-10-14T18:11:49.231356+00:00",
+  "integrity": "ok",
+  "row_counts": {
+    "raw_candles": 117802,
+    "candle_sync_state": 22,
+    "funding_rates": 16679,
+    "setup_candidates": 55,
+    "trade_journal": 0
+  }
+}

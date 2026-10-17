@@ -1,0 +1,77 @@
+app_name: "SMC-SNR ML Perpetual Scanner"
+version: "1.0.0"
+mode: "RESEARCH"
+live_trading_locked: true
+data_dir: "./data"
+db_filename: "scanner.db"
+
+watchlist:
+  - "ADAUSDT"
+  - "XRPUSDT"
+  - "BTCUSDT"
+  - "BNBUSDT"
+  - "ETHUSDT"
+  - "SOLUSDT"
+  - "AVAXUSDT"
+  - "LINKUSDT"
+  - "XMRUSDT"
+  - "DOGEUSDT"
+  - "LTCUSDT"
+
+enabled_symbols:
+  - "ADAUSDT"
+  - "XRPUSDT"
+  - "BTCUSDT"
+  - "BNBUSDT"
+  - "ETHUSDT"
+  - "SOLUSDT"
+  - "AVAXUSDT"
+  - "LINKUSDT"
+  - "XMRUSDT"
+  - "DOGEUSDT"
+  - "LTCUSDT"
+
+exchange:
+  name: "Aster DEX"
+  base_url: "https://fapi.asterdex.com"
+  request_timeout: 15
+  max_retries: 4
+  retry_delay_sec: 1.0
+  rate_limit_calls_per_min: 600
+  maker_fee_rate: 0.0002
+  taker_fee_rate: 0.0005
+  slippage_rate: 0.0005
+
+risk:
+  initial_equity_usdt: 16.0
+  margin_mode: "ISOLATED"
+  max_leverage: 10
+  risk_per_trade_usdt: 0.09
+  daily_loss_limit_usdt: 0.18
+  weekly_loss_limit_usdt: 0.54
+  max_open_positions: 1
+  max_entries_per_week: 3
+  min_notional_usdt: 5.0
+  buffer_pct_for_fees: 0.02
+
+strategy:
+  execution_timeframe: "1h"
+  bias_timeframe: "4h"
+  swing_left_bars: 3
+  swing_right_bars: 3
+  atr_period: 14
+  sl_buffer_atr_multiple: 0.5
+  min_reward_to_risk: 1.5
+  fvg_min_size_atr_ratio: 0.1
+  sr_cluster_tolerance_pct: 0.015
+
+ml:
+  enabled: true
+  model_type: "lightgbm"
+  label_horizon_bars: 12
+  train_split: 0.60
+  val_split: 0.20
+  test_split: 0.20
+  calibration_method: "isotonic"
+  min_confidence_threshold: 0.55
+  min_samples_required: 100

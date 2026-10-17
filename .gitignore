@@ -1,0 +1,57 @@
+# =====================================================================
+# SignalGenerator — Git Ignore Configuration
+# =====================================================================
+
+# 1. Environment variables, API keys, EIP-712 private keys & webhooks
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*secret*
+
+# 2. Local SQLite databases, WAL/SHM journals & runtime state
+data/*.db
+data/*.db-wal
+data/*.db-shm
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# 3. Runtime logs & temporary diagnostics
+logs/
+*.log
+tmp/
+temp/
+scratch/
+
+# 4. Python bytecode, caches & test/coverage artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# 5. Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# 6. IDE, Editor & OS metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini

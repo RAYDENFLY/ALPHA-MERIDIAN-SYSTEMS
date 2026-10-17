@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMC-SNR ML Perpetual Setup Scanner</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0b0f17; color: #e2e8f0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .card-bg { background-color: #131b2a; border: 1px solid #1e293b; }
+        .card-inner { background-color: #0f172a; }
+        .badge-green { background-color: #064e3b; color: #34d399; border: 1px solid #059669; }
+        .badge-red { background-color: #7f1d1d; color: #f87171; border: 1px solid #dc2626; }
+        .badge-blue { background-color: #1e3a8a; color: #60a5fa; border: 1px solid #2563eb; }
+        .badge-purple { background-color: #581c87; color: #c084fc; border: 1px solid #7c3aed; }
+        .badge-yellow { background-color: #713f12; color: #facc15; border: 1px solid #ca8a04; }
+        .badge-orange { background-color: #7c2d12; color: #fb923c; border: 1px solid #ea580c; }
+        .badge-gray { background-color: #1f2937; color: #9ca3af; border: 1px solid #374151; }
+        
+        .filter-btn-active { background-color: #4f46e5 !important; color: #ffffff !important; border-color: #6366f1 !important; font-weight: 600; }
+        .card-ready { border-left: 4px solid #10b981; }
+        .card-watchlist { border-left: 4px solid #f59e0b; }
+        .card-infeasible { border-left: 4px solid #ef4444; }
+        .card-invalidated { border-left: 4px solid #f97316; }
+        .card-stale { border-left: 4px solid #6b7280; opacity: 0.85; }
+        .card-error { border-left: 4px solid #ec4899; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Top Header Navigation -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div>
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <h1 class="text-2xl font-bold tracking-tight text-white">SMC-SNR ML Perpetual Setup Scanner</h1>
+                    <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full badge-blue" id="modeBadge">RESEARCH</span>
+                    <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full badge-yellow">LIVE LOCKED</span>
+                    <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">PAPER / RESEARCH — NO LIVE ORDERS</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 mt-1">
+                    <span>Zero-LLM Institutional Setup Engine &bull; Aster DEX Perpetuals &bull; Initial Equity: $16.00 USDT &bull; ML Score is Informative (Unproven Edge)</span>
+                    <span class="text-slate-600">|</span>
+                    <span id="dataFreshnessHeader" class="text-slate-400 font-mono">Candle Age: --</span>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Scanner State and Timing Indicators -->
+                <div class="flex flex-col items-end text-xs font-mono text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <span>Scanner:</span>
+                        <span id="scannerStateBadge" class="px-2 py-0.5 rounded text-[11px] font-bold badge-green">IDLE</span>
+                    </div>
+                    <span class="text-[10px] text-slate-500 mt-0.5" id="lastScanTimeDisplay">Last Scan: Never</span>
+                </div>
+
+                <button onclick="triggerScan()" id="scanBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-lg shadow transition flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Scan Watchlist Now
+                </button>
+            </div>
+        </header>
+
+        <!-- Dynamic Notice Banner (for alerts or busy scanner notifications) -->
+        <div id="noticeBanner" class="hidden p-3 rounded-lg text-xs font-medium flex items-center justify-between">
+            <span id="noticeBannerText"></span>
+            <button onclick="dismissNotice()" class="text-slate-400 hover:text-white text-sm ml-2">&times;</button>
+        </div>
+
+        <!-- Account Health & Risk Governance Metrics (Auto-refreshed every 15s) -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+            <div class="card-bg p-4 rounded-xl">
+                <div class="text-xs text-slate-400 font-medium">Account Equity</div>
+                <div class="text-xl font-bold text-white mt-1" id="equityDisplay">$16.00 USDT</div>
+                <div class="text-xs text-emerald-400 mt-1 font-mono">ISOLATED &bull; 10x Max</div>
+            </div>
+            <div class="card-bg p-4 rounded-xl">
+                <div class="text-xs text-slate-400 font-medium">Target Isolated Margin</div>
+                <div class="text-xl font-bold text-white mt-1" id="targetMarginDisplay">$6.00–$6.50</div>
+                <div class="text-xs text-amber-400 mt-1 font-mono" id="hardRiskDisplay">Hard Risk Limit: $1.50</div>
+            </div>
+            <div class="card-bg p-4 rounded-xl">
+                <div class="text-xs text-slate-400 font-medium">Daily Loss Limit</div>
+                <div class="text-xl font-bold text-white mt-1" id="dailyLossDisplay">$0.00 / $0.18</div>
+                <div class="text-xs text-emerald-400 mt-1 font-mono" id="dailyStatus">Active (0 Losses)</div>
+            </div>
+            <div class="card-bg p-4 rounded-xl">
+                <div class="text-xs text-slate-400 font-medium">Weekly Loss Limit</div>
+                <div class="text-xl font-bold text-white mt-1" id="weeklyLossDisplay">$0.00 / $0.54</div>
+                <div class="text-xs text-emerald-400 mt-1 font-mono" id="weeklyStatus">Active (0 Losses)</div>
+            </div>
+            <div class="card-bg p-4 rounded-xl">
+                <div class="text-xs text-slate-400 font-medium">Exposure Caps</div>
+                <div class="text-xl font-bold text-white mt-1" id="capsDisplay">0 / 1 Open Pos</div>
+                <div class="text-xs text-slate-400 mt-1 font-mono" id="entriesDisplay">0 / 3 Entries This Week</div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="flex border-b border-slate-800 space-x-6 text-sm font-medium">
+            <button onclick="switchTab('setups')" id="tabBtn-setups" class="pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold">Candidate Setups</button>
+            <button onclick="switchTab('backtest')" id="tabBtn-backtest" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Historical Backtest</button>
+            <button onclick="switchTab('watchlist')" id="tabBtn-watchlist" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Watchlist & Controls</button>
+            <button onclick="switchTab('journal')" id="tabBtn-journal" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Trading Journal</button>
+        </div>
+
+        <!-- TAB 1: CANDIDATE SETUPS -->
+        <div id="tab-setups" class="space-y-4">
+            
+            <!-- Controls Bar: Status Filter Pills + Entry Category Pills + Search + Sorting -->
+            <div class="card-bg p-4 rounded-xl space-y-3">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <!-- Status Filter Pills -->
+                    <div class="flex flex-wrap items-center gap-1.5" id="statusFilterGroup">
+                        <button onclick="setStatusFilter('ALL')" id="filter-ALL" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5 filter-btn-active">
+                            <span>All</span>
+                            <span id="badge-count-ALL" class="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-slate-300">0</span>
+                        </button>
+                        <button onclick="setStatusFilter('READY')" id="filter-READY" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span>Ready</span>
+                            <span id="badge-count-READY" class="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-emerald-400">0</span>
+                        </button>
+                        <button onclick="setStatusFilter('WATCHLIST')" id="filter-WATCHLIST" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            <span>Watchlist</span>
+                            <span id="badge-count-WATCHLIST" class="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-amber-400">0</span>
+                        </button>
+                        <button onclick="setStatusFilter('INFEASIBLE')" id="filter-INFEASIBLE" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-red-400"></span>
+                            <span>Infeasible</span>
+                            <span id="badge-count-INFEASIBLE" class="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-red-400">0</span>
+                        </button>
+                        <button onclick="setStatusFilter('INVALIDATED')" id="filter-INVALIDATED" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-orange-400"></span>
+                            <span>Invalidated</span>
+                            <span id="badge-count-INVALIDATED" class="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-orange-400">0</span>
+                        </button>
+                        <button onclick="setStatusFilter('STALE')" id="filter-STALE" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+                            <span>Stale</span>
+                            <span id="badge-count-STALE" class="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-gray-400">0</span>
+                        </button>
+                        <button onclick="setStatusFilter('ERROR')" id="filter-ERROR" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                            <span>Error</span>
+                            <span id="badge-count-ERROR" class="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-rose-400">0</span>
+                        </button>
+                    </div>
+
+                    <!-- Search and Sort Controls -->
+                    <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <input type="text" id="symbolSearchInput" oninput="handleSearchInput(this.value)" placeholder="Search symbol..." class="w-36 md:w-44 px-3 py-1.5 bg-slate-900 text-xs text-white rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500 placeholder-slate-500" />
+                            <button onclick="clearSearch()" id="clearSearchBtn" class="hidden absolute right-2 top-2 text-slate-400 hover:text-white text-xs">&times;</button>
+                        </div>
+
+                        <select id="sortSelect" onchange="handleSortChange(this.value)" class="px-3 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="confidence_desc">ML Score: High to Low (Informative)</option>
+                            <option value="confidence_asc">ML Score: Low to High (Informative)</option>
+                            <option value="latest">Latest Signal First</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Entry Category Filter Pills -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-800/60" id="categoryFilterGroup">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1">Category:</span>
+                    <button onclick="setCategoryFilter('ALL')" id="catFilter-ALL" class="px-2.5 py-0.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 filter-btn-active">
+                        <span>All</span>
+                        <span id="badge-cat-ALL" class="px-1 py-0.1 bg-slate-900 rounded-full text-[10px] text-slate-400">0</span>
+                    </button>
+                    <button onclick="setCategoryFilter('Breakout')" id="catFilter-Breakout" class="px-2.5 py-0.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                        <span>⚡ Breakout</span>
+                        <span id="badge-cat-Breakout" class="px-1 py-0.1 bg-slate-900 rounded-full text-[10px] text-indigo-400">0</span>
+                    </button>
+                    <button onclick="setCategoryFilter('Pullback')" id="catFilter-Pullback" class="px-2.5 py-0.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                        <span>🔄 Pullback</span>
+                        <span id="badge-cat-Pullback" class="px-1 py-0.1 bg-slate-900 rounded-full text-[10px] text-sky-400">0</span>
+                    </button>
+                    <button onclick="setCategoryFilter('Reversal')" id="catFilter-Reversal" class="px-2.5 py-0.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                        <span>🔀 Reversal</span>
+                        <span id="badge-cat-Reversal" class="px-1 py-0.1 bg-slate-900 rounded-full text-[10px] text-amber-400">0</span>
+                    </button>
+                    <button onclick="setCategoryFilter('Range/Mean Reversion')" id="catFilter-Range" class="px-2.5 py-0.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                        <span>↔️ Range / Mean Reversion</span>
+                        <span id="badge-cat-Range" class="px-1 py-0.1 bg-slate-900 rounded-full text-[10px] text-teal-400">0</span>
+                    </button>
+                    <button onclick="setCategoryFilter('Unclassified')" id="catFilter-Unclassified" class="px-2.5 py-0.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                        <span>❓ Unclassified</span>
+                        <span id="badge-cat-Unclassified" class="px-1 py-0.1 bg-slate-900 rounded-full text-[10px] text-slate-400">0</span>
+                    </button>
+                </div>
+
+                <!-- Live Query Summary Line -->
+                <div class="flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2 font-mono">
+                    <span id="summaryCountsDisplay">0 candidates tracked &bull; 0 ready for execution</span>
+                    <span class="text-[11px] text-slate-500" id="pollingStatusDisplay">Auto-refresh: 30s active</span>
+                </div>
+            </div>
+
+            <!-- Setups Container -->
+            <div id="setupsContainer" class="space-y-4">
+                <!-- Dynamically populated -->
+                <div class="card-bg p-8 rounded-xl text-center">
+                    <div class="w-12 h-12 mx-auto mb-3 text-slate-500">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white">NO TRADE</h3>
+                    <p class="text-sm text-slate-400 max-w-lg mx-auto mt-2">
+                        No setup qualifies across enabled watchlist symbols at current candle close. The deterministic SMC/SnR engine filters out low-probability conditions to protect account capital.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: HISTORICAL BACKTEST -->
+        <div id="tab-backtest" class="hidden space-y-6">
+            <div class="card-bg p-6 rounded-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold text-white">1-Year Out-Of-Sample Backtest Comparison</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">365 Days of 1H/4H Candles &bull; Realistic Fees (0.05% taker), Slippage (0.05%), and Historical Funding</p>
+                    </div>
+                    <button onclick="loadBacktest()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-medium">Re-Run Backtest</button>
+                </div>
+
+                <!-- Backtest Comparison Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Deterministic Baseline -->
+                    <div class="card-inner p-4 rounded-lg border border-slate-700">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-semibold text-slate-200">1. Deterministic SMC/SnR Baseline</span>
+                            <span class="px-2 py-0.5 text-xs rounded badge-blue">Deterministic</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 mt-4 text-center">
+                            <div>
+                                <div class="text-xs text-slate-400">Total Trades</div>
+                                <div class="text-base font-bold text-white" id="det-trades">--</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Win Rate</div>
+                                <div class="text-base font-bold text-white" id="det-winrate">--%</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Profit Factor</div>
+                                <div class="text-base font-bold text-white" id="det-pf">--</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Net PnL</div>
+                                <div class="text-base font-bold text-emerald-400" id="det-pnl">--</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Return on Capital</div>
+                                <div class="text-base font-bold text-emerald-400" id="det-roc">--%</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Max Drawdown</div>
+                                <div class="text-base font-bold text-red-400" id="det-dd">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ML-Filtered Strategy -->
+                    <div class="card-inner p-4 rounded-lg border border-slate-700">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-semibold text-slate-200">2. Calibrated ML-Filtered Strategy</span>
+                            <span class="px-2 py-0.5 text-xs rounded badge-purple">ML-Filtered</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 mt-4 text-center">
+                            <div>
+                                <div class="text-xs text-slate-400">Total Trades</div>
+                                <div class="text-base font-bold text-white" id="ml-trades">--</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Win Rate</div>
+                                <div class="text-base font-bold text-white" id="ml-winrate">--%</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Profit Factor</div>
+                                <div class="text-base font-bold text-white" id="ml-pf">--</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Net PnL</div>
+                                <div class="text-base font-bold text-emerald-400" id="ml-pnl">--</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Return on Capital</div>
+                                <div class="text-base font-bold text-emerald-400" id="ml-roc">--%</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Max Drawdown</div>
+                                <div class="text-base font-bold text-red-400" id="ml-dd">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Equity Curve Chart -->
+                <div class="mt-4">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Simulated Equity Curve ($16.00 Initial Capital)</h3>
+                    <div class="h-64">
+                        <canvas id="equityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: WATCHLIST & CONTROLS -->
+        <div id="tab-watchlist" class="hidden space-y-4">
+            <div class="card-bg p-6 rounded-xl">
+                <h2 class="text-lg font-bold text-white mb-1">Watchlist Specifications & Controls</h2>
+                <p class="text-xs text-slate-400 mb-4">Official Aster DEX Perpetual Contracts. Toggle individual pairs to enable or disable scanning.</p>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="text-xs text-slate-400 uppercase bg-slate-900 border-b border-slate-800">
+                            <tr>
+                                <th class="px-4 py-3">Symbol</th>
+                                <th class="px-4 py-3">Min Notional</th>
+                                <th class="px-4 py-3">Step Size</th>
+                                <th class="px-4 py-3">Tick Size</th>
+                                <th class="px-4 py-3">Status</th>
+                                <th class="px-4 py-3 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="watchlistTableBody" class="divide-y divide-slate-800">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: TRADING JOURNAL -->
+        <div id="tab-journal" class="hidden space-y-5">
+            <!-- Header and Refresh -->
+            <div class="card-bg p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span>📖 Trading Journal & Performance Analytics</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/80 border border-indigo-600 text-indigo-300">PAPER EXECUTION AUDIT</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Complete lifecycle audit of executed paper trades, fee & funding settlements, audited realized PnL, and setup provenance.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="loadJournal()" id="refreshJournalBtn" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Refresh Journal</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Performance KPI Metrics Cards (Strict Isolation: Closed Trades Only) -->
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
+                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Closed Trades</div>
+                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-closed-trades">0</div>
+                    <div class="text-[10px] text-slate-500 font-mono mt-0.5" id="journal-metric-trades-breakdown">0 Wins &bull; 0 Losses &bull; 0 BE</div>
+                </div>
+                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
+                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Win Rate</div>
+                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-winrate">0.0%</div>
+                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Closed Trades Win %</div>
+                </div>
+                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
+                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Gross Realized PnL</div>
+                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-gross-pnl">$0.00</div>
+                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Before fees & friction</div>
+                </div>
+                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
+                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Total Fees & Friction</div>
+                    <div class="text-lg font-bold text-amber-400 mt-1" id="journal-metric-fees">$0.00</div>
+                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Taker + Funding + Slip</div>
+                </div>
+                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
+                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Net Realized PnL</div>
+                    <div class="text-lg font-bold text-emerald-400 mt-1" id="journal-metric-net-pnl">$0.00</div>
+                    <div class="text-[10px] text-emerald-400/80 font-mono mt-0.5">Audited Net Realized</div>
+                </div>
+                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
+                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Average Net PnL</div>
+                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-avg-pnl">$0.00</div>
+                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Per Closed Trade</div>
+                </div>
+            </div>
+
+            <!-- Institutional Accounting Governance Note -->
+            <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-indigo-400 select-none">🛡️</span>
+                    <span><strong>Accounting Governance:</strong> Open positions are isolated from realized PnL metrics. Floating PnL is realized only upon bracket execution.</span>
+                </div>
+                <span class="text-slate-400 font-mono text-[10px]" id="journal-metric-open-trades">Active Open Positions: 0</span>
+            </div>
+
+            <!-- Multi-Filter Controls Bar -->
+            <div class="card-bg p-4 rounded-xl space-y-3">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <!-- Outcome Filter Buttons -->
+                    <div class="flex flex-wrap items-center gap-1.5" id="journalOutcomeGroup">
+                        <button onclick="setJournalOutcomeFilter('ALL')" id="jOutcome-ALL" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition filter-btn-active">
+                            <span>All Outcomes</span>
+                        </button>
+                        <button onclick="setJournalOutcomeFilter('WIN')" id="jOutcome-WIN" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span>Wins</span>
+                        </button>
+                        <button onclick="setJournalOutcomeFilter('LOSS')" id="jOutcome-LOSS" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-red-400"></span>
+                            <span>Losses</span>
+                        </button>
+                        <button onclick="setJournalOutcomeFilter('BREAKEVEN')" id="jOutcome-BREAKEVEN" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                            <span>Breakeven</span>
+                        </button>
+                        <button onclick="setJournalOutcomeFilter('OPEN')" id="jOutcome-OPEN" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+                            <span>Open Positions</span>
+                        </button>
+                    </div>
+
+                    <!-- Dropdown Filters & Search -->
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <!-- Category Filter -->
+                        <select id="journalCategorySelect" onchange="handleJournalCategoryChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="ALL">All Categories</option>
+                            <option value="Breakout">⚡ Breakout</option>
+                            <option value="Pullback">🔄 Pullback</option>
+                            <option value="Reversal">🔀 Reversal</option>
+                            <option value="Range/Mean Reversion">↔️ Range / Mean Reversion</option>
+                            <option value="Unclassified">❓ Unclassified</option>
+                        </select>
+
+                        <!-- Direction Filter -->
+                        <select id="journalDirectionSelect" onchange="handleJournalDirectionChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="ALL">All Directions</option>
+                            <option value="LONG">LONG Only</option>
+                            <option value="SHORT">SHORT Only</option>
+                        </select>
+
+                        <!-- Period Filter -->
+                        <select id="journalPeriodSelect" onchange="handleJournalPeriodChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="all">All Time</option>
+                            <option value="24h">Last 24 Hours</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                        </select>
+
+                        <!-- Symbol Search -->
+                        <div class="relative">
+                            <input type="text" id="journalSymbolInput" oninput="handleJournalSearchInput(this.value)" placeholder="Search symbol..." class="w-28 md:w-36 px-2.5 py-1.5 bg-slate-900 text-xs text-white rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500 placeholder-slate-500" />
+                        </div>
+
+                        <!-- Reset Filter Button -->
+                        <button onclick="resetJournalFilters()" class="px-2.5 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition" title="Clear all journal filters">Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trades Table Container -->
+            <div class="card-bg p-5 rounded-xl space-y-3">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead class="text-[11px] text-slate-400 uppercase bg-slate-900 border-b border-slate-800">
+                            <tr>
+                                <th class="px-3 py-3">Trade / Setup ID</th>
+                                <th class="px-3 py-3">Symbol & Side</th>
+                                <th class="px-3 py-3">Entry Category</th>
+                                <th class="px-3 py-3">Entry (UTC / Price)</th>
+                                <th class="px-3 py-3">Exit (UTC / Price)</th>
+                                <th class="px-3 py-3">SL / TP Targets</th>
+                                <th class="px-3 py-3">Duration</th>
+                                <th class="px-3 py-3">Gross PnL</th>
+                                <th class="px-3 py-3">Total Fees</th>
+                                <th class="px-3 py-3">Net PnL & Outcome</th>
+                                <th class="px-3 py-3">Exit Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="journalTableBody" class="divide-y divide-slate-800/80">
+                            <!-- Populated dynamically via loadJournal() -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State Display -->
+                <div id="journalEmptyState" class="hidden p-8 text-center space-y-2">
+                    <div class="w-12 h-12 mx-auto text-slate-500">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    </div>
+                    <h3 class="text-base font-semibold text-white" id="journalEmptyTitle">No Trade Records Found</h3>
+                    <p class="text-xs text-slate-400 max-w-md mx-auto" id="journalEmptyMessage">
+                        Paper trades are recorded automatically when qualifying setups decisively fill simulated limit orders and subsequently trigger take-profit or stop-loss brackets.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Frontend Script -->
+    <script>
+        let equityChartInstance = null;
+
+        // UI State preservation across polling intervals
+        let currentFilter = 'ALL';
+        let currentCategoryFilter = 'ALL';
+        let currentSort = 'confidence_desc';
+        let searchQuery = '';
+        let lastRawSetupsData = null;
+
+        // Trading Journal filter states
+        let journalOutcomeFilter = 'ALL';
+        let journalCategoryFilter = 'ALL';
+        let journalDirectionFilter = 'ALL';
+        let journalPeriodFilter = 'all';
+        let journalSearchQuery = '';
+
+        // Banner notifications
+        function showNotice(msg, type = 'info') {
+            const banner = document.getElementById('noticeBanner');
+            const text = document.getElementById('noticeBannerText');
+            banner.className = `p-3 rounded-lg text-xs font-medium flex items-center justify-between ${
+                type === 'warn' ? 'bg-amber-900/50 text-amber-200 border border-amber-700' :
+                type === 'error' ? 'bg-red-900/50 text-red-200 border border-red-700' :
+                'bg-indigo-900/50 text-indigo-200 border border-indigo-700'
+            }`;
+            text.innerText = msg;
+            banner.classList.remove('hidden');
+        }
+
+        function dismissNotice() {
+            document.getElementById('noticeBanner').classList.add('hidden');
+        }
+
+        // Account Status Polling (Every 15s)
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                document.getElementById('modeBadge').innerText = data.mode;
+                document.getElementById('equityDisplay').innerText = `$${data.capital.current_equity_usdt.toFixed(2)} USDT`;
+                const minM = data.risk_limits.target_isolated_margin_usdt !== undefined ? data.risk_limits.target_isolated_margin_usdt.toFixed(2) : '6.00';
+                const maxM = data.risk_limits.target_isolated_margin_max_usdt !== undefined ? data.risk_limits.target_isolated_margin_max_usdt.toFixed(2) : '6.50';
+                const targetMarginEl = document.getElementById('targetMarginDisplay');
+                if (targetMarginEl) targetMarginEl.innerText = `$${minM}–$${maxM}`;
+                const hardRiskEl = document.getElementById('hardRiskDisplay');
+                if (hardRiskEl && data.risk_limits.hard_risk_limit_usdt !== undefined) {
+                    hardRiskEl.innerText = `Hard Risk Limit: $${data.risk_limits.hard_risk_limit_usdt.toFixed(2)}`;
+                }
+                document.getElementById('dailyLossDisplay').innerText = `$${data.risk_limits.daily_loss_used_usdt.toFixed(2)} / $${data.risk_limits.daily_loss_limit_usdt.toFixed(2)}`;
+                document.getElementById('weeklyLossDisplay').innerText = `$${data.risk_limits.weekly_loss_used_usdt.toFixed(2)} / $${data.risk_limits.weekly_loss_limit_usdt.toFixed(2)}`;
+                document.getElementById('capsDisplay').innerText = `${data.risk_limits.open_positions} / ${data.risk_limits.max_open_positions} Open Pos`;
+                document.getElementById('entriesDisplay').innerText = `${data.risk_limits.weekly_entries} / ${data.risk_limits.max_weekly_entries} Entries This Week`;
+
+                // Scanner State & Metadata
+                if (data.scanner) {
+                    const st = data.scanner.state || 'IDLE';
+
+                    const badge = document.getElementById('scannerStateBadge');
+                    badge.innerText = st === 'STALE' ? 'STALE (INACTIVE)' : st;
+                    badge.className = `px-2 py-0.5 rounded text-[11px] font-bold ${
+                        st === 'RUNNING' ? 'badge-blue animate-pulse' :
+                        st === 'STOPPED' ? 'bg-amber-950 text-amber-300 border border-amber-700' :
+                        st === 'STALE' ? 'bg-red-950 text-red-300 border border-red-700' :
+                        st === 'ERROR' ? 'badge-red' :
+                        'badge-green'
+                    }`;
+
+                    if (data.scanner.last_scan_utc) {
+                        const d = new Date(data.scanner.last_scan_utc);
+                        const ageMin = data.scanner.last_scan_age_seconds !== undefined && data.scanner.last_scan_age_seconds !== null
+                            ? ` (${Math.floor(data.scanner.last_scan_age_seconds / 60)}m ago)`
+                            : '';
+                        document.getElementById('lastScanTimeDisplay').innerText = `Last Scan: ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}${ageMin}`;
+                    }
+
+                    if (data.scanner.candle_age_seconds !== null && data.scanner.candle_age_seconds !== undefined) {
+                        const m = Math.floor(data.scanner.candle_age_seconds / 60);
+                        const freshEl = document.getElementById('dataFreshnessHeader');
+                        if (freshEl) {
+                            freshEl.innerText = `Candle Age: ${m}m ago (${data.scanner.is_stale ? 'STALE' : 'Fresh'})`;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Status polling error:", err);
+            }
+        }
+
+        // Setups Polling (Every 30s)
+        async function fetchSetups() {
+            try {
+                // Call API with preserved filter and sort parameters
+                const params = new URLSearchParams();
+                if (currentFilter && currentFilter !== 'ALL') params.append('status', currentFilter);
+                if (currentCategoryFilter && currentCategoryFilter !== 'ALL') params.append('category', currentCategoryFilter);
+                if (currentSort) params.append('sort_by', currentSort);
+                if (searchQuery) params.append('symbol', searchQuery);
+                if (typeof showHistoricalArchive !== 'undefined' && showHistoricalArchive) {
+                    params.append('include_historical', 'true');
+                }
+
+                const res = await fetch(`/api/setups?${params.toString()}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                lastRawSetupsData = data;
+                renderSetups(data);
+                updateBadgeCounters(data.counts_by_status);
+                updateCategoryBadgeCounters(data.counts_by_category);
+            } catch (err) {
+                console.error("Setups polling error:", err);
+            }
+        }
+
+        function updateBadgeCounters(counts) {
+            if (!counts) return;
+            ['ALL', 'READY', 'WATCHLIST', 'INFEASIBLE', 'INVALIDATED', 'STALE', 'ERROR'].forEach(st => {
+                const el = document.getElementById(`badge-count-${st}`);
+                if (el) el.innerText = counts[st] !== undefined ? counts[st] : 0;
+            });
+
+            const summaryEl = document.getElementById('summaryCountsDisplay');
+            if (summaryEl) {
+                const total = counts['ALL'] || 0;
+                const ready = counts['READY'] || 0;
+                summaryEl.innerText = `${total} candidates tracked \u2022 ${ready} ready for execution`;
+            }
+        }
+
+        function updateCategoryBadgeCounters(counts) {
+            if (!counts) return;
+            const mapping = {
+                'ALL': 'badge-cat-ALL',
+                'Breakout': 'badge-cat-Breakout',
+                'Pullback': 'badge-cat-Pullback',
+                'Reversal': 'badge-cat-Reversal',
+                'Range/Mean Reversion': 'badge-cat-Range',
+                'Unclassified': 'badge-cat-Unclassified'
+            };
+            for (const [k, elemId] of Object.entries(mapping)) {
+                const el = document.getElementById(elemId);
+                if (el) el.innerText = counts[k] !== undefined ? counts[k] : 0;
+            }
+        }
+
+        function setStatusFilter(status) {
+            currentFilter = status;
+            ['ALL', 'READY', 'WATCHLIST', 'INFEASIBLE', 'INVALIDATED', 'STALE', 'ERROR'].forEach(st => {
+                const btn = document.getElementById(`filter-${st}`);
+                if (btn) {
+                    if (st === status) btn.classList.add('filter-btn-active');
+                    else btn.classList.remove('filter-btn-active');
+                }
+            });
+            fetchSetups();
+        }
+
+        function setCategoryFilter(category) {
+            currentCategoryFilter = category;
+            const catButtons = {
+                'ALL': 'catFilter-ALL',
+                'Breakout': 'catFilter-Breakout',
+                'Pullback': 'catFilter-Pullback',
+                'Reversal': 'catFilter-Reversal',
+                'Range/Mean Reversion': 'catFilter-Range',
+                'Unclassified': 'catFilter-Unclassified'
+            };
+            for (const [k, btnId] of Object.entries(catButtons)) {
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    if (k === category) btn.classList.add('filter-btn-active');
+                    else btn.classList.remove('filter-btn-active');
+                }
+            }
+            fetchSetups();
+        }
+
+        function handleSortChange(sortOption) {
+            currentSort = sortOption;
+            fetchSetups();
+        }
+
+        function handleSearchInput(query) {
+            searchQuery = query.trim();
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (searchQuery.length > 0) {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+            }
+            fetchSetups();
+        }
+
+        function clearSearch() {
+            document.getElementById('symbolSearchInput').value = '';
+            handleSearchInput('');
+        }
+
+        let showHistoricalArchive = false;
+
+        function toggleHistoricalArchive(val) {
+            showHistoricalArchive = Boolean(val);
+            fetchSetups();
+        }
+
+        function renderSetups(data) {
+            const container = document.getElementById('setupsContainer');
+            if (!data.setups || data.setups.length === 0) {
+                const filterDesc = currentFilter !== 'ALL' ? `matching status "${currentFilter}"` : '';
+                const searchDesc = searchQuery ? `matching symbol "${searchQuery}"` : '';
+                const activeQueryText = [filterDesc, searchDesc].filter(Boolean).join(' and ');
+                const syms = (data.symbols_attempted && data.symbols_attempted.length > 0)
+                    ? data.symbols_attempted.join(', ')
+                    : 'ADAUSDT, AVAXUSDT, BNBUSDT, BTCUSDT, DOGEUSDT, ETHUSDT, LINKUSDT, LTCUSDT, SOLUSDT, XMRUSDT, XRPUSDT';
+                const scanStatusBadge = data.has_completed_scan
+                    ? `<span class="px-2 py-0.5 rounded text-[11px] font-mono badge-green">LIVE SCAN COMPLETED (${(data.symbols_attempted || []).length || 11}/11 SYMBOLS OK)</span>`
+                    : `<span class="px-2 py-0.5 rounded text-[11px] font-mono badge-blue">INITIALIZING SCAN...</span>`;
+
+                container.innerHTML = `
+                    <div class="card-bg p-8 rounded-xl text-center space-y-3">
+                        <div class="w-12 h-12 mx-auto text-slate-500">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <div class="flex items-center justify-center gap-2">
+                            ${scanStatusBadge}
+                        </div>
+                        <h3 class="text-lg font-semibold text-white">NO ACTIONABLE SETUP AT CURRENT CANDLE (${data.status || 'NO_TRADE'})</h3>
+                        <p class="text-sm text-slate-400 max-w-xl mx-auto">
+                            No setup candidates qualified ${activeQueryText || 'at the latest 1H/4H candle close'}.
+                            All watchlist pairs are currently trading mid-range (72H dealing range 0.24–0.55) without hitting premium exhaustion (&ge;0.88), deep discount rejection (&le;0.12), or bullish variance-ratio expansion.
+                        </p>
+                        <div class="text-xs font-mono text-slate-500 max-w-2xl mx-auto pt-1">
+                            Scanned Symbols: ${syms}
+                        </div>
+                        <div class="pt-3 flex items-center justify-center gap-3">
+                            <button onclick="switchTab('watchlist')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition">
+                                View Watchlist & Specs (11 Pairs)
+                            </button>
+                            <button onclick="toggleHistoricalArchive(true)" class="px-3 py-1.5 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 rounded-lg text-xs font-medium transition">
+                                Inspect Historical Setup Archive (Stale/Past Signals)
+                            </button>
+                        </div>
+                    </div>`;
+                return;
+            }
+
+            const archiveBannerHtml = (typeof showHistoricalArchive !== 'undefined' && showHistoricalArchive) ? `
+                <div class="p-3 rounded-xl bg-amber-950/60 border border-amber-700/80 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span>🗄️</span>
+                        <span><strong>HISTORICAL ARCHIVE VIEW:</strong> Showing past setup records from SQLite database (marked <code>STALE</code>). Current live scan has 0 active candidates.</span>
+                    </div>
+                    <button onclick="toggleHistoricalArchive(false)" class="px-3 py-1 bg-amber-800 hover:bg-amber-700 text-white rounded-lg font-semibold transition">
+                        &larr; Return to Live Scan View
+                    </button>
+                </div>
+            ` : '';
+
+            container.innerHTML = archiveBannerHtml + data.setups.map(s => {
+                const isLong = s.direction === 'LONG';
+                const sideBadge = isLong ? 'badge-green' : 'badge-red';
+                
+                // Status specific border and badge styling
+                let statusBadge = 'badge-yellow';
+                let cardClass = 'card-bg p-5 rounded-xl space-y-4';
+                let statusTitle = s.status;
+
+                if (s.status === 'READY' || s.status === 'VALID') {
+                    statusBadge = 'badge-green';
+                    cardClass += ' card-ready border border-emerald-500/40';
+                    statusTitle = 'SETUP: READY (STRATEGY QUALIFIED)';
+                } else if (s.status === 'WATCHLIST') {
+                    statusBadge = 'badge-yellow';
+                    cardClass += ' card-watchlist';
+                    const rText = ((s.rejection_reasons || []).join(' ') + ' ' + (s.opposing_reasons || []).join(' ')).toLowerCase();
+                    if (rText.includes('account limit') || rText.includes('open position') || rText.includes('weekly entries') || rText.includes('loss limit')) {
+                        statusTitle = 'SETUP: WATCHLIST (Account Limit)';
+                    } else if (rText.includes('live sync failed') || rText.includes('pending verified data') || rText.includes('sync failed')) {
+                        statusTitle = 'SETUP: WATCHLIST (Data Pending)';
+                    } else if (rText.includes('trigger') || rText.includes('entry price') || rText.includes('breakout')) {
+                        statusTitle = 'SETUP: WATCHLIST (Awaiting Trigger)';
+                    } else {
+                        statusTitle = 'SETUP: WATCHLIST';
+                    }
+                } else if (s.status === 'INFEASIBLE') {
+                    statusBadge = 'badge-red';
+                    cardClass += ' card-infeasible';
+                    statusTitle = 'SETUP: INFEASIBLE (Capital / Sizing)';
+                } else if (s.status === 'INVALIDATED') {
+                    statusBadge = 'badge-orange';
+                    cardClass += ' card-invalidated';
+                    statusTitle = 'SETUP: INVALIDATED (Structural Breach)';
+                } else if (s.status === 'STALE') {
+                    statusBadge = 'badge-gray';
+                    cardClass += ' card-stale opacity-75 border border-slate-700/60 bg-slate-950/40';
+                    statusTitle = 'SETUP: STALE (Expired / Data Outdated)';
+                } else if (s.status === 'ERROR') {
+                    statusBadge = 'badge-red';
+                    cardClass += ' card-error';
+                    statusTitle = 'SETUP: ERROR (Evaluation Failed)';
+                }
+
+                // Decoupled Execution Status logic
+                let execBadgeClass = 'border border-slate-700 text-slate-400 bg-slate-900/80';
+                let execTitle = 'EXEC: NOT SUBMITTED';
+                const exStatus = s.execution_status || 'NOT_SUBMITTED';
+
+                if (exStatus === 'SUBMITTED' || exStatus === 'SUBMITTING') {
+                    execBadgeClass = 'bg-amber-950/80 border border-amber-600 text-amber-300 font-semibold';
+                    execTitle = 'EXEC: PENDING LIMIT ORDER';
+                } else if (exStatus === 'FILLED') {
+                    execBadgeClass = 'bg-blue-950/80 border border-blue-600 text-blue-300 font-semibold';
+                    execTitle = 'EXEC: POSITION OPEN';
+                } else if (exStatus === 'PROTECTED') {
+                    execBadgeClass = 'bg-emerald-950/80 border border-emerald-600 text-emerald-300 font-semibold';
+                    execTitle = 'EXEC: POSITION OPEN (PROTECTED)';
+                } else if (exStatus === 'CLOSED') {
+                    execBadgeClass = 'bg-slate-800 border border-slate-600 text-slate-300';
+                    execTitle = 'EXEC: POSITION CLOSED';
+                } else if (exStatus === 'REJECTED') {
+                    execBadgeClass = 'bg-red-950/80 border border-red-700 text-red-300';
+                    execTitle = 'EXEC: ORDER REJECTED';
+                } else if (exStatus === 'EXECUTION_UNKNOWN') {
+                    execBadgeClass = 'bg-purple-950/80 border border-purple-700 text-purple-300';
+                    execTitle = 'EXEC: UNKNOWN';
+                }
+
+                // Confidence display semantics (explicit N/A handling)
+                const mlProbText = s.ml_probability !== null && s.ml_probability !== undefined 
+                    ? `${(s.ml_probability * 100).toFixed(1)}%` 
+                    : 'N/A';
+
+                // Prominent Primary Status Reason Banner definition
+                let bannerClass = 'bg-slate-900 border-slate-800 text-slate-300';
+                let bannerIcon = 'ℹ️';
+                let bannerTitle = 'STATUS DETAILS';
+                let primaryReason = s.rejection_reasons && s.rejection_reasons.length ? s.rejection_reasons[0] : 'Candidate condition normal.';
+
+                if (s.status === 'READY' || s.status === 'VALID') {
+                    bannerClass = 'bg-emerald-950/70 border-emerald-700 text-emerald-200';
+                    bannerIcon = '✅';
+                    bannerTitle = `STRATEGY SETUP QUALIFIED &bull; [${execTitle}]`;
+                    primaryReason = 'Strategy rules confirmed, sizing feasible, and risk limits permitted. Note: Live trading is locked; order execution is decoupled from setup generation.';
+                } else if (s.status === 'WATCHLIST') {
+                    bannerClass = 'bg-amber-950/70 border-amber-700 text-amber-200';
+                    bannerIcon = '👁️';
+                    const rText = ((s.rejection_reasons || []).join(' ') + ' ' + (s.opposing_reasons || []).join(' ')).toLowerCase();
+                    if (rText.includes('account limit') || rText.includes('open position') || rText.includes('weekly entries') || rText.includes('loss limit')) {
+                        bannerTitle = 'WATCHLIST (ACCOUNT LIMIT REACHED)';
+                    } else if (rText.includes('live sync failed') || rText.includes('pending verified data') || rText.includes('sync failed')) {
+                        bannerTitle = 'WATCHLIST (DATA VERIFICATION PENDING)';
+                    } else if (rText.includes('trigger') || rText.includes('entry price') || rText.includes('breakout')) {
+                        bannerTitle = 'WATCHLIST (AWAITING TRIGGER)';
+                    } else {
+                        bannerTitle = 'WATCHLIST (NOT EXECUTABLE)';
+                    }
+                    primaryReason = s.rejection_reasons && s.rejection_reasons.length ? s.rejection_reasons[0] : 'Awaiting confirmation.';
+                } else if (s.status === 'INFEASIBLE') {
+                    bannerClass = 'bg-red-950/70 border-red-700 text-red-200';
+                    bannerIcon = '🚫';
+                    bannerTitle = 'CAPITAL / SIZING INFEASIBLE';
+                    primaryReason = s.rejection_reasons && s.rejection_reasons.length ? s.rejection_reasons[0] : 'Position sizing exceeds $16 account constraints.';
+                } else if (s.status === 'INVALIDATED') {
+                    bannerClass = 'bg-orange-950/70 border-orange-700 text-orange-200';
+                    bannerIcon = '⛔';
+                    bannerTitle = 'STRUCTURAL INVALIDATION BREACHED';
+                    primaryReason = s.rejection_reasons && s.rejection_reasons.length ? s.rejection_reasons[0] : (s.invalidation_reason || 'Price wicks violated structural invalidation.');
+                } else if (s.status === 'STALE') {
+                    bannerClass = 'bg-slate-900 border-slate-700 text-slate-300';
+                    bannerIcon = '⏳';
+                    bannerTitle = `STALE SIGNAL / EXPIRED (NO ACTION)`;
+                    primaryReason = s.rejection_reasons && s.rejection_reasons.length ? s.rejection_reasons[0] : 'Candle data age exceeds 3-hour limit or 12-hour TTL expired. Scanner stopped or market moved.';
+                } else if (s.status === 'ERROR') {
+                    bannerClass = 'bg-rose-950/70 border-rose-700 text-rose-200';
+                    bannerIcon = '❌';
+                    bannerTitle = 'EVALUATION ERROR';
+                    primaryReason = s.rejection_reasons && s.rejection_reasons.length ? s.rejection_reasons[0] : 'Candidate evaluation failed.';
+                }
+
+                // Entry Category Badge
+                const cat = s.entry_category || 'Unclassified';
+                let catBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+                let catIcon = '❓';
+                if (cat === 'Breakout') { catBadgeClass = 'bg-indigo-950/80 text-indigo-300 border-indigo-700'; catIcon = '⚡'; }
+                else if (cat === 'Pullback') { catBadgeClass = 'bg-sky-950/80 text-sky-300 border-sky-700'; catIcon = '🔄'; }
+                else if (cat === 'Reversal') { catBadgeClass = 'bg-amber-950/80 text-amber-300 border-amber-700'; catIcon = '🔀'; }
+                else if (cat === 'Range/Mean Reversion' || cat === 'Range') { catBadgeClass = 'bg-teal-950/80 text-teal-300 border-teal-700'; catIcon = '↔️'; }
+
+                // Direction accent styling
+                const dirAccent = isLong ? 'border-t border-t-emerald-500/40' : 'border-t border-t-rose-500/40';
+                cardClass += ' ' + dirAccent;
+
+                return `
+                <div class="${cardClass}">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                        <div class="flex flex-wrap items-center gap-2.5">
+                            <span class="text-xl font-extrabold text-white tracking-wide">${s.symbol}</span>
+                            <span class="px-3 py-0.5 text-xs font-extrabold rounded-lg ${sideBadge} border ${isLong ? 'border-emerald-400' : 'border-rose-400'}">${s.direction}</span>
+                            <span class="px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-slate-300 border border-slate-700">10.0x Isolated</span>
+                            <span class="px-2 py-0.5 text-xs font-semibold rounded border ${catBadgeClass}" title="Structural Entry Category">${catIcon} ${cat}</span>
+                            <span class="px-2.5 py-0.5 text-xs font-semibold rounded ${statusBadge}" title="Strategy qualification status">${statusTitle}</span>
+                            <span class="px-2.5 py-0.5 text-[11px] rounded ${execBadgeClass}" title="Exchange / Paper execution status">${execTitle}</span>
+                            <span class="text-xs text-slate-400 font-mono">${s.datetime_utc || ''}</span>
+                        </div>
+                        <div class="flex items-center gap-2 font-mono">
+                            <span class="text-xs text-slate-400" title="Informative score; does not guarantee edge">ML Score (Informative):</span>
+                            <span class="px-2.5 py-0.5 text-xs font-bold rounded ${s.ml_probability !== null ? 'badge-purple' : 'badge-gray'}">${mlProbText}</span>
+                            <span class="text-[11px] text-slate-500">(${s.eval_sample_count || 0} samples)</span>
+                        </div>
+                    </div>
+
+                    <!-- Primary Reason Banner (High Visibility) -->
+                    <div class="p-3 rounded-lg border text-xs flex items-start gap-2.5 ${bannerClass}">
+                        <span class="text-base select-none shrink-0">${bannerIcon}</span>
+                        <div class="space-y-0.5 flex-1">
+                            <div class="font-bold tracking-wide">${bannerTitle}</div>
+                            <div class="text-[11px] leading-relaxed opacity-95">${primaryReason}</div>
+                        </div>
+                    </div>
+
+                    <!-- AsterDEX-Inspired Entry & Position Specifications Panel -->
+                    <div class="bg-slate-900/90 border border-slate-800/90 rounded-xl p-4 space-y-3 font-mono">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 text-xs">
+                            <div class="flex items-center gap-2 font-bold uppercase tracking-wider ${isLong ? 'text-emerald-400' : 'text-rose-400'}">
+                                <span>⚡ AsterDEX Entry & Bracket Specifications</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">Isolated 10.0x</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] border ${catBadgeClass}">${catIcon} ${cat}</span>
+                                ${!s.is_executable ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">NON-ACTIONABLE / REFERENCE ONLY</span>` : ''}
+                            </div>
+                            <div class="flex items-center gap-3 text-[11px] text-slate-400">
+                                <span>Feed: <strong class="text-slate-300">1H Candle Store (Local DB)</strong></span>
+                                <span>|</span>
+                                <span>Candle Close: <strong class="text-slate-300">${s.reference_price_time_utc ? s.reference_price_time_utc.slice(11, 19) + ' UTC' : 'Pending'}</strong></span>
+                                ${s.is_reference_data_stale ? `<span class="px-1.5 py-0.2 rounded text-[10px] badge-yellow">Candle Data Stale (${s.reference_data_age_hours !== null && s.reference_data_age_hours !== undefined ? s.reference_data_age_hours.toFixed(1) + 'h' : '--'})</span>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Core Order Pricing & Brackets Grid -->
+                        <div class="grid grid-cols-2 md:grid-cols-6 gap-2.5 text-center">
+                            <div class="card-inner p-2.5 rounded border border-slate-800/70">
+                                <div class="text-[11px] text-slate-400 uppercase">Planned Entry</div>
+                                <div class="text-sm font-bold text-white mt-0.5">$${s.entry_price}</div>
+                                <div class="text-[10px] font-semibold mt-0.5 ${s.status === 'READY' ? 'text-emerald-400' : (s.status === 'INFEASIBLE' ? 'text-red-400' : (s.status === 'INVALIDATED' ? 'text-orange-400' : 'text-slate-400'))}">
+                                    ${s.status === 'READY' ? '● ACTIONABLE (READY)' : '🚫 ' + s.status + ' (NO TRADE)'}
+                                </div>
+                            </div>
+                            <div class="card-inner p-2.5 rounded border border-slate-800/70">
+                                <div class="text-[11px] text-slate-400 uppercase" title="Latest closed 1H candle close price from local SQLite store, not live WebSocket ticker">1H Candle Ref Price</div>
+                                <div class="text-sm font-bold text-cyan-300 mt-0.5">${s.reference_price !== null && s.reference_price !== undefined ? '$' + s.reference_price : (s.mark_price !== null && s.mark_price !== undefined ? '$' + s.mark_price : '--')}</div>
+                                <div class="text-[10px] ${s.is_reference_data_stale ? 'text-amber-400 font-semibold' : 'text-slate-500'} mt-0.5">${s.reference_data_age_hours !== null && s.reference_data_age_hours !== undefined ? s.reference_data_age_hours.toFixed(1) + 'h age' : 'No Candle'}</div>
+                            </div>
+                            <div class="card-inner p-2.5 rounded border border-red-900/30">
+                                <div class="text-[11px] text-slate-400 uppercase">Stop Loss (SL)</div>
+                                <div class="text-sm font-bold text-red-400 mt-0.5">$${s.stop_loss}</div>
+                                <div class="text-[10px] text-red-400/80 mt-0.5">-${s.stop_loss_pct || '--'}% distance</div>
+                            </div>
+                            <div class="card-inner p-2.5 rounded border border-emerald-900/30">
+                                <div class="text-[11px] text-slate-400 uppercase">Take Profit 1</div>
+                                <div class="text-sm font-bold text-emerald-400 mt-0.5">$${s.take_profit_1}</div>
+                                <div class="text-[10px] text-emerald-400/80 mt-0.5">+${s.take_profit_1_pct || '--'}% (${s.gross_reward_to_risk ? s.gross_reward_to_risk.toFixed(1) + 'R target' : 'Target'})</div>
+                            </div>
+                            <div class="card-inner p-2.5 rounded border border-slate-800/70">
+                                <div class="text-[11px] text-slate-400 uppercase">Take Profit 2</div>
+                                <div class="text-sm font-bold ${s.take_profit_2 ? 'text-emerald-300' : 'text-slate-500'} mt-0.5">${s.take_profit_2 ? '$' + s.take_profit_2 : '--'}</div>
+                                <div class="text-[10px] text-slate-500 mt-0.5">${s.take_profit_2_pct ? '+' + s.take_profit_2_pct + '% (Runner)' : 'Optional'}</div>
+                            </div>
+                            <div class="card-inner p-2.5 rounded border border-amber-900/30">
+                                <div class="text-[11px] text-slate-400 uppercase" title="Exact fee-only break-even: covers 0.05% taker fee on entry and exit">Fee-Only Break-Even</div>
+                                <div class="text-sm font-bold text-amber-300 mt-0.5">${s.break_even_price_fee_only !== null && s.break_even_price_fee_only !== undefined ? '$' + s.break_even_price_fee_only : (s.break_even_price !== null && s.break_even_price !== undefined ? '$' + s.break_even_price : '--')}</div>
+                                <div class="text-[10px] text-amber-400/80 mt-0.5">0.05% taker/side (Net PnL=0)</div>
+                            </div>
+                        </div>
+
+                        <!-- AsterDEX Position Sizing, Margin, Fees & Unrealized PnL -->
+                        <div class="p-3 bg-slate-950/60 rounded-lg border border-slate-800 text-xs space-y-2">
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <span>Quantity: <strong class="text-white">${s.risk_assessment ? s.risk_assessment.quantity : '--'}</strong></span>
+                                    <span>Position Notional: <strong class="text-white">$${s.risk_assessment ? s.risk_assessment.position_notional_usdt.toFixed(2) : '--'} USDT</strong></span>
+                                    <span>Target Margin: <strong class="text-emerald-400">$${s.risk_assessment ? (s.risk_assessment.actual_margin_usdt !== undefined ? s.risk_assessment.actual_margin_usdt : s.risk_assessment.required_margin_usdt).toFixed(2) : '6.00'} USDT</strong></span>
+                                    <span>Leverage: <strong class="text-cyan-400">10.0x Isolated</strong></span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-400">Net R:R:</span>
+                                    <strong class="text-indigo-400">${s.net_reward_to_risk}:1</strong>
+                                    <span class="text-[10px] text-slate-500">(Gross ${s.gross_reward_to_risk}:1)</span>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <span>Est. Loss at SL: <strong class="text-red-400">$${s.risk_assessment && s.risk_assessment.estimated_loss_usdt !== undefined ? s.risk_assessment.estimated_loss_usdt.toFixed(3) : '--'} USDT</strong></span>
+                                    <span>Equity Impact: <strong class="text-amber-400">${s.risk_assessment && s.risk_assessment.estimated_loss_pct !== undefined ? s.risk_assessment.estimated_loss_pct.toFixed(2) + '%' : '--'}</strong></span>
+                                    <span>Break-Even (+Slip): <strong class="text-amber-300">${s.break_even_price_with_slippage !== null && s.break_even_price_with_slippage !== undefined ? '$' + s.break_even_price_with_slippage : '--'}</strong></span>
+                                    <span>Costs: <span class="text-slate-400">0.05% fee + 0.05% slip / side (Excl. 8h funding)</span></span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-400">Unrealized PnL:</span>
+                                    ${s.unrealized_pnl_usdt !== null && s.unrealized_pnl_usdt !== undefined ? `
+                                        <strong class="${s.unrealized_pnl_usdt >= 0 ? 'text-emerald-400' : 'text-red-400'}">$${s.unrealized_pnl_usdt.toFixed(4)} USDT (${s.roe_pct !== null && s.roe_pct !== undefined ? (s.roe_pct >= 0 ? '+' : '') + s.roe_pct.toFixed(2) + '%' : '--'})</strong>
+                                    ` : `
+                                        <span class="text-slate-400">N/A <span class="text-[10px] text-slate-500">(No open position)</span></span>
+                                    `}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Distinct Structural Invalidation Level Callout -->
+                    <div class="p-3 rounded-lg border border-amber-900/40 bg-amber-950/20 text-xs flex items-start gap-2.5">
+                        <span class="text-base select-none shrink-0">🛡️</span>
+                        <div class="space-y-0.5 flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-amber-300">STRUCTURAL INVALIDATION LEVEL: <span class="font-mono text-amber-200">$${s.invalidation_price}</span></span>
+                                <span class="text-[10px] px-2 py-0.5 rounded bg-amber-900/50 text-amber-200 border border-amber-700/50">Market Structure Thesis</span>
+                            </div>
+                            <div class="text-[11px] text-slate-300 leading-relaxed">${s.invalidation_reason || 'Breached if 1H candle closes beyond structural swing low/high.'}</div>
+                            <div class="text-[10px] text-slate-400 italic">Distinct from Stop Loss: Structural Invalidation violates the technical thesis, while Stop Loss ($${s.stop_loss}) enforces exchange bracket risk exit.</div>
+                        </div>
+                    </div>
+
+                    <!-- SMC & SnR Research Evidence Accordion -->
+                    <div class="border border-slate-800 rounded-lg bg-slate-900/60 overflow-hidden text-xs">
+                        <button type="button" onclick="toggleAccordion('evidence-${s.candidate_id}')" class="w-full p-3 flex items-center justify-between text-left hover:bg-slate-800/40 transition">
+                            <div class="flex items-center gap-2 font-semibold text-slate-200">
+                                <span>🔬 Institutional SMC & SnR Research Evidence</span>
+                                <span class="text-[11px] font-normal text-slate-400">(4H Bias: <strong class="text-white">${s.bias_4h}</strong> &bull; 1H Structure: <strong class="text-white">${s.structure_1h}</strong>)</span>
+                            </div>
+                            <span id="evidence-icon-evidence-${s.candidate_id}" class="text-slate-400 text-xs font-mono">[− Collapse]</span>
+                        </button>
+                        
+                        <div id="evidence-${s.candidate_id}" class="p-3 pt-0 border-t border-slate-800/60 space-y-3">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                                <div class="space-y-1.5">
+                                    <div class="font-semibold text-slate-300">SMC & SnR Technical Confirmation:</div>
+                                    <ul class="list-disc list-inside text-slate-400 space-y-0.5">
+                                        ${s.smc_evidence && s.smc_evidence.length ? s.smc_evidence.map(e => `<li>${e}</li>`).join('') : '<li class="text-slate-500">No active SMC events</li>'}
+                                        ${s.snr_evidence && s.snr_evidence.length ? s.snr_evidence.map(e => `<li>${e}</li>`).join('') : ''}
+                                    </ul>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <div class="font-semibold text-slate-300">Strategy Decision Context:</div>
+                                    ${s.supporting_reasons && s.supporting_reasons.length ? `
+                                    <div class="text-emerald-400 space-y-0.5">
+                                        ${s.supporting_reasons.map(r => `<div>&bull; ${r}</div>`).join('')}
+                                    </div>` : ''}
+                                    ${s.opposing_reasons && s.opposing_reasons.length ? `
+                                    <div class="text-amber-400 space-y-0.5">
+                                        ${s.opposing_reasons.map(r => `<div>&bull; ${r}</div>`).join('')}
+                                    </div>` : ''}
+                                    ${(!s.supporting_reasons || !s.supporting_reasons.length) && (!s.opposing_reasons || !s.opposing_reasons.length) ? `
+                                    <div class="text-slate-500 italic">No additional supporting or opposing notes.</div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status Semantics & Constraints -->
+                    <div class="space-y-1.5 text-xs pt-1">
+                        <div class="font-semibold text-slate-300">Status Semantics & Constraints:</div>
+                        ${s.rejection_reasons && s.rejection_reasons.length ? `
+                        <div class="p-2.5 rounded bg-slate-900 border border-slate-800 text-slate-300 space-y-1">
+                            ${s.rejection_reasons.map(r => `
+                                <div class="flex items-start gap-1.5 ${s.status === 'READY' ? 'text-emerald-400' : 'text-amber-300'}">
+                                    <span>&bull;</span>
+                                    <span>${r}</span>
+                                </div>
+                            `).join('')}
+                        </div>` : `
+                        <div class="p-2 rounded bg-slate-900/60 border border-emerald-900/40 text-emerald-300">
+                            &bull; Setup satisfies strategy validation, position sizing, and risk limits. Ready for manual review. ML score is informative only and unproven to deliver positive edge.
+                        </div>`}
+                    </div>
+
+                    <!-- Optional Qwen2.5-7B AI Signal Analysis Section -->
+                    ${s.ai_analysis && s.ai_analysis.output ? `
+                    <div class="mt-3 p-3 rounded-lg bg-slate-900/80 border border-indigo-900/50 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-1.5 font-semibold text-indigo-300">
+                                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                <span>AI Qualitative Analysis (Qwen2.5-7B-Instruct)</span>
+                                <span class="text-[10px] text-slate-500 font-mono">(${s.ai_analysis.latency_ms}ms)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${s.ai_analysis.output.direction_assessment === 'SUPPORTS_SETUP' ? 'badge-green' : (s.ai_analysis.output.direction_assessment === 'CONFLICTS_WITH_SETUP' ? 'badge-red' : 'badge-yellow')}">
+                                    ${s.ai_analysis.output.direction_assessment}
+                                </span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${s.ai_analysis.output.setup_quality === 'HIGH' ? 'badge-green' : (s.ai_analysis.output.setup_quality === 'MEDIUM' ? 'badge-yellow' : 'badge-gray')}">
+                                    QUALITY: ${s.ai_analysis.output.setup_quality}
+                                </span>
+                                ${s.ai_analysis.output.abstain ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold badge-orange">ABSTAIN</span>' : ''}
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 italic">"${s.ai_analysis.output.summary}"</p>
+                        ${s.ai_analysis.output.reasons && s.ai_analysis.output.reasons.length ? `
+                        <div class="text-[11px] text-slate-400 space-y-0.5">
+                            <span class="font-semibold text-slate-300">Key AI Observations:</span>
+                            <ul class="list-disc list-inside space-y-0.5 text-slate-400">
+                                ${s.ai_analysis.output.reasons.map(r => `<li>${r}</li>`).join('')}
+                            </ul>
+                        </div>` : ''}
+                        ${s.ai_analysis.deterministic_guards_applied && s.ai_analysis.deterministic_guards_applied.length ? `
+                        <div class="text-[10px] text-amber-400 font-mono bg-amber-950/40 p-1.5 rounded border border-amber-900/40">
+                            🛡️ Client Guards: ${s.ai_analysis.deterministic_guards_applied.join('; ')}
+                        </div>` : ''}
+                    </div>` : (s.ai_analysis && s.ai_analysis.status !== 'DISABLED' ? `
+                    <div class="mt-2 p-2 rounded bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+                        <span>AI Analysis Status: <strong class="text-amber-400">${s.ai_analysis.status}</strong> (${s.ai_analysis.error_message || 'Bypassed'})</span>
+                        <span class="text-[10px] text-slate-500 font-mono">${s.ai_analysis.model_id}</span>
+                    </div>` : '')}
+                </div>
+            `;
+            }).join('');
+        }
+
+        // Research Evidence Accordion Toggle
+        function toggleAccordion(id) {
+            const el = document.getElementById(id);
+            const icon = document.getElementById('evidence-icon-' + id);
+            if (!el) return;
+            if (el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+                if (icon) icon.textContent = '[− Collapse]';
+            } else {
+                el.classList.add('hidden');
+                if (icon) icon.textContent = '[+ Expand]';
+            }
+        }
+
+
+        // Safe Manual Trigger Scan with Anti-Overlap Handling
+        async function triggerScan() {
+            const btn = document.getElementById('scanBtn');
+            btn.disabled = true;
+            btn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> Scanning Watchlist...`;
+            
+            try {
+                const res = await fetch('/api/scan', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.status === 'ALREADY_RUNNING') {
+                    showNotice(data.message || 'A background scan is currently in progress. Displaying cached results.', 'warn');
+                } else {
+                    dismissNotice();
+                }
+
+                await fetchSetups();
+                await fetchStatus();
+            } catch (err) {
+                showNotice("Manual scan request failed: " + err, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Scan Watchlist Now`;
+            }
+        }
+
+        async function loadWatchlist() {
+            try {
+                const res = await fetch('/api/symbols');
+                const symbols = await res.json();
+                const tbody = document.getElementById('watchlistTableBody');
+                tbody.innerHTML = symbols.map(s => `
+                    <tr class="hover:bg-slate-800/50">
+                        <td class="px-4 py-3 font-bold text-white">${s.symbol}</td>
+                        <td class="px-4 py-3 font-mono">$${s.min_notional.toFixed(2)}</td>
+                        <td class="px-4 py-3 font-mono">${s.step_size}</td>
+                        <td class="px-4 py-3 font-mono">${s.tick_size}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-0.5 text-xs rounded ${s.enabled ? 'badge-green' : 'badge-red'}">
+                                ${s.enabled ? 'ENABLED' : 'DISABLED'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <button onclick="toggleSymbol('${s.symbol}', ${!s.enabled})" class="px-3 py-1 text-xs rounded ${s.enabled ? 'bg-red-800/80 hover:bg-red-700 text-red-200' : 'bg-emerald-800/80 hover:bg-emerald-700 text-emerald-200'}">
+                                ${s.enabled ? 'Disable' : 'Enable'}
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error("Watchlist error:", err);
+            }
+        }
+
+        async function toggleSymbol(symbol, enable) {
+            try {
+                await fetch(`/api/symbols/${symbol}/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: enable })
+                });
+                await loadWatchlist();
+            } catch (err) {
+                alert("Toggle error: " + err);
+            }
+        }
+
+        function setJournalOutcomeFilter(outcome) {
+            journalOutcomeFilter = outcome;
+            ['ALL', 'WIN', 'LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
+                const btn = document.getElementById(`jOutcome-${o}`);
+                if (btn) {
+                    if (o === outcome) btn.classList.add('filter-btn-active');
+                    else btn.classList.remove('filter-btn-active');
+                }
+            });
+            loadJournal();
+        }
+
+        function handleJournalCategoryChange(val) {
+            journalCategoryFilter = val;
+            loadJournal();
+        }
+
+        function handleJournalDirectionChange(val) {
+            journalDirectionFilter = val;
+            loadJournal();
+        }
+
+        function handleJournalPeriodChange(val) {
+            journalPeriodFilter = val;
+            loadJournal();
+        }
+
+        function handleJournalSearchInput(val) {
+            journalSearchQuery = val.trim();
+            loadJournal();
+        }
+
+        function resetJournalFilters() {
+            journalOutcomeFilter = 'ALL';
+            journalCategoryFilter = 'ALL';
+            journalDirectionFilter = 'ALL';
+            journalPeriodFilter = 'all';
+            journalSearchQuery = '';
+
+            ['ALL', 'WIN', 'LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
+                const btn = document.getElementById(`jOutcome-${o}`);
+                if (btn) {
+                    if (o === 'ALL') btn.classList.add('filter-btn-active');
+                    else btn.classList.remove('filter-btn-active');
+                }
+            });
+
+            const catSel = document.getElementById('journalCategorySelect');
+            if (catSel) catSel.value = 'ALL';
+            const dirSel = document.getElementById('journalDirectionSelect');
+            if (dirSel) dirSel.value = 'ALL';
+            const perSel = document.getElementById('journalPeriodSelect');
+            if (perSel) perSel.value = 'all';
+            const symInp = document.getElementById('journalSymbolInput');
+            if (symInp) symInp.value = '';
+
+            loadJournal();
+        }
+
+        async function loadJournal() {
+            const refreshBtn = document.getElementById('refreshJournalBtn');
+            if (refreshBtn) refreshBtn.classList.add('opacity-75');
+
+            try {
+                const params = new URLSearchParams();
+                if (journalOutcomeFilter && journalOutcomeFilter !== 'ALL') params.append('outcome', journalOutcomeFilter);
+                if (journalCategoryFilter && journalCategoryFilter !== 'ALL') params.append('category', journalCategoryFilter);
+                if (journalDirectionFilter && journalDirectionFilter !== 'ALL') params.append('direction', journalDirectionFilter);
+                if (journalPeriodFilter && journalPeriodFilter !== 'all') params.append('period', journalPeriodFilter);
+                if (journalSearchQuery) params.append('symbol', journalSearchQuery);
+                params.append('limit', '100');
+
+                const res = await fetch(`/api/trades?${params.toString()}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // Metrics calculation (strictly isolating realized closed trades from floating open trades)
+                const m = data.filtered_metrics || data.metrics || {};
+                const closedCount = m.closed_trades_count || 0;
+                const winsCount = m.wins_count || 0;
+                const lossesCount = m.losses_count || 0;
+                const beCount = m.breakeven_count || 0;
+                const winRate = m.win_rate_pct !== undefined ? m.win_rate_pct.toFixed(1) : '0.0';
+                const grossPnl = m.gross_pnl !== undefined ? m.gross_pnl.toFixed(2) : '0.00';
+                const totalFees = m.total_fees !== undefined ? m.total_fees.toFixed(2) : '0.00';
+                const netPnl = m.net_pnl !== undefined ? m.net_pnl.toFixed(2) : '0.00';
+                const avgNetPnl = m.avg_net_pnl !== undefined ? m.avg_net_pnl.toFixed(2) : '0.00';
+                const openTradesCount = m.open_trades_count !== undefined ? m.open_trades_count : (data.metrics ? data.metrics.open_trades_count : 0);
+
+                const closedEl = document.getElementById('journal-metric-closed-trades');
+                if (closedEl) closedEl.innerText = closedCount;
+
+                const bdEl = document.getElementById('journal-metric-trades-breakdown');
+                if (bdEl) bdEl.innerText = `${winsCount} Wins \u2022 ${lossesCount} Losses \u2022 ${beCount} BE`;
+
+                const wrEl = document.getElementById('journal-metric-winrate');
+                if (wrEl) wrEl.innerText = `${winRate}%`;
+
+                const grossEl = document.getElementById('journal-metric-gross-pnl');
+                if (grossEl) {
+                    const grossNum = parseFloat(grossPnl);
+                    grossEl.innerText = `${grossNum >= 0 ? '$' : '-$'}${Math.abs(grossNum).toFixed(2)}`;
+                    grossEl.className = `text-lg font-bold mt-1 ${grossNum > 0 ? 'text-emerald-400' : (grossNum < 0 ? 'text-red-400' : 'text-slate-300')}`;
+                }
+
+                const feesEl = document.getElementById('journal-metric-fees');
+                if (feesEl) feesEl.innerText = `$${totalFees}`;
+
+                const netEl = document.getElementById('journal-metric-net-pnl');
+                if (netEl) {
+                    const netNum = parseFloat(netPnl);
+                    netEl.innerText = `${netNum >= 0 ? '$' : '-$'}${Math.abs(netNum).toFixed(2)}`;
+                    netEl.className = `text-lg font-bold mt-1 ${netNum > 0 ? 'text-emerald-400' : (netNum < 0 ? 'text-red-400' : 'text-slate-300')}`;
+                }
+
+                const avgEl = document.getElementById('journal-metric-avg-pnl');
+                if (avgEl) {
+                    const avgNum = parseFloat(avgNetPnl);
+                    avgEl.innerText = `${avgNum >= 0 ? '$' : '-$'}${Math.abs(avgNum).toFixed(2)}`;
+                    avgEl.className = `text-lg font-bold mt-1 ${avgNum > 0 ? 'text-emerald-400' : (avgNum < 0 ? 'text-red-400' : 'text-slate-300')}`;
+                }
+
+                const openEl = document.getElementById('journal-metric-open-trades');
+                if (openEl) openEl.innerText = `Active Open Positions: ${openTradesCount}`;
+
+                // Populate table rows
+                const tbody = document.getElementById('journalTableBody');
+                const emptyState = document.getElementById('journalEmptyState');
+
+                if (!data.trades || data.trades.length === 0) {
+                    tbody.innerHTML = '';
+                    if (emptyState) {
+                        emptyState.classList.remove('hidden');
+                        const emptyTitle = document.getElementById('journalEmptyTitle');
+                        const emptyMsg = document.getElementById('journalEmptyMessage');
+                        const hasActiveFilter = (journalOutcomeFilter !== 'ALL') || (journalCategoryFilter !== 'ALL') || (journalDirectionFilter !== 'ALL') || Boolean(journalSearchQuery) || (journalPeriodFilter !== 'all');
+                        if (hasActiveFilter) {
+                            if (emptyTitle) emptyTitle.innerText = 'No Trades Match Filter Criteria';
+                            if (emptyMsg) emptyMsg.innerText = 'No trade executions match the active filters. Try resetting filters or switching the outcome selection.';
+                        } else {
+                            if (emptyTitle) emptyTitle.innerText = 'No Paper Trades Recorded Yet';
+                            if (emptyMsg) emptyMsg.innerText = 'Paper trades are recorded automatically when qualifying setups decisively fill simulated limit orders and subsequently trigger take-profit or stop-loss brackets.';
+                        }
+                    }
+                    return;
+                }
+
+                if (emptyState) emptyState.classList.add('hidden');
+
+                tbody.innerHTML = data.trades.map(t => {
+                    const isLong = (t.direction || '').toUpperCase() === 'LONG';
+                    const sideColor = isLong ? 'text-emerald-400' : 'text-rose-400';
+                    const sideBg = isLong ? 'border-emerald-500/40 bg-emerald-950/40' : 'border-rose-500/40 bg-rose-950/40';
+
+                    const outcome = t.outcome || (t.is_open ? 'OPEN' : 'BREAKEVEN');
+                    let outcomeBadge = 'bg-slate-800 text-slate-300 border-slate-700';
+                    if (outcome === 'WIN') outcomeBadge = 'bg-emerald-950/80 text-emerald-300 border-emerald-600 font-bold';
+                    else if (outcome === 'LOSS') outcomeBadge = 'bg-rose-950/80 text-rose-300 border-rose-600 font-bold';
+                    else if (outcome === 'BREAKEVEN') outcomeBadge = 'bg-slate-800 text-slate-300 border-slate-600';
+                    else if (outcome === 'OPEN') outcomeBadge = 'bg-blue-950/80 text-blue-300 border-blue-600 font-bold animate-pulse';
+
+                    const cat = t.entry_category || 'Unclassified';
+                    let catColor = 'text-slate-400';
+                    let catIcon = '❓';
+                    if (cat === 'Breakout') { catColor = 'text-indigo-300'; catIcon = '⚡'; }
+                    else if (cat === 'Pullback') { catColor = 'text-sky-300'; catIcon = '🔄'; }
+                    else if (cat === 'Reversal') { catColor = 'text-amber-300'; catIcon = '🔀'; }
+                    else if (cat === 'Range/Mean Reversion' || cat === 'Range') { catColor = 'text-teal-300'; catIcon = '↔️'; }
+
+                    const netPnlVal = parseFloat(t.pnl_net || 0);
+                    const grossPnlVal = parseFloat(t.pnl_gross || 0);
+                    const feesVal = parseFloat(t.total_fees !== undefined ? t.total_fees : ((t.fee_paid || 0) + (t.funding_paid || 0) + (t.slippage_paid || 0)));
+
+                    const netColor = netPnlVal > 0.0001 ? 'text-emerald-400' : (netPnlVal < -0.0001 ? 'text-rose-400' : 'text-slate-300');
+                    const grossColor = grossPnlVal > 0.0001 ? 'text-emerald-400' : (grossPnlVal < -0.0001 ? 'text-rose-400' : 'text-slate-300');
+
+                    const entryTime = t.entry_time_utc ? t.entry_time_utc.substring(5, 16).replace('T', ' ') + ' UTC' : '--';
+                    const exitTime = t.exit_time_utc ? t.exit_time_utc.substring(5, 16).replace('T', ' ') + ' UTC' : (t.is_open ? '<span class="text-blue-400">In Progress</span>' : '--');
+
+                    const tradeIdShort = (t.trade_id || '').substring(0, 8);
+                    const setupIdShort = t.setup_id ? `<div class="text-[10px] text-slate-500">Ref: ${t.setup_id.substring(0, 8)}</div>` : '';
+
+                    return `
+                        <tr class="hover:bg-slate-800/40 text-xs font-mono transition">
+                            <td class="px-3 py-3">
+                                <div class="font-bold text-white">${tradeIdShort}</div>
+                                ${setupIdShort}
+                            </td>
+                            <td class="px-3 py-3">
+                                <div class="font-bold text-white flex items-center gap-1.5">
+                                    <span>${t.symbol}</span>
+                                    <span class="px-1.5 py-0.2 rounded text-[10px] border ${sideBg} ${sideColor}">${t.direction}</span>
+                                </div>
+                                <div class="text-[10px] text-slate-500">10.0x Isolated</div>
+                            </td>
+                            <td class="px-3 py-3">
+                                <div class="flex items-center gap-1 ${catColor}">
+                                    <span>${catIcon}</span>
+                                    <span class="font-semibold">${cat}</span>
+                                </div>
+                            </td>
+                            <td class="px-3 py-3">
+                                <div class="text-white font-semibold">$${Number(t.entry_price).toFixed(2)}</div>
+                                <div class="text-[10px] text-slate-400">${entryTime}</div>
+                            </td>
+                            <td class="px-3 py-3">
+                                <div class="font-semibold ${t.exit_price ? 'text-white' : 'text-slate-500'}">${t.exit_price ? '$' + Number(t.exit_price).toFixed(2) : '--'}</div>
+                                <div class="text-[10px] text-slate-400">${exitTime}</div>
+                            </td>
+                            <td class="px-3 py-3 text-[11px]">
+                                <div>SL: <span class="text-rose-400">$${Number(t.stop_loss).toFixed(2)}</span></div>
+                                <div>TP: <span class="text-emerald-400">$${Number(t.take_profit).toFixed(2)}</span></div>
+                            </td>
+                            <td class="px-3 py-3 text-slate-300">
+                                ${t.duration_display || '--'}
+                            </td>
+                            <td class="px-3 py-3 font-semibold ${grossColor}">
+                                ${grossPnlVal >= 0 ? '+$' : '-$'}${Math.abs(grossPnlVal).toFixed(3)}
+                            </td>
+                            <td class="px-3 py-3 text-amber-400 font-mono">
+                                $${feesVal.toFixed(3)}
+                            </td>
+                            <td class="px-3 py-3">
+                                <div class="font-bold ${netColor}">${netPnlVal >= 0 ? '+$' : '-$'}${Math.abs(netPnlVal).toFixed(3)}</div>
+                                <span class="inline-block px-1.5 py-0.2 rounded text-[10px] border ${outcomeBadge} mt-0.5">${outcome}</span>
+                            </td>
+                            <td class="px-3 py-3 text-slate-400 text-[11px]">
+                                <span class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">${t.exit_reason || (t.is_open ? 'Position Active' : '--')}</span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error("Journal polling error:", err);
+            } finally {
+                if (refreshBtn) refreshBtn.classList.remove('opacity-75');
+            }
+        }
+
+        async function loadBacktest() {
+            try {
+                const res = await fetch('/api/backtest');
+                const data = await res.json();
+
+                const d = data.deterministic;
+                document.getElementById('det-trades').innerText = d.total_trades;
+                document.getElementById('det-winrate').innerText = `${d.win_rate_pct}%`;
+                document.getElementById('det-pf').innerText = d.profit_factor;
+                document.getElementById('det-pnl').innerText = `$${d.total_net_pnl.toFixed(2)}`;
+                document.getElementById('det-roc').innerText = `${d.return_on_capital_pct}%`;
+                document.getElementById('det-dd').innerText = `$${d.max_drawdown_usdt.toFixed(2)} (${d.max_drawdown_pct}%)`;
+
+                const m = data.ml_filtered;
+                document.getElementById('ml-trades').innerText = m.total_trades;
+                document.getElementById('ml-winrate').innerText = `${m.win_rate_pct}%`;
+                document.getElementById('ml-pf').innerText = m.profit_factor;
+                document.getElementById('ml-pnl').innerText = `$${m.total_net_pnl.toFixed(2)}`;
+                document.getElementById('ml-roc').innerText = `${m.return_on_capital_pct}%`;
+                document.getElementById('ml-dd').innerText = `$${m.max_drawdown_usdt.toFixed(2)} (${m.max_drawdown_pct}%)`;
+
+                renderEquityChart(d.equity_curve, m.equity_curve);
+            } catch (err) {
+                console.error("Backtest error:", err);
+            }
+        }
+
+        function renderEquityChart(detCurve, mlCurve) {
+            const ctx = document.getElementById('equityChart').getContext('2d');
+            if (equityChartInstance) {
+                equityChartInstance.destroy();
+            }
+
+            const labels = detCurve.map((pt, i) => `Trade ${i}`);
+            const detData = detCurve.map(pt => pt.equity);
+            const mlData = mlCurve.map(pt => pt.equity);
+
+            equityChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Deterministic Baseline',
+                            data: detData,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1,
+                        },
+                        {
+                            label: 'ML-Filtered Strategy',
+                            data: mlData,
+                            borderColor: '#a855f7',
+                            backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#94a3b8', callback: v => `$${v.toFixed(2)}` }
+                        }
+                    }
+                }
+            });
+        }
+
+        function switchTab(tabId) {
+            ['setups', 'backtest', 'watchlist', 'journal'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`tabBtn-${t}`).className = 'pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+            });
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tabBtn-${tabId}`).className = 'pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold';
+
+            if (tabId === 'watchlist') loadWatchlist();
+            if (tabId === 'journal') loadJournal();
+            if (tabId === 'backtest') loadBacktest();
+        }
+
+        // Automatic Independent Periodic Polling
+        // 1. Account status and risk limits refresh every 15 seconds
+        fetchStatus();
+        setInterval(fetchStatus, 15000);
+
+        // 2. Setup cards and status classifications refresh every 30 seconds
+        fetchSetups();
+        setInterval(fetchSetups, 30000);
+    </script>
+</body>
+</html>

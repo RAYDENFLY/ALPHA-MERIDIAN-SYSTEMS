@@ -1,0 +1,54 @@
+{
+  "total_candidates": 270,
+  "label_horizon_bars": 48,
+  "split_epochs": {
+    "train_start_ms": 1761530400000,
+    "train_end_ms": 1787238000000,
+    "val_start_ms": 1787238000000,
+    "val_end_ms": 1788458400000,
+    "test_start_ms": 1788462000000,
+    "test_end_ms": 1790197200000
+  },
+  "outcomes": {
+    "TP_HIT": 142,
+    "SL_HIT": 112,
+    "SL_COLLISION": 0,
+    "TIMEOUT": 16
+  },
+  "models": {
+    "logistic_regression": {
+      "train_samples": 162,
+      "val_samples": 54,
+      "test_samples": 54,
+      "uncalibrated": {
+        "brier_score": 0.2837,
+        "log_loss": 0.7659,
+        "roc_auc": 0.4803,
+        "ece": 0.2957
+      },
+      "calibrated": {
+        "brier_score": 0.4426,
+        "log_loss": 1.4261,
+        "roc_auc": 0.5,
+        "ece": 0.4839
+      }
+    },
+    "lightgbm": {
+      "train_samples": 162,
+      "val_samples": 54,
+      "test_samples": 54,
+      "uncalibrated": {
+        "brier_score": 0.3017,
+        "log_loss": 0.8183,
+        "roc_auc": 0.6932,
+        "ece": 0.3496
+      },
+      "calibrated": {
+        "brier_score": 0.3798,
+        "log_loss": 0.9722,
+        "roc_auc": 0.6792,
+        "ece": 0.4605
+      }
+    }
+  }
+}
