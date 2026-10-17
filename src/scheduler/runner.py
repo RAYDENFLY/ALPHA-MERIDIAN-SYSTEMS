@@ -475,7 +475,7 @@ class ScannerRunner:
                             if not can_open:
                                 candidate.status = CandidateStatus.WATCHLIST
                                 candidate.rejection_reasons.append(
-                                    reason or "Account limits reached (awaiting position closure or quota reset)."
+                                    reason or "Account limits reached (awaiting position closure or daily/weekly loss budget reset)."
                                 )
                             else:
                                 # Mandatory gates passed: strategy valid, sizing feasible, account limits permitted

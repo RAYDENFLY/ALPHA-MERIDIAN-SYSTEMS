@@ -1,0 +1,7 @@
+Policy,MaxWeeklyCap,CompletedTrades,WinRatePct,NetPnLUSDT,ExpectancyPerTrade,ProfitFactor,MaxDrawdownUSDT,CILowUSDT,CIHighUSDT,DevExpectancy,ValExpectancy,OOSExpectancy,ConcurrencyBlocked,WeeklyCapBlocked,DailyLossBlocked,WeeklyLossBlocked
+"Cap=1",1,10,60.0,7.7126,0.7713,2.35,4.2356,-0.3792,1.8927,0.0,0.0,0.7713,31,44,1,0
+"Cap=2",2,12,66.67,11.5185,0.9599,3.02,4.2356,-0.0721,1.9574,0.0,0.0,0.9599,39,34,1,0
+"Cap=3",3,13,69.23,14.1566,1.089,3.48,4.2356,0.0126,2.0229,0.0,0.0,1.089,64,8,1,0
+"Cap=4",4,14,64.29,12.6745,0.9053,2.76,4.2356,-0.1283,1.8254,0.0,0.0,0.9053,71,0,1,0
+"Cap=5",5,14,64.29,12.6745,0.9053,2.76,4.2356,-0.1283,1.8254,0.0,0.0,0.9053,71,0,1,0
+"Unlimited (No Hard Cap)",None,14,64.29,12.6745,0.9053,2.76,4.2356,-0.1283,1.8254,0.0,0.0,0.9053,71,0,1,0

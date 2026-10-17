@@ -360,7 +360,7 @@ class TestConcurrencyAndAPIEndpoints:
         assert data["risk_limits"]["daily_loss_limit_usdt"] == 0.18
         assert data["risk_limits"]["weekly_loss_limit_usdt"] == 0.54
         assert data["risk_limits"]["max_open_positions"] == 1
-        assert data["risk_limits"]["max_weekly_entries"] == 3
+        assert data["risk_limits"]["max_weekly_entries"] is None
 
 
 class TestSynchronizationRegression:

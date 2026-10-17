@@ -44,7 +44,7 @@ class RiskConfig(BaseModel):
     daily_loss_limit_usdt: float = Field(default=0.18, gt=0)
     weekly_loss_limit_usdt: float = Field(default=0.54, gt=0)
     max_open_positions: int = Field(default=1, ge=1, le=1)
-    max_entries_per_week: int = Field(default=3, ge=1, le=10)
+    max_entries_per_week: Optional[int] = Field(default=None, description="Deprecated weekly entry hard cap; entry frequency governed by risk controls")
     min_notional_usdt: float = Field(default=5.0, gt=0)
     buffer_pct_for_fees: float = Field(default=0.02, ge=0)
 

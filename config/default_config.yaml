@@ -50,7 +50,7 @@ risk:
   daily_loss_limit_usdt: 0.18
   weekly_loss_limit_usdt: 0.54
   max_open_positions: 1
-  max_entries_per_week: 3
+  max_entries_per_week: null
   min_notional_usdt: 5.0
   buffer_pct_for_fees: 0.02
 

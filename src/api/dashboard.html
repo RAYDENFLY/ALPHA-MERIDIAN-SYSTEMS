@@ -96,7 +96,7 @@
             <div class="card-bg p-4 rounded-xl">
                 <div class="text-xs text-slate-400 font-medium">Exposure Caps</div>
                 <div class="text-xl font-bold text-white mt-1" id="capsDisplay">0 / 1 Open Pos</div>
-                <div class="text-xs text-slate-400 mt-1 font-mono" id="entriesDisplay">0 / 3 Entries This Week</div>
+                <div class="text-xs text-slate-400 mt-1 font-mono" id="entriesDisplay">Entries This Week: 0</div>
             </div>
         </div>
 
@@ -600,7 +600,7 @@
                 document.getElementById('dailyLossDisplay').innerText = `$${data.risk_limits.daily_loss_used_usdt.toFixed(2)} / $${data.risk_limits.daily_loss_limit_usdt.toFixed(2)}`;
                 document.getElementById('weeklyLossDisplay').innerText = `$${data.risk_limits.weekly_loss_used_usdt.toFixed(2)} / $${data.risk_limits.weekly_loss_limit_usdt.toFixed(2)}`;
                 document.getElementById('capsDisplay').innerText = `${data.risk_limits.open_positions} / ${data.risk_limits.max_open_positions} Open Pos`;
-                document.getElementById('entriesDisplay').innerText = `${data.risk_limits.weekly_entries} / ${data.risk_limits.max_weekly_entries} Entries This Week`;
+                document.getElementById('entriesDisplay').innerText = `Entries This Week: ${data.risk_limits.weekly_entries}`;
 
                 // Scanner State & Metadata
                 if (data.scanner) {

@@ -2,10 +2,10 @@
 
 Enforces:
 - Maximum 1 concurrent position across account.
-- Maximum 3 entries per calendar week.
 - Daily loss limit ($0.18 USDT).
 - Weekly loss limit ($0.54 USDT).
 - Dynamic risk budget calculation based on remaining loss budgets.
+- Weekly entry count tracked as telemetry (no hard entry quota cap).
 """
 
 from datetime import datetime, timezone
@@ -23,7 +23,7 @@ class RiskManager:
         daily_loss_limit_usdt: float = 0.18,
         weekly_loss_limit_usdt: float = 0.54,
         max_open_positions: int = 1,
-        max_entries_per_week: int = 3,
+        max_entries_per_week: Optional[int] = None,
     ) -> None:
         self.equity_usdt = initial_equity_usdt
         self.initial_equity = initial_equity_usdt
@@ -201,9 +201,6 @@ class RiskManager:
 
         if len(self.open_trades) >= self.max_open_positions:
             return False, f"Maximum open position limit ({self.max_open_positions}) reached."
-
-        if self.weekly_entries_count >= self.max_entries_per_week:
-            return False, f"Weekly entry limit ({self.max_entries_per_week}) reached for week {self.current_week_str}."
 
         if self.daily_loss_usdt >= self.daily_loss_limit:
             return False, f"Daily loss limit (${self.daily_loss_limit:.2f}) reached (${self.daily_loss_usdt:.2f} loss)."

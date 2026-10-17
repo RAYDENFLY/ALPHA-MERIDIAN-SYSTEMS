@@ -5,7 +5,7 @@ holding-time expiration, and conservative intrabar collision resolution (SL-firs
 with full risk limits and dynamic break-even ML confidence gating.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import uuid
 from src.core.logger import logger
 from src.core.types import Candle, Direction, SetupCandidate, TradeRecord
@@ -30,7 +30,7 @@ class BacktestEngine:
         daily_loss_limit: float = 0.18,
         weekly_loss_limit: float = 0.54,
         max_open_positions: int = 1,
-        max_entries_per_week: int = 3,
+        max_entries_per_week: Optional[int] = None,
         maker_fee: float = 0.0002,
         taker_fee: float = 0.0005,
         slippage: float = 0.0005,

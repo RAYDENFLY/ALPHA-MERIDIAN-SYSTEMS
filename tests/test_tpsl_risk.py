@@ -409,13 +409,13 @@ class TestRiskManager:
         assert can_open_2 is False
         assert "Maximum open position limit" in reason
 
-    def test_max_three_entries_per_week(self):
-        rm = RiskManager(initial_equity_usdt=16.0, max_entries_per_week=3)
+    def test_weekly_entries_unlimited_by_count_when_risk_permits(self):
+        rm = RiskManager(initial_equity_usdt=16.0)
         base_ts = 1700000000000
 
-        for i in range(3):
-            can_open, _ = rm.can_open_new_position(base_ts + i * 3600000)
-            assert can_open is True
+        for i in range(5):
+            can_open, reason = rm.can_open_new_position(base_ts + i * 3600000)
+            assert can_open is True, f"Entry {i+1} should be permitted but got: {reason}"
             t = TradeRecord(
                 trade_id=f"t{i}",
                 symbol="ADAUSDT",
@@ -428,15 +428,16 @@ class TestRiskManager:
                 notional_usdt=5.0,
             )
             rm.record_entry(t)
-            # Close trade so position count is 0
+            # Close trade with profit so position count is 0 and loss limits untouched
             t.exit_timestamp_ms = base_ts + i * 3600000 + 1800000
             t.pnl_net = 0.05
             rm.record_exit(t)
 
-        # 4th trade in same week must be blocked
-        can_open_4, reason = rm.can_open_new_position(base_ts + 4 * 3600000)
-        assert can_open_4 is False
-        assert "Weekly entry limit" in reason
+        # 5 entries completed, count tracks 5, and 6th trade is still permitted
+        assert rm.weekly_entries_count == 5
+        can_open_6, reason_6 = rm.can_open_new_position(base_ts + 6 * 3600000)
+        assert can_open_6 is True
+        assert reason_6 is None
 
     def test_daily_loss_limit_blocks_entry(self):
         rm = RiskManager(initial_equity_usdt=16.0, daily_loss_limit_usdt=0.18)
