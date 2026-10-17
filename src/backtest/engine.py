@@ -39,6 +39,7 @@ class BacktestEngine:
         target_isolated_margin: float = 6.0,
         target_isolated_margin_max: float = 6.5,
         hard_risk_limit_usdt: float = 1.50,
+        strategy_gen: Optional[Any] = None,
     ) -> None:
         self.db = db
         self.specs_map = symbol_specs_map
@@ -61,7 +62,7 @@ class BacktestEngine:
             max_entries_per_week=max_entries_per_week,
         )
 
-        self.strategy_gen = SetupGenerator()
+        self.strategy_gen = strategy_gen if strategy_gen is not None else SetupGenerator()
         self.funding_cache: Dict[str, Dict[int, float]] = {}
 
     def _load_funding_cache(self, symbol: str) -> None:

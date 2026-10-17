@@ -10,7 +10,7 @@ import time
 from typing import Any, Dict, List, Optional
 from src.backtest.engine import BacktestEngine
 from src.core.logger import logger
-from src.core.types import CandidateStatus, Direction, ExecutionStatus, MarketBias, SetupCandidate, StructureState
+from src.core.types import CandidateStatus, Direction, ExecutionStatus, MarketBias, SetupCandidate, StrategyDiagnostic, StructureState
 from src.data.database import DatabaseManager
 from src.data.sync import CandleSynchronizer
 from src.exchange.base import BaseExchangeAdapter
@@ -370,15 +370,16 @@ class ScannerRunner:
 
                     if candidate is None:
                         diag = getattr(self.generator, "last_diagnostic", None)
-                        reason_code = diag.reason_code if diag else "NO_SMC_CONFLUENCE"
-                        reason_detail = (
-                            diag.reason_detail
-                            if diag
-                            else "No SMC/SnR structural setup found in dealing range and order blocks."
-                        )
-                        event_metadata = {"candle_time_ms": latest_c1.timestamp_ms}
-                        if diag and diag.metadata:
-                            event_metadata.update(diag.metadata)
+                        if isinstance(diag, StrategyDiagnostic):
+                            reason_code = diag.reason_code
+                            reason_detail = diag.reason_detail
+                            event_metadata = {"candle_time_ms": latest_c1.timestamp_ms}
+                            if diag.metadata:
+                                event_metadata.update(diag.metadata)
+                        else:
+                            reason_code = "NO_SMC_CONFLUENCE"
+                            reason_detail = "No SMC/SnR structural setup found in dealing range and order blocks."
+                            event_metadata = {"candle_time_ms": latest_c1.timestamp_ms}
 
                         if hasattr(self.journal, "save_lifecycle_event"):
                             try:
