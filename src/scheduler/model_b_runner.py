@@ -7,11 +7,12 @@ Completely isolated from Model A.
 
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timezone
+import json
 import threading
 import time
 
 from src.core.logger import logger
-from src.core.types import Candle, CandidateStatus, Direction, SetupCandidate
+from src.core.types import Candle, CandidateStatus, Direction, ExecutionStatus, SetupCandidate, TradeRecord
 from src.data.database import DatabaseManager
 from src.catalyst.engine import NewsCatalystEngine
 from src.exchange.base import BaseExchangeAdapter
@@ -19,6 +20,7 @@ from src.exchange.new_market_scanner import NewMarketOpportunityScanner
 from src.exchange.normalized import NormalizedInstrument
 from src.exchange.service import MultiExchangeService
 from src.execution.paper_engine import PaperExecutionEngine
+from src.execution.types import PaperOrder, PaperOrderStatus, PaperPosition
 from src.journal.repository import JournalRepository
 from src.liquidity.collector import LiquidityCollector
 from src.liquidity.wall_hunter import LiquidityWallHunter
@@ -177,6 +179,24 @@ class ModelBRunner:
                         found_candidates.append(candidate)
                         self.journal.save_setup(candidate)
 
+            # Ensure symbols with active pending orders or open positions also receive candles
+            # even if they drop out of the top volume focus list
+            pending_symbols = {o.symbol for o in self.paper_engine.pending_orders.values()}
+            open_symbols = set(self.paper_engine.open_positions.keys())
+            active_monitoring_symbols = (pending_symbols | open_symbols) - set(candles_by_symbol.keys())
+
+            for sym in active_monitoring_symbols:
+                candles: List[Candle] = []
+                if self.exchange:
+                    try:
+                        candles = self.exchange.get_klines(sym, "1h", limit=50)
+                    except Exception as k_err:
+                        logger.debug(f"ModelBRunner: Failed to fetch monitoring candles for {sym}: {k_err}")
+                if not candles:
+                    candles = self.db.get_candles(sym, "1h", limit=50)
+                if candles:
+                    candles_by_symbol[sym] = candles
+
             # Deduplicate candidates by (symbol, direction) keeping highest confidence
             dedup_candidates: Dict[Tuple[str, Direction], SetupCandidate] = {}
             for cand in found_candidates:
@@ -189,12 +209,41 @@ class ModelBRunner:
             # Submit deduplicated READY candidates to Model B Paper Engine
             for cand in dedup_candidates.values():
                 if cand.status == CandidateStatus.READY:
-                    self.paper_engine.submit_candidate(cand, now_ms=current_ms)
+                    order = self.paper_engine.submit_candidate(cand, now_ms=current_ms)
+                    if order:
+                        cand.execution_status = ExecutionStatus.SUBMITTED
+                        cand.order_id = order.order_id
+                        self.journal.save_setup(cand)
+                    else:
+                        # Inspect why candidate was not submitted
+                        if cand.symbol in self.paper_engine.open_positions:
+                            existing_pos = self.paper_engine.open_positions[cand.symbol]
+                            cand.execution_status = ExecutionStatus.FILLED
+                            cand.order_id = existing_pos.order_id
+                            self.journal.save_setup(cand)
+                        elif any(o.symbol == cand.symbol for o in self.paper_engine.pending_orders.values()):
+                            existing_o = next(o for o in self.paper_engine.pending_orders.values() if o.symbol == cand.symbol)
+                            cand.execution_status = ExecutionStatus.SUBMITTED
+                            cand.order_id = existing_o.order_id
+                            self.journal.save_setup(cand)
+                        else:
+                            # Check if rejected by account risk gate
+                            recent_orders = self.journal.get_paper_orders(symbol=cand.symbol, model_id="MODEL_B")
+                            matching_rejected = next((o for o in recent_orders if o.get("candidate_id") == cand.candidate_id and o.get("status") == "REJECTED"), None)
+                            if matching_rejected:
+                                cand.execution_status = ExecutionStatus.REJECTED
+                                cand.order_id = matching_rejected.get("order_id")
+                                self.journal.save_setup(cand)
 
             # 4. Evaluate pending orders and open positions against latest candles
             if candles_by_symbol:
-                self.paper_engine.evaluate_pending_orders(candles_by_symbol, now_ms=current_ms)
-                self.paper_engine.evaluate_open_positions(candles_by_symbol, now_ms=current_ms)
+                terminal_orders = self.paper_engine.evaluate_pending_orders(candles_by_symbol, now_ms=current_ms)
+                for term_order in terminal_orders:
+                    self._sync_candidate_on_order_update(term_order)
+
+                closed_trades = self.paper_engine.evaluate_open_positions(candles_by_symbol, now_ms=current_ms)
+                for closed_trade in closed_trades:
+                    self._sync_candidate_on_trade_close(closed_trade)
 
             self.latest_candidates = list(dedup_candidates.values()) if dedup_candidates else found_candidates
             self.last_successful_scan_utc = datetime.now(timezone.utc).isoformat()
@@ -213,6 +262,57 @@ class ModelBRunner:
             self._lock.release()
 
         return self.latest_candidates
+
+    def _sync_candidate_on_order_update(self, order: PaperOrder) -> None:
+        """Update candidate execution_status in setup_candidates when order transitions."""
+        if not order.candidate_id:
+            return
+        try:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT details_json FROM setup_candidates WHERE candidate_id = ?", (order.candidate_id,))
+                row = cur.fetchone()
+                if row and row[0]:
+                    details = json.loads(row[0])
+                    if order.status == PaperOrderStatus.FILLED:
+                        details["execution_status"] = ExecutionStatus.FILLED.value
+                    elif order.status == PaperOrderStatus.EXPIRED:
+                        details["execution_status"] = ExecutionStatus.REJECTED.value
+                        details["order_status"] = "EXPIRED"
+                    elif order.status == PaperOrderStatus.INVALIDATED:
+                        details["execution_status"] = ExecutionStatus.REJECTED.value
+                        details["order_status"] = "INVALIDATED"
+                    elif order.status == PaperOrderStatus.REJECTED:
+                        details["execution_status"] = ExecutionStatus.REJECTED.value
+                        details["order_status"] = "REJECTED"
+                    details["order_id"] = order.order_id
+                    conn.execute(
+                        "UPDATE setup_candidates SET details_json = ? WHERE candidate_id = ?",
+                        (json.dumps(details), order.candidate_id),
+                    )
+                    conn.commit()
+        except Exception as sync_err:
+            logger.debug(f"ModelBRunner: Failed to sync candidate on order update: {sync_err}")
+
+    def _sync_candidate_on_trade_close(self, trade: TradeRecord) -> None:
+        """Update candidate execution_status in setup_candidates when trade closes."""
+        if not trade.setup_id:
+            return
+        try:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT details_json FROM setup_candidates WHERE candidate_id = ?", (trade.setup_id,))
+                row = cur.fetchone()
+                if row and row[0]:
+                    details = json.loads(row[0])
+                    details["execution_status"] = ExecutionStatus.CLOSED.value
+                    conn.execute(
+                        "UPDATE setup_candidates SET details_json = ? WHERE candidate_id = ?",
+                        (json.dumps(details), trade.setup_id),
+                    )
+                    conn.commit()
+        except Exception as sync_err:
+            logger.debug(f"ModelBRunner: Failed to sync candidate on trade close: {sync_err}")
 
     def start_background_loop(self, interval_seconds: float = 60.0) -> None:
         """Launch background polling thread for periodic 1H scans."""
@@ -264,6 +364,16 @@ class ModelBRunner:
 
         total_discovered = sum(len(v) for v in self.discovered_universe.values())
 
+        # Compute authoritative execution metrics from SQLite journal
+        all_orders = self.journal.get_paper_orders(model_id="MODEL_B") if self.journal else []
+        all_trades = self.journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B") if self.journal else []
+        all_setups = self.journal.get_latest_setups(limit=1000, model_id="MODEL_B") if self.journal else []
+
+        rejected_orders_count = sum(1 for o in all_orders if o.get("status") == "REJECTED")
+        expired_orders_count = sum(1 for o in all_orders if o.get("status") == "EXPIRED")
+        invalidated_orders_count = sum(1 for o in all_orders if o.get("status") == "INVALIDATED")
+        closed_trades_count = sum(1 for t in all_trades if not t.get("is_open"))
+
         return {
             "model_id": "MODEL_B",
             "model_name": "Aggressive Multi-Exchange Liquidity Research",
@@ -290,6 +400,7 @@ class ModelBRunner:
                 "weekly_loss_realized_usdt": risk_summary["weekly_loss_usdt"],
                 "max_open_positions": self.config.max_open_positions,
                 "open_positions_count": risk_summary["open_positions_count"],
+                "pending_orders_count": len(pending_orders),
                 "daily_circuit_breaker_active": risk_summary["daily_circuit_breaker_active"],
                 "weekly_circuit_breaker_active": risk_summary["weekly_circuit_breaker_active"],
             },
@@ -297,6 +408,17 @@ class ModelBRunner:
                 "enabled": True,
                 "open_positions": open_positions,
                 "pending_orders": pending_orders,
+            },
+            "execution_metrics": {
+                "candidates_total": len(all_setups),
+                "candidates_ready": sum(1 for s in all_setups if s.get("status") == "READY"),
+                "orders_submitted": len(all_orders),
+                "orders_pending": len(pending_orders),
+                "positions_open": len(open_positions),
+                "trades_closed": closed_trades_count,
+                "orders_rejected": rejected_orders_count,
+                "orders_expired": expired_orders_count,
+                "orders_invalidated": invalidated_orders_count,
             },
             "live_trading_locked": True,
         }

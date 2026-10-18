@@ -1347,9 +1347,114 @@ async def trigger_model_b_scan():
 
 @app.get("/api/model_b/setups")
 def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
-    """Retrieve latest Model B setup candidates from database."""
+    """Retrieve latest Model B setup candidates from database enriched with execution state and linked orders."""
     setups = journal.get_latest_setups(limit=limit, model_id="MODEL_B")
-    return {"setups": setups, "count": len(setups), "model_id": "MODEL_B"}
+    all_orders = journal.get_paper_orders(model_id="MODEL_B")
+    all_trades = journal.get_trades(open_only=False, limit=1000, model_id="MODEL_B")
+    
+    enriched_setups = []
+    for s in setups:
+        item = dict(s)
+        cid = item.get("candidate_id")
+        sym = item.get("symbol")
+        details = item.get("details") or {}
+        
+        # Check active open positions
+        open_pos = model_b_runner.paper_engine.open_positions.get(sym) if model_b_runner else None
+        
+        # Check active pending limit orders
+        pending_order = None
+        if model_b_runner:
+            pending_order = next((o for o in model_b_runner.paper_engine.pending_orders.values() if o.candidate_id == cid or o.symbol == sym), None)
+            
+        # Check historical orders for this candidate or symbol
+        matching_orders = [o for o in all_orders if o.get("candidate_id") == cid]
+        if not matching_orders:
+            matching_orders = [o for o in all_orders if o.get("symbol") == sym]
+        latest_order = matching_orders[0] if matching_orders else None
+        
+        # Determine truthful execution state
+        execution_state = "NOT_SUBMITTED"
+        order_id = None
+        order_status = None
+        order_price = None
+        order_created_at = None
+        rejection_reason = None
+        
+        if open_pos and (open_pos.setup_id == cid or open_pos.symbol == sym):
+            execution_state = "OPEN"
+            order_id = open_pos.order_id
+            order_status = "FILLED"
+            order_price = open_pos.entry_price
+            order_created_at = datetime.fromtimestamp(open_pos.entry_timestamp_ms / 1000.0, tz=timezone.utc).isoformat()
+        elif pending_order and (pending_order.candidate_id == cid or pending_order.symbol == sym):
+            execution_state = "ENTRY_PENDING"
+            order_id = pending_order.order_id
+            order_status = "PENDING"
+            order_price = pending_order.price
+            order_created_at = pending_order.created_at_utc
+        elif latest_order:
+            st = (latest_order.get("status") or "").upper()
+            order_id = latest_order.get("order_id")
+            order_status = st
+            order_price = latest_order.get("price")
+            order_created_at = latest_order.get("created_at_utc")
+            if st == "PENDING":
+                execution_state = "ENTRY_PENDING"
+            elif st == "FILLED":
+                closed_trade = next((t for t in all_trades if (t.get("setup_id") == cid or t.get("symbol") == sym) and not t.get("is_open")), None)
+                execution_state = "CLOSED" if closed_trade else "OPEN"
+            elif st == "REJECTED":
+                execution_state = "REJECTED"
+                rejection_reason = latest_order.get("rejection_reason")
+            elif st == "EXPIRED":
+                execution_state = "EXPIRED"
+            elif st == "INVALIDATED":
+                execution_state = "CANCELLED"
+            else:
+                execution_state = st or "NOT_SUBMITTED"
+        else:
+            # Reconstruct from details or candidate status
+            details_exec = details.get("execution_status")
+            if details_exec and details_exec != "NOT_SUBMITTED":
+                execution_state = details_exec
+            elif item.get("status") == "READY":
+                execution_state = "READY"
+            else:
+                execution_state = "NOT_SUBMITTED"
+            order_id = details.get("order_id")
+            
+        item["execution_state"] = execution_state
+        item["order_id"] = order_id
+        item["order_status"] = order_status
+        item["order_price"] = order_price
+        item["order_created_at"] = order_created_at
+        if rejection_reason:
+            item["rejection_reason"] = rejection_reason
+        enriched_setups.append(item)
+
+    return {"setups": enriched_setups, "count": len(enriched_setups), "model_id": "MODEL_B"}
+
+
+@app.get("/api/model_b/orders")
+def get_model_b_orders(
+    symbol: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Retrieve simulated paper orders isolated to Model B with status and symbol filtering."""
+    orders = journal.get_paper_orders(
+        symbol=symbol,
+        status=status,
+        model_id="MODEL_B",
+    )
+    pending_count = len(model_b_runner.paper_engine.pending_orders) if model_b_runner else 0
+    return {
+        "model_id": "MODEL_B",
+        "orders": orders[:limit],
+        "count": len(orders),
+        "pending_count": pending_count,
+    }
 
 
 @app.get("/api/model_b/journal")
@@ -1358,7 +1463,7 @@ def get_model_b_journal(
     open_only: bool = Query(False),
     limit: int = Query(100, ge=1, le=500),
 ):
-    """Retrieve simulated paper trading journal and metrics isolated to Model B."""
+    """Retrieve simulated paper trading journal, metrics, pending orders, and lifecycle events for Model B."""
     trades = journal.get_trades(
         outcome=outcome,
         open_only=open_only,
@@ -1367,11 +1472,22 @@ def get_model_b_journal(
     )
     all_model_b_trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
     metrics = journal.compute_trade_metrics(all_model_b_trades)
+    
+    pending_orders = [o.to_dict() for o in model_b_runner.paper_engine.pending_orders.values()] if model_b_runner else []
+    all_orders = journal.get_paper_orders(model_id="MODEL_B")
+    lifecycle_events = journal.get_lifecycle_events(limit=limit, model_id="MODEL_B")
+    
     return {
         "model_id": "MODEL_B",
         "trades": trades,
         "metrics": metrics,
         "total_count": len(trades),
+        "pending_orders": pending_orders,
+        "pending_orders_count": len(pending_orders),
+        "paper_orders": all_orders[:limit],
+        "paper_orders_count": len(all_orders),
+        "lifecycle_events": lifecycle_events[:limit],
+        "lifecycle_events_count": len(lifecycle_events),
     }
 
 
