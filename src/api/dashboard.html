@@ -1132,7 +1132,16 @@
                 <div class="flex flex-wrap items-center gap-2">
                     <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1">
                         <span class="text-xs text-slate-400 font-mono">Pair:</span>
-                        <input id="intelSymbolInput" type="text" value="BTCUSDT" class="bg-transparent text-white text-xs font-mono font-bold w-24 uppercase focus:outline-none" placeholder="BTCUSDT" onkeydown="handleIntelSymbolKeydown(event)">
+                        <input id="intelSymbolInput" type="text" list="intelSymbolDatalist" value="BTCUSDT" class="bg-transparent text-white text-xs font-mono font-bold w-24 uppercase focus:outline-none" placeholder="BTCUSDT" onkeydown="handleIntelSymbolKeydown(event)" onchange="handleIntelSymbolChange(event)">
+                        <datalist id="intelSymbolDatalist"></datalist>
+                        <select id="intelSymbolSelect" onchange="handleIntelSymbolSelect(event)" class="bg-slate-900 text-slate-300 text-xs font-mono border-l border-slate-700 pl-1.5 pr-0.5 focus:outline-none cursor-pointer">
+                            <option value="BTCUSDT" class="bg-slate-900">BTCUSDT</option>
+                            <option value="ETHUSDT" class="bg-slate-900">ETHUSDT</option>
+                            <option value="SOLUSDT" class="bg-slate-900">SOLUSDT</option>
+                            <option value="AGTUSDT" class="bg-slate-900">AGTUSDT</option>
+                            <option value="BNBUSDT" class="bg-slate-900">BNBUSDT</option>
+                            <option value="DOGEUSDT" class="bg-slate-900">DOGEUSDT</option>
+                        </select>
                     </div>
                     <button onclick="loadLiquidityIntel()" id="intelRefreshBtn" class="px-3 py-1 text-xs font-medium rounded bg-cyan-600 hover:bg-cyan-500 text-white transition flex items-center gap-1.5 shadow-sm">
                         <svg id="intelSpinIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
@@ -1363,10 +1372,12 @@
 
                 <!-- Instrument & Timeframe & Refresh Controls -->
                 <div class="flex flex-wrap items-center gap-2">
-                    <!-- Symbol Selector -->
+                    <!-- Searchable Symbol Selector -->
                     <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1">
-                        <span class="text-xs text-slate-400 font-mono">Symbol:</span>
-                        <select id="chartSymbolSelect" onchange="handleChartSymbolChange(event)" class="bg-transparent text-white text-xs font-mono font-bold focus:outline-none cursor-pointer">
+                        <span class="text-xs text-slate-400 font-mono">Pair:</span>
+                        <input id="chartSymbolInput" type="text" list="chartSymbolDatalist" value="BTCUSDT" class="bg-transparent text-white text-xs font-mono font-bold w-24 uppercase focus:outline-none" placeholder="BTCUSDT" onkeydown="handleChartSymbolKeydown(event)" onchange="handleChartSymbolInputChange(event)">
+                        <datalist id="chartSymbolDatalist"></datalist>
+                        <select id="chartSymbolSelect" onchange="handleChartSymbolChange(event)" class="bg-slate-900 text-slate-300 text-xs font-mono border-l border-slate-700 pl-1.5 pr-0.5 focus:outline-none cursor-pointer">
                             <option value="BTCUSDT" class="bg-slate-900">BTCUSDT</option>
                             <option value="ETHUSDT" class="bg-slate-900">ETHUSDT</option>
                             <option value="SOLUSDT" class="bg-slate-900">SOLUSDT</option>
@@ -1382,6 +1393,19 @@
                         <button onclick="setChartTimeframe('1h')" id="chartTf-1h" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-bold transition">1H</button>
                         <button onclick="setChartTimeframe('4h')" id="chartTf-4h" class="px-2.5 py-1 rounded text-slate-400 hover:text-white transition">4H</button>
                     </div>
+
+                    <!-- Price Scale Selector: Auto / Log -->
+                    <div class="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 text-xs font-mono" title="Chart Price Scale Mode">
+                        <button onclick="togglePriceScaleAuto()" id="scaleAutoBtn" class="px-2 py-1 rounded bg-indigo-600 text-white font-bold transition text-[11px]" title="Toggle Price Scale Autoscale">Auto</button>
+                        <button onclick="togglePriceScaleLog()" id="scaleLogBtn" class="px-2 py-1 rounded text-slate-400 hover:text-white transition text-[11px]" title="Toggle Logarithmic / Linear Price Scale">Log</button>
+                    </div>
+
+                    <!-- Fullscreen Button -->
+                    <button onclick="toggleChartFullscreen()" id="chartFullscreenBtn" class="px-2.5 py-1.5 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm" title="Toggle Fullscreen Chart View">
+                        <svg id="fullscreenExpandIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+                        <svg id="fullscreenCollapseIcon" class="w-3.5 h-3.5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9L4 4m0 5h5V4M15 9l5-5m0 5h-5V4M9 15l-5 5m0-5h5v5M15 15l5 5m-5 0v-5h5"/></svg>
+                        <span id="fullscreenBtnText">Fullscreen</span>
+                    </button>
 
                     <!-- Reload Button -->
                     <button onclick="loadLiquidityChartData()" id="chartRefreshBtn" class="px-3 py-1.5 text-xs font-medium rounded bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-sm">
@@ -1425,9 +1449,15 @@
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
                 <!-- Chart Canvas Container (3 cols on desktop) -->
                 <div class="lg:col-span-3 space-y-3">
-                    <div class="card-bg rounded-xl border border-slate-800 p-2 sm:p-3 relative overflow-hidden">
+                    <div id="chartCardContainer" class="card-bg rounded-xl border border-slate-800 p-2 sm:p-3 relative overflow-hidden transition-all duration-300">
                         <!-- Lightweight Charts Canvas Container -->
                         <div id="tvLightweightChartContainer" class="w-full h-[520px] rounded-lg"></div>
+
+                        <!-- Floating Exit Fullscreen Button (Appears only during fullscreen) -->
+                        <button id="chartExitFullscreenFloatingBtn" onclick="toggleChartFullscreen()" class="hidden absolute top-4 right-4 z-20 px-3 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700 text-xs font-semibold backdrop-blur-md shadow-lg flex items-center gap-1.5 cursor-pointer">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <span>Exit Fullscreen (Esc)</span>
+                        </button>
                         
                         <!-- Fallback / Loading Overlay -->
                         <div id="chartLoadingOverlay" class="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-10 transition-opacity">
@@ -3137,7 +3167,10 @@
             if (tabId === 'backtest') loadBacktest();
             if (tabId === 'alerts') loadAlerts();
             if (tabId === 'model_b') loadModelB();
-            if (tabId === 'liquidity_intel') loadLiquidityIntel();
+            if (tabId === 'liquidity_intel') {
+                loadLiquidityChartSymbols();
+                loadLiquidityIntel();
+            }
             if (tabId === 'sweep_chart') initOrRefreshLiquidityChart();
         }
 
@@ -4691,15 +4724,40 @@
             }
         }
 
+        function handleIntelSymbolChange(event) {
+            const sym = (event.target.value || '').trim().toUpperCase();
+            if (!sym) return;
+            const sel = document.getElementById('intelSymbolSelect');
+            if (sel) {
+                const hasOption = Array.from(sel.options).some(o => o.value === sym);
+                if (hasOption) sel.value = sym;
+            }
+            loadLiquidityIntel();
+        }
+
+        function handleIntelSymbolSelect(event) {
+            const sym = (event.target.value || '').trim().toUpperCase();
+            if (!sym) return;
+            const inp = document.getElementById('intelSymbolInput');
+            if (inp) inp.value = sym;
+            loadLiquidityIntel();
+        }
+
         function quickSelectIntelSymbol(sym) {
             const inp = document.getElementById('intelSymbolInput');
             if (inp) inp.value = sym;
+            const sel = document.getElementById('intelSymbolSelect');
+            if (sel) sel.value = sym;
             loadLiquidityIntel();
         }
 
         async function loadLiquidityIntel() {
             const inp = document.getElementById('intelSymbolInput');
             const sym = (inp && inp.value ? inp.value : 'BTCUSDT').trim().toUpperCase();
+            const sel = document.getElementById('intelSymbolSelect');
+            if (sel && Array.from(sel.options).some(o => o.value === sym)) {
+                sel.value = sym;
+            }
             const btn = document.getElementById('intelRefreshBtn');
             const spin = document.getElementById('intelSpinIcon');
 
@@ -4982,6 +5040,10 @@
         let currentSelectedEventId = null;
         let currentChartEventFilter = 'ALL';
 
+        let chartPriceScaleAuto = true;
+        let chartPriceScaleLog = false;
+        let isChartFullscreen = false;
+
         function initOrRefreshLiquidityChart() {
             loadLiquidityChartSymbols();
             loadLiquidityChartData();
@@ -4992,17 +5054,54 @@
                 const res = await fetch('/api/chart/symbols');
                 if (!res.ok) return;
                 const data = await res.json();
-                const sel = document.getElementById('chartSymbolSelect');
-                if (sel && data.symbols && data.symbols.length > 0) {
-                    const existingVals = Array.from(sel.options).map(o => o.value);
-                    data.symbols.forEach(s => {
-                        if (!existingVals.includes(s)) {
+                const symbols = (data && data.symbols && data.symbols.length > 0) ? data.symbols : [];
+                if (symbols.length === 0) return;
+
+                // 1. Populate Tab 8 Chart Dropdown & Datalist
+                const chartSel = document.getElementById('chartSymbolSelect');
+                const chartDatalist = document.getElementById('chartSymbolDatalist');
+                if (chartSel) {
+                    const existingVals = new Set(Array.from(chartSel.options).map(o => o.value));
+                    symbols.forEach(s => {
+                        if (!existingVals.has(s)) {
                             const opt = document.createElement('option');
                             opt.value = s;
                             opt.textContent = s;
                             opt.className = 'bg-slate-900';
-                            sel.appendChild(opt);
+                            chartSel.appendChild(opt);
                         }
+                    });
+                }
+                if (chartDatalist) {
+                    chartDatalist.innerHTML = '';
+                    symbols.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s;
+                        chartDatalist.appendChild(opt);
+                    });
+                }
+
+                // 2. Populate Tab 7 Intel Dropdown & Datalist
+                const intelSel = document.getElementById('intelSymbolSelect');
+                const intelDatalist = document.getElementById('intelSymbolDatalist');
+                if (intelSel) {
+                    const existingVals = new Set(Array.from(intelSel.options).map(o => o.value));
+                    symbols.forEach(s => {
+                        if (!existingVals.has(s)) {
+                            const opt = document.createElement('option');
+                            opt.value = s;
+                            opt.textContent = s;
+                            opt.className = 'bg-slate-900';
+                            intelSel.appendChild(opt);
+                        }
+                    });
+                }
+                if (intelDatalist) {
+                    intelDatalist.innerHTML = '';
+                    symbols.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s;
+                        intelDatalist.appendChild(opt);
                     });
                 }
             } catch (e) {
@@ -5010,11 +5109,196 @@
             }
         }
 
-        function handleChartSymbolChange(event) {
-            currentChartSymbol = (event.target.value || 'BTCUSDT').toUpperCase();
+        function handleChartSymbolKeydown(event) {
+            if (event && event.key === 'Enter') {
+                handleChartSymbolInputChange(event);
+            }
+        }
+
+        function handleChartSymbolInputChange(event) {
+            const sym = (event.target.value || 'BTCUSDT').trim().toUpperCase();
+            if (!sym) return;
+            currentChartSymbol = sym;
+            const sel = document.getElementById('chartSymbolSelect');
+            if (sel) {
+                const hasOption = Array.from(sel.options).some(o => o.value === sym);
+                if (hasOption) sel.value = sym;
+            }
             if (isReplayMode) toggleReplayMode();
             loadLiquidityChartData();
         }
+
+        function handleChartSymbolChange(event) {
+            currentChartSymbol = (event.target.value || 'BTCUSDT').trim().toUpperCase();
+            const inp = document.getElementById('chartSymbolInput');
+            if (inp) inp.value = currentChartSymbol;
+            if (isReplayMode) toggleReplayMode();
+            loadLiquidityChartData();
+        }
+
+        function togglePriceScaleAuto() {
+            chartPriceScaleAuto = !chartPriceScaleAuto;
+            const btn = document.getElementById('scaleAutoBtn');
+            if (btn) {
+                if (chartPriceScaleAuto) {
+                    btn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-bold transition text-[11px]';
+                } else {
+                    btn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition text-[11px]';
+                }
+            }
+            if (tvChart) {
+                try {
+                    tvChart.priceScale('right').applyOptions({ autoScale: chartPriceScaleAuto });
+                } catch (e) {
+                    console.warn('Could not apply price scale autoscale:', e);
+                }
+            }
+        }
+
+        function togglePriceScaleLog() {
+            chartPriceScaleLog = !chartPriceScaleLog;
+            const btn = document.getElementById('scaleLogBtn');
+            if (btn) {
+                if (chartPriceScaleLog) {
+                    btn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-bold transition text-[11px]';
+                    btn.textContent = 'Log [ON]';
+                } else {
+                    btn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition text-[11px]';
+                    btn.textContent = 'Log';
+                }
+            }
+            if (tvChart && typeof LightweightCharts !== 'undefined') {
+                try {
+                    const logMode = chartPriceScaleLog
+                        ? (LightweightCharts.PriceScaleMode ? LightweightCharts.PriceScaleMode.Logarithmic : 1)
+                        : (LightweightCharts.PriceScaleMode ? LightweightCharts.PriceScaleMode.Normal : 0);
+                    tvChart.priceScale('right').applyOptions({ mode: logMode });
+                } catch (e) {
+                    console.warn('Could not apply price scale mode:', e);
+                }
+            }
+        }
+
+        async function toggleChartFullscreen() {
+            const card = document.getElementById('chartCardContainer');
+            if (!card) return;
+
+            if (!isChartFullscreen) {
+                if (card.requestFullscreen) {
+                    try {
+                        await card.requestFullscreen();
+                        return;
+                    } catch (err) {
+                        console.warn('Native fullscreen request rejected/unsupported, fallback to CSS:', err);
+                    }
+                } else if (card.webkitRequestFullscreen) {
+                    try {
+                        await card.webkitRequestFullscreen();
+                        return;
+                    } catch (err) {}
+                }
+                applyCssFullscreen(true);
+            } else {
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    try {
+                        if (document.exitFullscreen) await document.exitFullscreen();
+                        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+                        return;
+                    } catch (err) {
+                        console.warn('Native exit fullscreen error:', err);
+                    }
+                }
+                applyCssFullscreen(false);
+            }
+        }
+
+        function applyCssFullscreen(enable) {
+            isChartFullscreen = Boolean(enable);
+            const card = document.getElementById('chartCardContainer');
+            const chartDiv = document.getElementById('tvLightweightChartContainer');
+            const floatingBtn = document.getElementById('chartExitFullscreenFloatingBtn');
+            const expandIcon = document.getElementById('fullscreenExpandIcon');
+            const collapseIcon = document.getElementById('fullscreenCollapseIcon');
+            const btnText = document.getElementById('fullscreenBtnText');
+
+            if (!card || !chartDiv) return;
+
+            if (isChartFullscreen) {
+                card.classList.add('fixed', 'inset-0', 'z-50', 'w-screen', 'h-screen', 'rounded-none', 'bg-slate-950', 'p-4');
+                card.style.zIndex = '9999';
+                chartDiv.style.height = 'calc(100vh - 32px)';
+                if (floatingBtn) floatingBtn.classList.remove('hidden');
+                if (expandIcon) expandIcon.classList.add('hidden');
+                if (collapseIcon) collapseIcon.classList.remove('hidden');
+                if (btnText) btnText.textContent = 'Exit Fullscreen';
+                document.body.style.overflow = 'hidden';
+            } else {
+                card.classList.remove('fixed', 'inset-0', 'z-50', 'w-screen', 'h-screen', 'rounded-none', 'bg-slate-950', 'p-4');
+                card.style.zIndex = '';
+                chartDiv.style.height = '520px';
+                if (floatingBtn) floatingBtn.classList.add('hidden');
+                if (expandIcon) expandIcon.classList.remove('hidden');
+                if (collapseIcon) collapseIcon.classList.add('hidden');
+                if (btnText) btnText.textContent = 'Fullscreen';
+                document.body.style.overflow = '';
+            }
+
+            setTimeout(() => {
+                if (tvChart && chartDiv) {
+                    const rect = chartDiv.getBoundingClientRect();
+                    tvChart.applyOptions({
+                        width: rect.width || window.innerWidth,
+                        height: isChartFullscreen ? (window.innerHeight - 32) : 520
+                    });
+                    tvChart.timeScale().fitContent();
+                }
+            }, 100);
+        }
+
+        function handleNativeFullscreenChange() {
+            const card = document.getElementById('chartCardContainer');
+            const chartDiv = document.getElementById('tvLightweightChartContainer');
+            const floatingBtn = document.getElementById('chartExitFullscreenFloatingBtn');
+            const expandIcon = document.getElementById('fullscreenExpandIcon');
+            const collapseIcon = document.getElementById('fullscreenCollapseIcon');
+            const btnText = document.getElementById('fullscreenBtnText');
+            const isNativeFs = (document.fullscreenElement === card || document.webkitFullscreenElement === card);
+
+            isChartFullscreen = isNativeFs;
+
+            if (isNativeFs) {
+                if (chartDiv) chartDiv.style.height = 'calc(100vh - 32px)';
+                if (floatingBtn) floatingBtn.classList.remove('hidden');
+                if (expandIcon) expandIcon.classList.add('hidden');
+                if (collapseIcon) collapseIcon.classList.remove('hidden');
+                if (btnText) btnText.textContent = 'Exit Fullscreen';
+            } else {
+                if (chartDiv) chartDiv.style.height = '520px';
+                if (floatingBtn) floatingBtn.classList.add('hidden');
+                if (expandIcon) expandIcon.classList.remove('hidden');
+                if (collapseIcon) collapseIcon.classList.add('hidden');
+                if (btnText) btnText.textContent = 'Fullscreen';
+            }
+
+            setTimeout(() => {
+                if (tvChart && chartDiv) {
+                    const rect = chartDiv.getBoundingClientRect();
+                    tvChart.applyOptions({
+                        width: rect.width || window.innerWidth,
+                        height: isNativeFs ? (window.innerHeight - 32) : 520
+                    });
+                    tvChart.timeScale().fitContent();
+                }
+            }, 100);
+        }
+
+        document.addEventListener('fullscreenchange', handleNativeFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleNativeFullscreenChange);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isChartFullscreen) {
+                toggleChartFullscreen();
+            }
+        });
 
         function setChartTimeframe(tf) {
             currentChartTf = tf;
@@ -5033,6 +5317,13 @@
         }
 
         async function loadLiquidityChartData(asOfIndex = null) {
+            const chartInp = document.getElementById('chartSymbolInput');
+            if (chartInp && chartInp.value !== currentChartSymbol) chartInp.value = currentChartSymbol;
+            const chartSel = document.getElementById('chartSymbolSelect');
+            if (chartSel && Array.from(chartSel.options).some(o => o.value === currentChartSymbol)) {
+                chartSel.value = currentChartSymbol;
+            }
+
             const spin = document.getElementById('chartSpinIcon');
             const overlay = document.getElementById('chartLoadingOverlay');
             if (spin) spin.classList.add('animate-spin');
@@ -5113,14 +5404,18 @@
                 color: c.close >= c.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'
             }));
 
+            const targetHeight = isChartFullscreen ? (window.innerHeight - 32) : 520;
+            const logMode = chartPriceScaleLog
+                ? (LightweightCharts.PriceScaleMode ? LightweightCharts.PriceScaleMode.Logarithmic : 1)
+                : (LightweightCharts.PriceScaleMode ? LightweightCharts.PriceScaleMode.Normal : 0);
+
             if (!tvChart) {
                 container.innerHTML = '';
                 const width = container.clientWidth || 800;
-                const height = 520;
 
                 tvChart = LightweightCharts.createChart(container, {
                     width: width,
-                    height: height,
+                    height: targetHeight,
                     layout: {
                         background: { color: '#0b0f17' },
                         textColor: '#94a3b8',
@@ -5135,6 +5430,8 @@
                     },
                     rightPriceScale: {
                         borderColor: '#1e293b',
+                        autoScale: chartPriceScaleAuto,
+                        mode: logMode,
                     },
                     timeScale: {
                         borderColor: '#1e293b',
@@ -5191,11 +5488,21 @@
                     const ro = new ResizeObserver(entries => {
                         if (entries && entries[0] && tvChart) {
                             const rect = entries[0].contentRect;
-                            tvChart.applyOptions({ width: rect.width });
+                            tvChart.applyOptions({
+                                width: rect.width,
+                                height: isChartFullscreen ? (window.innerHeight - 32) : 520
+                            });
                         }
                     });
                     ro.observe(container);
                 }
+            } else {
+                try {
+                    tvChart.priceScale('right').applyOptions({
+                        autoScale: chartPriceScaleAuto,
+                        mode: logMode
+                    });
+                } catch (e) {}
             }
 
             candleSeries.setData(chartData);
