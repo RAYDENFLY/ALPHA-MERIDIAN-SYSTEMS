@@ -108,12 +108,14 @@ class MultiExchangeService:
         trades: Dict[str, List[NormalizedTrade]] = {
             "asterdex": [],
             "binance": [],
+            "hyperliquid": [],
         }
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {
                 executor.submit(self.aster.get_recent_trades, symbol, limit): "asterdex",
                 executor.submit(self.binance.get_recent_trades, symbol, limit): "binance",
+                executor.submit(self.hyperliquid.get_recent_trades, symbol, limit): "hyperliquid",
             }
             for fut in as_completed(futures):
                 ex = futures[fut]

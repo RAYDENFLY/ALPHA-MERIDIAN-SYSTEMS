@@ -14,6 +14,7 @@ from src.core.logger import logger
 from src.exchange.normalized import (
     NormalizedInstrument,
     NormalizedOrderBook,
+    NormalizedTrade,
     OrderBookLevel,
 )
 
@@ -173,3 +174,62 @@ class HyperliquidAdapter:
         except Exception as err:
             logger.warning(f"Hyperliquid: Failed to fetch order book for {symbol}: {err}")
             return None
+
+    def get_recent_trades(self, symbol: str, limit: int = 100) -> List[NormalizedTrade]:
+        """Fetch recent public trades for perpetual contract from Hyperliquid.
+        
+        Args:
+            symbol: Target symbol e.g. 'BTCUSDT' or 'BTC'.
+            limit: Maximum trades to return.
+        """
+        coin = symbol.removesuffix("USDT")
+        payload = {"type": "recentTrades", "coin": coin}
+
+        try:
+            resp = self.session.post(self.info_url, json=payload, timeout=self.timeout_sec)
+            if resp.status_code != 200:
+                logger.warning(f"Hyperliquid: recentTrades for {symbol} returned status {resp.status_code}")
+                return []
+
+            data = resp.json()
+            if not isinstance(data, list):
+                return []
+
+            trades: List[NormalizedTrade] = []
+            for item in data[:limit]:
+                try:
+                    px = float(item["px"])
+                    sz = float(item["sz"])
+                    # Hyperliquid: 'B' indicates aggressor buyer (crossed ask), 'A' aggressor seller (hit bid)
+                    raw_side = str(item.get("side", "")).upper()
+                    if raw_side == "B":
+                        side = "BUY"
+                    elif raw_side == "A":
+                        side = "SELL"
+                    else:
+                        side = "UNKNOWN"
+
+                    trade_id = str(item.get("tid") or item.get("hash") or "")
+                    ts_ms = int(item.get("time", 0))
+
+                    trades.append(
+                        NormalizedTrade(
+                            trade_id=trade_id,
+                            symbol=symbol,
+                            exchange_name="hyperliquid",
+                            timestamp_ms=ts_ms,
+                            price=px,
+                            size=sz,
+                            notional_usdt=px * sz,
+                            side=side,
+                        )
+                    )
+                except (ValueError, KeyError, TypeError) as parse_err:
+                    logger.debug(f"Hyperliquid: Skipped malformed trade item for {symbol}: {parse_err}")
+                    continue
+
+            return trades
+        except Exception as err:
+            logger.warning(f"Hyperliquid: Failed to fetch trades for {symbol}: {err}")
+            return []
+
