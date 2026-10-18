@@ -874,7 +874,7 @@
             </div>
 
             <!-- Model B Risk & Portfolio Cards -->
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4">
                 <div class="card-bg p-4 rounded-xl border border-slate-800">
                     <div class="text-xs text-slate-400 font-medium">Model B Paper Equity</div>
                     <div class="text-xl font-bold text-white mt-1" id="modelBEquityDisplay">$100.00 USDT</div>
@@ -896,9 +896,14 @@
                     <div class="text-xs text-emerald-400 mt-1 font-mono" id="modelBWeeklyStatus">Active (7.5R Cap)</div>
                 </div>
                 <div class="card-bg p-4 rounded-xl border border-slate-800">
-                    <div class="text-xs text-slate-400 font-medium">Active Exposure</div>
-                    <div class="text-xl font-bold text-white mt-1" id="modelBExposureDisplay">0 / 3 Positions</div>
+                    <div class="text-xs text-slate-400 font-medium">Open Positions</div>
+                    <div class="text-xl font-bold text-white mt-1" id="modelBExposureDisplay">0 / 3 Open</div>
                     <div class="text-xs text-indigo-400 mt-1 font-mono" id="modelBDiscoveredCount">-- Markets Discovered</div>
+                </div>
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-medium">Pending Orders</div>
+                    <div class="text-xl font-bold text-amber-300 mt-1" id="modelBPendingOrdersDisplay">0 Pending</div>
+                    <div class="text-xs text-slate-500 mt-1 font-mono">Awaiting Limit Penetration</div>
                 </div>
             </div>
 
@@ -965,11 +970,42 @@
                                 <th class="px-4 py-2.5">Take Profit (TP1/TP2)</th>
                                 <th class="px-4 py-2.5">Sizing / Risk</th>
                                 <th class="px-4 py-2.5">Liquidity Metrics</th>
-                                <th class="px-4 py-2.5">Status</th>
+                                <th class="px-4 py-2.5">Setup Status</th>
+                                <th class="px-4 py-2.5">Execution State</th>
                             </tr>
                         </thead>
                         <tbody id="modelBSetupsTableBody" class="divide-y divide-slate-800">
-                            <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B setups recorded yet. Click "Scan Universal Markets Now" to trigger a 1H cycle.</td></tr>
+                            <tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No Model B setups recorded yet. Click "Scan Universal Markets Now" to trigger a 1H cycle.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Model B Pending Paper Orders Table -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-base font-bold text-white">Model B Pending Paper Orders</h3>
+                        <span id="modelBPendingOrdersBadge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-950 text-amber-300 border border-amber-800">0 Pending Orders</span>
+                    </div>
+                    <span class="text-xs text-slate-400 font-mono">Conservative Fill Model: Awaiting decisive penetration beyond entry</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono text-slate-300">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+                            <tr>
+                                <th class="px-4 py-2.5">Order ID & Symbol</th>
+                                <th class="px-4 py-2.5">Direction</th>
+                                <th class="px-4 py-2.5">Limit Price</th>
+                                <th class="px-4 py-2.5">Stop Loss / TP</th>
+                                <th class="px-4 py-2.5">Quantity / Margin</th>
+                                <th class="px-4 py-2.5">Created (UTC)</th>
+                                <th class="px-4 py-2.5">Execution Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelBPendingOrdersTableBody" class="divide-y divide-slate-800">
+                            <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No pending limit orders. Conservative limit orders are queued when candidates qualify and await decisive price penetration.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3141,6 +3177,7 @@
                 fetchModelBStatus(),
                 fetchModelBCoverage(),
                 fetchModelBSetups(),
+                fetchModelBOrders(),
                 fetchModelBJournal(),
                 fetchModelBOrderBook(),
             ]);
@@ -3185,7 +3222,10 @@
                 }
 
                 const expEl = document.getElementById('modelBExposureDisplay');
-                if (expEl) expEl.innerText = `${data.risk_limits.open_positions_count || 0} / ${data.risk_limits.max_open_positions || 3} Positions`;
+                if (expEl) expEl.innerText = `${data.risk_limits.open_positions_count || 0} / ${data.risk_limits.max_open_positions || 3} Open`;
+
+                const pendEl = document.getElementById('modelBPendingOrdersDisplay');
+                if (pendEl) pendEl.innerText = `${data.risk_limits.pending_orders_count || 0} Pending`;
 
                 const discEl = document.getElementById('modelBDiscoveredCount');
                 if (discEl) discEl.innerText = `${data.discovered_markets_count || 0} Markets Discovered`;
@@ -3247,7 +3287,7 @@
                 if (badge) badge.innerText = `${setups.length} Candidate${setups.length === 1 ? '' : 's'}`;
 
                 if (setups.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B setups recorded. Click "Scan Universal Markets Now" to trigger a 1H cycle.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No Model B setups recorded. Click "Scan Universal Markets Now" to trigger a 1H cycle.</td></tr>';
                     return;
                 }
 
@@ -3261,6 +3301,36 @@
                     else if (s.status === 'WATCHLIST') statusBadge = 'bg-amber-950 text-amber-300 border-amber-600';
                     else if (s.status === 'INFEASIBLE') statusBadge = 'bg-rose-950 text-rose-300 border-rose-600';
                     else if (s.status === 'INVALIDATED') statusBadge = 'bg-orange-950 text-orange-300 border-orange-600';
+
+                    let execBadge = 'bg-slate-800 text-slate-400 border-slate-700';
+                    let execSub = '';
+                    const execState = (s.execution_state || 'NOT_SUBMITTED').toUpperCase();
+
+                    if (execState === 'ENTRY_PENDING') {
+                        execBadge = 'bg-amber-950 text-amber-300 border-amber-600 font-bold animate-pulse';
+                        execSub = `<div class="text-[10px] text-amber-400/90 font-mono mt-0.5 truncate max-w-xs">${escapeHtml(s.order_id || '')} &bull; Awaiting Penetration</div>`;
+                    } else if (execState === 'OPEN') {
+                        execBadge = 'bg-emerald-950 text-emerald-300 border-emerald-600 font-bold';
+                        execSub = `<div class="text-[10px] text-emerald-400/90 font-mono mt-0.5 truncate max-w-xs">${escapeHtml(s.order_id || '')} &bull; Position Active</div>`;
+                    } else if (execState === 'CLOSED') {
+                        execBadge = 'bg-purple-950 text-purple-300 border-purple-600 font-bold';
+                        execSub = `<div class="text-[10px] text-purple-400/90 font-mono mt-0.5">Exited & Journaled</div>`;
+                    } else if (execState === 'REJECTED') {
+                        execBadge = 'bg-rose-950 text-rose-300 border-rose-600 font-bold';
+                        execSub = `<div class="text-[10px] text-rose-400 font-mono mt-0.5 truncate max-w-xs">${escapeHtml(s.rejection_reason || 'Risk limit rejected')}</div>`;
+                    } else if (execState === 'EXPIRED') {
+                        execBadge = 'bg-orange-950 text-orange-300 border-orange-600';
+                        execSub = `<div class="text-[10px] text-orange-400 font-mono mt-0.5">TTL Expired (12 bars)</div>`;
+                    } else if (execState === 'CANCELLED') {
+                        execBadge = 'bg-orange-950 text-orange-300 border-orange-600';
+                        execSub = `<div class="text-[10px] text-orange-400 font-mono mt-0.5">Structural Invalidation</div>`;
+                    } else if (execState === 'READY') {
+                        execBadge = 'bg-blue-950 text-blue-300 border-blue-600 font-bold';
+                        execSub = `<div class="text-[10px] text-blue-400/90 font-mono mt-0.5">Qualified &bull; Ready</div>`;
+                    } else {
+                        execBadge = 'bg-slate-800 text-slate-400 border-slate-700';
+                        execSub = `<div class="text-[10px] text-slate-500 font-mono mt-0.5">Not Submitted</div>`;
+                    }
 
                     const meta = s.metadata || {};
                     const spreadStr = meta.spread_bps !== undefined ? `${meta.spread_bps.toFixed(1)} bps` : '--';
@@ -3295,12 +3365,76 @@
                                 <span class="px-2 py-0.5 rounded text-[10px] border ${statusBadge}">${s.status}</span>
                                 ${s.rejection_reasons && s.rejection_reasons.length ? `<div class="text-[10px] text-slate-500 max-w-xs truncate mt-0.5">${escapeHtml(s.rejection_reasons[0])}</div>` : ''}
                             </td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-0.5 rounded text-[10px] border ${execBadge}">${execState}</span>
+                                ${execSub}
+                            </td>
                         </tr>
                     `;
                 }).join('');
 
             } catch (err) {
                 console.error("Model B setups error:", err);
+            }
+        }
+
+        async function fetchModelBOrders() {
+            try {
+                const res = await fetch('/api/model_b/orders?status=PENDING&limit=25');
+                if (!res.ok) return;
+                const data = await res.json();
+                const tbody = document.getElementById('modelBPendingOrdersTableBody');
+                const badge = document.getElementById('modelBPendingOrdersBadge');
+                if (!tbody) return;
+
+                const orders = data.orders || [];
+                if (badge) badge.innerText = `${orders.length} Pending Order${orders.length === 1 ? '' : 's'}`;
+
+                if (orders.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No pending limit orders. Conservative limit orders are queued when candidates qualify and await decisive price penetration.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = orders.map(o => {
+                    const isLong = (o.direction || '').toUpperCase() === 'LONG';
+                    const dirClass = isLong ? 'text-emerald-400' : 'text-rose-400';
+                    const dirBg = isLong ? 'border-emerald-600 bg-emerald-950/40' : 'border-rose-600 bg-rose-950/40';
+
+                    const notional = Number(o.notional_usdt || (o.quantity * o.price) || 0).toFixed(2);
+                    const margin = Number(o.margin_usdt || (notional / (o.leverage || 10.0)) || 0).toFixed(2);
+                    const createdStr = o.created_at_utc ? new Date(o.created_at_utc).toLocaleTimeString() : '--';
+
+                    return `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="px-4 py-3">
+                                <div class="font-bold text-white">${escapeHtml(o.symbol)}</div>
+                                <div class="text-[10px] text-amber-400 font-mono">${escapeHtml(o.order_id)}</div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold border ${dirBg} ${dirClass}">${o.direction}</span>
+                                <span class="text-slate-400 text-[10px] ml-1">${o.order_type || 'LIMIT'}</span>
+                            </td>
+                            <td class="px-4 py-3 font-semibold text-white">$${formatPrice(o.price)}</td>
+                            <td class="px-4 py-3 text-[11px]">
+                                <div class="text-rose-400">SL: $${formatPrice(o.stop_loss)}</div>
+                                <div class="text-emerald-400">TP: $${formatPrice(o.take_profit)}</div>
+                            </td>
+                            <td class="px-4 py-3 text-[11px]">
+                                <div class="text-white">$${notional} USDT (${o.leverage || 10}x)</div>
+                                <div class="text-slate-400 text-[10px]">Margin: $${margin}</div>
+                            </td>
+                            <td class="px-4 py-3 text-[10px] text-slate-400 font-mono">${createdStr}</td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-600">
+                                    AWAITING FILL
+                                </span>
+                                <div class="text-[10px] text-slate-500 mt-0.5">Eval Bars: ${o.evaluated_bars_count || 0} / 12</div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Model B orders error:", err);
             }
         }
 
