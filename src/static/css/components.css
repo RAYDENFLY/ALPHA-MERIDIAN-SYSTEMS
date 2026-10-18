@@ -1,0 +1,24 @@
+/* Component status badges */
+.badge-green { background-color: #064e3b; color: #34d399; border: 1px solid #059669; }
+.badge-red { background-color: #7f1d1d; color: #f87171; border: 1px solid #dc2626; }
+.badge-blue { background-color: #1e3a8a; color: #60a5fa; border: 1px solid #2563eb; }
+.badge-purple { background-color: #581c87; color: #c084fc; border: 1px solid #7c3aed; }
+.badge-yellow { background-color: #713f12; color: #facc15; border: 1px solid #ca8a04; }
+.badge-orange { background-color: #7c2d12; color: #fb923c; border: 1px solid #ea580c; }
+.badge-gray { background-color: #1f2937; color: #9ca3af; border: 1px solid #374151; }
+
+/* Filter chip active state */
+.filter-btn-active {
+    background-color: #4f46e5 !important;
+    color: #ffffff !important;
+    border-color: #6366f1 !important;
+    font-weight: 600;
+}
+
+/* Candidate setup cards status borders */
+.card-ready { border-left: 4px solid #10b981; }
+.card-watchlist { border-left: 4px solid #f59e0b; }
+.card-infeasible { border-left: 4px solid #ef4444; }
+.card-invalidated { border-left: 4px solid #f97316; }
+.card-stale { border-left: 4px solid #6b7280; opacity: 0.85; }
+.card-error { border-left: 4px solid #ec4899; }

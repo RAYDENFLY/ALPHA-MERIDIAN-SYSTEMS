@@ -1,0 +1,33 @@
+/* TradingView & Chart.js visualizer styles */
+#tvLightweightChartContainer {
+    position: relative;
+    width: 100%;
+}
+
+/* Smooth fullscreen transitions */
+#chartCardContainer.fullscreen-active {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    border-radius: 0 !important;
+    background-color: #0b0f17 !important;
+    padding: 1rem !important;
+}
+
+/* Scrollbar styles for dark dashboard */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0b0f17;
+}
+::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+}
