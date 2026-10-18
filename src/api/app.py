@@ -1366,7 +1366,7 @@ async def trigger_model_b_scan():
 
 @app.get("/api/model_b/setups")
 def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
-    """Retrieve latest Model B setup candidates from database enriched with execution state and linked orders."""
+    """Retrieve latest Model B setup candidates from database enriched with execution state, structured reasons, and metrics."""
     setups = journal.get_latest_setups(limit=limit, model_id="MODEL_B")
     all_orders = journal.get_paper_orders(model_id="MODEL_B")
     all_trades = journal.get_trades(open_only=False, limit=1000, model_id="MODEL_B")
@@ -1377,6 +1377,17 @@ def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
         cid = item.get("candidate_id")
         sym = item.get("symbol")
         details = item.get("details") or {}
+        ai = details.get("ai_analysis") or {}
+        risk = details.get("risk_assessment") or {}
+
+        # Enrich metrics and risk sizing for frontend display
+        item["metadata"] = ai
+        item["risk_assessment"] = risk
+        item["spread_bps"] = ai.get("spread_bps")
+        item["imbalance_25bps"] = ai.get("imbalance_25bps")
+        item["cvd_1h"] = ai.get("cvd_1h")
+        item["quantity"] = risk.get("quantity")
+        item["risk_budget_usdt"] = risk.get("risk_budget_usdt", 1.0)
         
         # Check active open positions
         open_pos = model_b_runner.paper_engine.open_positions.get(sym) if model_b_runner else None
@@ -1386,46 +1397,46 @@ def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
         if model_b_runner:
             pending_order = next((o for o in model_b_runner.paper_engine.pending_orders.values() if o.candidate_id == cid or o.symbol == sym), None)
             
-        # Check historical orders for this candidate or symbol
-        matching_orders = [o for o in all_orders if o.get("candidate_id") == cid]
-        if not matching_orders:
-            matching_orders = [o for o in all_orders if o.get("symbol") == sym]
-        latest_order = matching_orders[0] if matching_orders else None
+        # Check historical orders for this candidate specifically
+        exact_orders = [o for o in all_orders if o.get("candidate_id") == cid]
+        latest_exact_order = exact_orders[0] if exact_orders else None
         
-        # Determine truthful execution state
+        # Determine truthful execution state and structured reasons
         execution_state = "NOT_SUBMITTED"
         order_id = None
         order_status = None
         order_price = None
         order_created_at = None
         rejection_reason = None
+        not_submitted_reason = None
         
-        if open_pos and (open_pos.setup_id == cid or open_pos.symbol == sym):
+        if open_pos and open_pos.setup_id == cid:
             execution_state = "OPEN"
             order_id = open_pos.order_id
             order_status = "FILLED"
             order_price = open_pos.entry_price
             order_created_at = datetime.fromtimestamp(open_pos.entry_timestamp_ms / 1000.0, tz=timezone.utc).isoformat()
-        elif pending_order and (pending_order.candidate_id == cid or pending_order.symbol == sym):
+        elif pending_order and pending_order.candidate_id == cid:
             execution_state = "ENTRY_PENDING"
             order_id = pending_order.order_id
             order_status = "PENDING"
             order_price = pending_order.price
             order_created_at = pending_order.created_at_utc
-        elif latest_order:
-            st = (latest_order.get("status") or "").upper()
-            order_id = latest_order.get("order_id")
+        elif latest_exact_order:
+            st = (latest_exact_order.get("status") or "").upper()
+            order_id = latest_exact_order.get("order_id")
             order_status = st
-            order_price = latest_order.get("price")
-            order_created_at = latest_order.get("created_at_utc")
+            order_price = latest_exact_order.get("price")
+            order_created_at = latest_exact_order.get("created_at_utc")
             if st == "PENDING":
                 execution_state = "ENTRY_PENDING"
             elif st == "FILLED":
-                closed_trade = next((t for t in all_trades if (t.get("setup_id") == cid or t.get("symbol") == sym) and not t.get("is_open")), None)
-                execution_state = "CLOSED" if closed_trade else "OPEN"
+                # Check if position is currently open or closed
+                open_trade = next((t for t in all_trades if t.get("setup_id") == cid and t.get("is_open")), None)
+                execution_state = "OPEN" if open_trade else "CLOSED"
             elif st == "REJECTED":
                 execution_state = "REJECTED"
-                rejection_reason = latest_order.get("rejection_reason")
+                rejection_reason = latest_exact_order.get("rejection_reason")
             elif st == "EXPIRED":
                 execution_state = "EXPIRED"
             elif st == "INVALIDATED":
@@ -1433,16 +1444,33 @@ def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
             else:
                 execution_state = st or "NOT_SUBMITTED"
         else:
-            # Reconstruct from details or candidate status
+            # Reconstruct from candidate details or explain why NOT_SUBMITTED
             details_exec = details.get("execution_status")
-            if details_exec and details_exec != "NOT_SUBMITTED":
+            if details_exec and details_exec not in ("NOT_SUBMITTED", None):
                 execution_state = details_exec
+                order_id = details.get("order_id")
+            elif open_pos and open_pos.symbol == sym:
+                execution_state = "NOT_SUBMITTED"
+                not_submitted_reason = f"Submission suppressed by deduplication: Active position already open on {sym}"
+            elif pending_order and pending_order.symbol == sym:
+                execution_state = "NOT_SUBMITTED"
+                not_submitted_reason = f"Submission suppressed by deduplication: Active pending order already exists on {sym}"
             elif item.get("status") == "READY":
-                execution_state = "READY"
+                execution_state = "NOT_SUBMITTED"
+                if details.get("rejection_reasons"):
+                    not_submitted_reason = "; ".join(details["rejection_reasons"])
+                else:
+                    not_submitted_reason = "Waiting for entry trigger"
             else:
                 execution_state = "NOT_SUBMITTED"
-            order_id = details.get("order_id")
-            
+                rej_list = details.get("rejection_reasons") or item.get("rejection_reasons") or []
+                not_submitted_reason = "; ".join(rej_list) if rej_list else "Qualification criteria not met"
+
+        if not rejection_reason and details.get("rejection_reasons"):
+            rejection_reason = "; ".join(details["rejection_reasons"])
+        if not not_submitted_reason and execution_state == "NOT_SUBMITTED":
+            not_submitted_reason = rejection_reason or "Waiting for entry trigger"
+
         item["execution_state"] = execution_state
         item["order_id"] = order_id
         item["order_status"] = order_status
@@ -1450,9 +1478,13 @@ def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
         item["order_created_at"] = order_created_at
         if rejection_reason:
             item["rejection_reason"] = rejection_reason
+        if not_submitted_reason:
+            item["not_submitted_reason"] = not_submitted_reason
+            
         enriched_setups.append(item)
 
     return {"setups": enriched_setups, "count": len(enriched_setups), "model_id": "MODEL_B"}
+
 
 
 @app.get("/api/model_b/orders")

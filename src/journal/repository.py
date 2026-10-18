@@ -56,6 +56,33 @@ class JournalRepository:
             conn.execute(query, params)
             conn.commit()
 
+    def get_setup_by_id(self, candidate_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single setup candidate by its primary candidate_id."""
+        query = """
+        SELECT candidate_id, symbol, timestamp_ms, direction, bias_4h, structure_1h,
+               entry_price, stop_loss, take_profit_1, take_profit_2, gross_rr, net_rr,
+               invalidation_price, ml_probability, calibration_status, eval_sample_count,
+               status, details_json, created_at_utc, entry_category, model_id
+        FROM setup_candidates
+        WHERE candidate_id = ?
+        LIMIT 1;
+        """
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(query, (candidate_id,))
+            row = cur.fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        try:
+            data["details"] = json.loads(data["details_json"])
+        except Exception:
+            data["details"] = {}
+        if "entry_category" not in data or not data["entry_category"]:
+            data["entry_category"] = data["details"].get("entry_category", "Unclassified")
+        data["details"]["entry_category"] = data["entry_category"]
+        return data
+
     def get_latest_setups(
         self,
         symbol: Optional[str] = None,

@@ -3460,13 +3460,29 @@
                         execSub = `<div class="text-[10px] text-blue-400/90 font-mono mt-0.5">Qualified &bull; Ready</div>`;
                     } else {
                         execBadge = 'bg-slate-800 text-slate-400 border-slate-700';
-                        execSub = `<div class="text-[10px] text-slate-500 font-mono mt-0.5">Not Submitted</div>`;
+                        const notSubReason = s.not_submitted_reason || s.rejection_reason || 'Not Submitted';
+                        execSub = `<div class="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-xs" title="${escapeHtml(notSubReason)}">${escapeHtml(notSubReason)}</div>`;
                     }
 
-                    const meta = s.metadata || {};
-                    const spreadStr = meta.spread_bps !== undefined ? `${meta.spread_bps.toFixed(1)} bps` : '--';
-                    const imbStr = meta.imbalance_25bps !== undefined ? `${(meta.imbalance_25bps * 100).toFixed(1)}%` : '--';
-                    const cvdStr = meta.cvd_1h !== undefined ? `$${Math.round(meta.cvd_1h).toLocaleString()}` : '--';
+                    const meta = s.metadata || (s.details && s.details.ai_analysis) || {};
+                    const risk = s.risk_assessment || (s.details && s.details.risk_assessment) || {};
+
+                    const spreadStr = (meta.spread_bps !== undefined && meta.spread_bps !== null)
+                        ? `${meta.spread_bps.toFixed(1)} bps`
+                        : '<span class="text-slate-500 italic">UNAVAILABLE</span>';
+
+                    const imbStr = (meta.imbalance_25bps !== undefined && meta.imbalance_25bps !== null)
+                        ? `${(meta.imbalance_25bps * 100).toFixed(1)}%`
+                        : '<span class="text-slate-500 italic">UNAVAILABLE</span>';
+
+                    const cvdStr = (meta.cvd_1h !== undefined && meta.cvd_1h !== null)
+                        ? `$${Math.round(meta.cvd_1h).toLocaleString()}`
+                        : '<span class="text-slate-500 italic">UNAVAILABLE</span>';
+
+                    const rawQty = (risk.quantity !== undefined && risk.quantity !== null) ? risk.quantity : s.quantity;
+                    const qtyStr = (rawQty !== undefined && rawQty !== null && rawQty > 0)
+                        ? `${rawQty}`
+                        : '<span class="text-slate-500 italic">UNAVAILABLE (Risk pending)</span>';
 
                     return `
                         <tr class="hover:bg-slate-800/40 transition">
@@ -3485,7 +3501,7 @@
                             </td>
                             <td class="px-4 py-3 text-[11px]">
                                 <div>Risk: <strong class="text-amber-300">$1.00 USDT</strong></div>
-                                <div class="text-slate-400 text-[10px]">Qty: ${s.risk_assessment ? s.risk_assessment.quantity : '--'}</div>
+                                <div class="text-slate-400 text-[10px]">Qty: ${qtyStr}</div>
                             </td>
                             <td class="px-4 py-3 text-[10px] text-slate-400">
                                 <div>Spread: <span class="text-slate-300">${spreadStr}</span></div>
@@ -3502,6 +3518,7 @@
                             </td>
                         </tr>
                     `;
+
                 }).join('');
 
             } catch (err) {

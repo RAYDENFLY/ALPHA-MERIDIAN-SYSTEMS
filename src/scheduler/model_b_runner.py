@@ -176,6 +176,42 @@ class ModelBRunner:
                         now_ms=current_ms,
                     )
                     if candidate:
+                        # Check active open positions and pending orders for this symbol
+                        if sym in self.paper_engine.open_positions:
+                            pos = self.paper_engine.open_positions[sym]
+                            if candidate.candidate_id == pos.setup_id or not candidate.order_id:
+                                candidate.execution_status = ExecutionStatus.FILLED
+                                candidate.order_id = pos.order_id
+                            if candidate.candidate_id != pos.setup_id:
+                                suppress_reason = f"Submission suppressed by deduplication: Active position already open on {sym}"
+                                if suppress_reason not in candidate.rejection_reasons:
+                                    candidate.rejection_reasons.append(suppress_reason)
+                        elif any(o.symbol == sym for o in self.paper_engine.pending_orders.values()):
+                            pend_o = next(o for o in self.paper_engine.pending_orders.values() if o.symbol == sym)
+                            if candidate.candidate_id == pend_o.candidate_id or not candidate.order_id:
+                                candidate.execution_status = ExecutionStatus.SUBMITTED
+                                candidate.order_id = pend_o.order_id
+                            if candidate.candidate_id != pend_o.candidate_id:
+                                suppress_reason = f"Submission suppressed by deduplication: Active pending order already exists on {sym}"
+                                if suppress_reason not in candidate.rejection_reasons:
+                                    candidate.rejection_reasons.append(suppress_reason)
+                        else:
+                            # Reconcile existing candidate execution state from DB to preserve state across scans
+                            existing = self.journal.get_setup_by_id(candidate.candidate_id)
+                            if existing:
+                                det = existing.get("details", {})
+                                existing_st = det.get("execution_status")
+                                if existing_st and existing_st != ExecutionStatus.NOT_SUBMITTED.value:
+                                    try:
+                                        candidate.execution_status = ExecutionStatus(existing_st)
+                                    except Exception:
+                                        pass
+                                    candidate.order_id = det.get("order_id") or candidate.order_id
+                                    if det.get("rejection_reasons"):
+                                        for r in det["rejection_reasons"]:
+                                            if r not in candidate.rejection_reasons:
+                                                candidate.rejection_reasons.append(r)
+
                         found_candidates.append(candidate)
                         self.journal.save_setup(candidate)
 
@@ -209,6 +245,10 @@ class ModelBRunner:
             # Submit deduplicated READY candidates to Model B Paper Engine
             for cand in dedup_candidates.values():
                 if cand.status == CandidateStatus.READY:
+                    # Skip resubmission if candidate is already in flight, filled, or closed
+                    if cand.execution_status in (ExecutionStatus.SUBMITTED, ExecutionStatus.FILLED, ExecutionStatus.CLOSED):
+                        continue
+
                     order = self.paper_engine.submit_candidate(cand, now_ms=current_ms)
                     if order:
                         cand.execution_status = ExecutionStatus.SUBMITTED
@@ -220,11 +260,17 @@ class ModelBRunner:
                             existing_pos = self.paper_engine.open_positions[cand.symbol]
                             cand.execution_status = ExecutionStatus.FILLED
                             cand.order_id = existing_pos.order_id
+                            reason = f"Submission suppressed by deduplication: Active position already open on {cand.symbol}"
+                            if reason not in cand.rejection_reasons:
+                                cand.rejection_reasons.append(reason)
                             self.journal.save_setup(cand)
                         elif any(o.symbol == cand.symbol for o in self.paper_engine.pending_orders.values()):
                             existing_o = next(o for o in self.paper_engine.pending_orders.values() if o.symbol == cand.symbol)
                             cand.execution_status = ExecutionStatus.SUBMITTED
                             cand.order_id = existing_o.order_id
+                            reason = f"Submission suppressed by deduplication: Active pending order already exists on {cand.symbol}"
+                            if reason not in cand.rejection_reasons:
+                                cand.rejection_reasons.append(reason)
                             self.journal.save_setup(cand)
                         else:
                             # Check if rejected by account risk gate
@@ -233,7 +279,29 @@ class ModelBRunner:
                             if matching_rejected:
                                 cand.execution_status = ExecutionStatus.REJECTED
                                 cand.order_id = matching_rejected.get("order_id")
+                                reason = matching_rejected.get("rejection_reason") or "Account risk limits exceeded."
+                                if reason not in cand.rejection_reasons:
+                                    cand.rejection_reasons.append(reason)
                                 self.journal.save_setup(cand)
+                            else:
+                                can_open, r_reason = self.risk_manager.can_open_new_position(current_ms)
+                                if not can_open:
+                                    cand.execution_status = ExecutionStatus.REJECTED
+                                    reason = r_reason or "Account risk limits exceeded."
+                                    if reason not in cand.rejection_reasons:
+                                        cand.rejection_reasons.append(reason)
+                                elif cand.expires_at_ms and current_ms > cand.expires_at_ms:
+                                    cand.execution_status = ExecutionStatus.REJECTED
+                                    reason = "Candidate TTL expired."
+                                    if reason not in cand.rejection_reasons:
+                                        cand.rejection_reasons.append(reason)
+                                else:
+                                    cand.execution_status = ExecutionStatus.NOT_SUBMITTED
+                                    reason = "Waiting for entry trigger"
+                                    if reason not in cand.rejection_reasons:
+                                        cand.rejection_reasons.append(reason)
+                                self.journal.save_setup(cand)
+
 
             # 4. Evaluate pending orders and open positions against latest candles
             if candles_by_symbol:
@@ -276,6 +344,8 @@ class ModelBRunner:
                     details = json.loads(row[0])
                     if order.status == PaperOrderStatus.FILLED:
                         details["execution_status"] = ExecutionStatus.FILLED.value
+                        details["filled_quantity"] = order.quantity
+                        details["filled_at_ms"] = order.filled_time_ms
                     elif order.status == PaperOrderStatus.EXPIRED:
                         details["execution_status"] = ExecutionStatus.REJECTED.value
                         details["order_status"] = "EXPIRED"

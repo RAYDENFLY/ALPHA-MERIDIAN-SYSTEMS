@@ -307,9 +307,11 @@ class ModelBStrategyGenerator:
         aggregated_conf = round(min(0.95, max(0.50, conf)), 2)
         is_feasible = assessment.is_feasible and not is_vetoed
         status = CandidateStatus.READY if is_feasible else CandidateStatus.INFEASIBLE
-        ts_ms = current_ts
+        # Anchor candidate timestamp and logical setup ID to triggering candle timestamp
+        anchor_candle_ms = getattr(signal, "timestamp_ms", None) or current_ts
+        ts_ms = anchor_candle_ms
         expires_at = ts_ms + int(self.config.pending_order_ttl_hours * 3600 * 1000)
-        cid = f"MCAND_B_{symbol}_{ts_ms}"
+        cid = f"MCAND_B_{symbol}_{signal.direction.value}_{anchor_candle_ms}"
 
         candidate = SetupCandidate(
             candidate_id=cid,
