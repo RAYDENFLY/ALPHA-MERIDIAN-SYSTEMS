@@ -117,14 +117,23 @@ def test_setup():
                 exchange_name="asterdex",
                 timestamp_ms=candle.timestamp_ms if candle else 1792300000000,
                 spread_bps=5.0,
-                bid_depth_10bps=25000.0,
-                ask_depth_10bps=20000.0,
+                depth_10bps_usdt=25000.0,
+                depth_25bps_usdt=50000.0,
+                depth_50bps_usdt=100000.0,
+                depth_100bps_usdt=200000.0,
+                imbalance_10bps=0.30,
                 imbalance_25bps=0.35,
+                imbalance_50bps=0.25,
+                imbalance_100bps=0.20,
                 cvd_1h=1500.0,
+                taker_buy_volume_1h=10000.0,
+                taker_sell_volume_1h=8500.0,
+                large_trade_count=10,
                 absorption_score=0.65,
             )
 
     generator.liquidity_collector = MockCollector()
+
 
     runner = ModelBRunner(
         db=db,
