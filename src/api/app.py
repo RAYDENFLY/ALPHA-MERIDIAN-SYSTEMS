@@ -973,12 +973,17 @@ async def trigger_scan() -> Dict[str, Any]:
 
 
 @app.get("/api/journal")
-def get_journal(limit: int = 50) -> Dict[str, Any]:
+def get_journal(
+    limit: int = 50,
+    model_id: Optional[str] = Query(None, description="Filter by model_id: MODEL_A, MODEL_B, or ALL"),
+) -> Dict[str, Any]:
     """Retrieve historical setup candidates and trade executions with performance summary."""
-    setups = journal.get_latest_setups(limit=limit)
-    trades = journal.get_trades(limit=limit)
+    m_id = None if (not model_id or model_id.strip().upper() == "ALL") else model_id.strip().upper()
+    setups = journal.get_latest_setups(limit=limit, model_id=m_id)
+    trades = journal.get_trades(limit=limit, model_id=m_id)
     metrics = journal.compute_trade_metrics(trades)
     return {
+        "model_id": m_id or "ALL",
         "setups": setups,
         "trades": trades,
         "metrics": metrics,
@@ -993,6 +998,7 @@ def get_trades(
     category: Optional[str] = Query(None, description="Filter entry category"),
     outcome: Optional[str] = Query(None, description="Filter outcome: WIN, LOSS, BREAKEVEN, OPEN, ALL"),
     period: Optional[str] = Query(None, description="Period filter: 24h, 7d, 30d, all"),
+    model_id: Optional[str] = Query(None, description="Filter by model_id: MODEL_A, MODEL_B, or ALL"),
     open_only: bool = Query(False, description="Filter open positions only"),
     limit: int = Query(100, description="Max trades to return"),
 ) -> Dict[str, Any]:
@@ -1008,6 +1014,8 @@ def get_trades(
         elif p_lower == "30d":
             start_time_ms = now_ms - (30 * 24 * 3600 * 1000)
 
+    target_model_id = None if (not model_id or model_id.strip().upper() == "ALL") else model_id.strip().upper()
+
     trades = journal.get_trades(
         symbol=symbol,
         direction=direction,
@@ -1016,19 +1024,30 @@ def get_trades(
         open_only=open_only,
         start_time_ms=start_time_ms,
         limit=limit,
+        model_id=target_model_id,
     )
-    all_recorded_trades = journal.get_trades(limit=1000)
+    all_recorded_trades = journal.get_trades(limit=1000, model_id=target_model_id)
     overall_metrics = journal.compute_trade_metrics(all_recorded_trades)
     filtered_metrics = journal.compute_trade_metrics(trades)
 
-    orders = journal.get_paper_orders(symbol=symbol)
-    lifecycle_events = journal.get_lifecycle_events(symbol=symbol, limit=limit)
+    # Compute authoritative per-model metrics
+    model_a_trades = journal.get_trades(limit=1000, model_id="MODEL_A")
+    model_b_trades = journal.get_trades(limit=1000, model_id="MODEL_B")
+    per_model_metrics = {
+        "MODEL_A": journal.compute_trade_metrics(model_a_trades),
+        "MODEL_B": journal.compute_trade_metrics(model_b_trades),
+    }
+
+    orders = journal.get_paper_orders(symbol=symbol, model_id=target_model_id)
+    lifecycle_events = journal.get_lifecycle_events(symbol=symbol, limit=limit, model_id=target_model_id)
     forward_cohort = journal.compute_forward_validation_cohort()
     return {
+        "model_id": target_model_id or "ALL",
         "count": len(trades),
         "trades": trades,
         "metrics": overall_metrics,
         "filtered_metrics": filtered_metrics,
+        "per_model_metrics": per_model_metrics,
         "paper_orders_count": len(orders),
         "paper_orders": orders[:limit],
         "lifecycle_events_count": len(lifecycle_events),

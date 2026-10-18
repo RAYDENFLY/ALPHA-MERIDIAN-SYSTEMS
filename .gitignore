@@ -5,10 +5,12 @@
 # 1. Environment variables, API keys, EIP-712 private keys & webhooks
 .env
 .env.*
+.env.local
 !.env.example
 *.pem
 *.key
 *secret*
+credentials.json
 
 # 2. Local SQLite databases, WAL/SHM journals & runtime state
 data/*.db
@@ -26,6 +28,9 @@ logs/
 tmp/
 temp/
 scratch/
+*.tmp
+*.bak
+*.orig
 
 # 4. Python bytecode, caches & test/coverage artifacts
 __pycache__/
@@ -36,6 +41,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 dist/
 build/
@@ -50,8 +57,11 @@ ENV/
 # 6. IDE, Editor & OS metadata
 .vscode/
 .idea/
+.cursor/
+.claude/
 *.swp
 *.swo
 .DS_Store
 Thumbs.db
 Desktop.ini
+node_modules/

@@ -459,6 +459,36 @@
                 </div>
             </div>
 
+            <!-- Model Selection Segmented Controls -->
+            <div class="card-bg p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>🎯</span>
+                        <span>Model Scope:</span>
+                    </span>
+                    <div class="flex flex-wrap items-center gap-1.5" id="journalModelGroup">
+                        <button onclick="setJournalModelFilter('ALL')" id="jModel-ALL" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white border border-indigo-500 shadow-sm transition flex items-center gap-1.5">
+                            <span>All Models</span>
+                        </button>
+                        <button onclick="setJournalModelFilter('MODEL_A')" id="jModel-MODEL_A" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                            <span>Model A — Defensive SMC/SnR</span>
+                        </button>
+                        <button onclick="setJournalModelFilter('MODEL_B')" id="jModel-MODEL_B" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            <span>Model B — Aggressive Liquidity</span>
+                        </button>
+                        <button disabled class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900/60 text-slate-600 border border-slate-800 cursor-not-allowed opacity-60 flex items-center gap-1.5" title="Model C is deferred until implemented and approved">
+                            <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                            <span>Model C — Solana Momentum (Deferred)</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="text-[11px] font-mono text-slate-400" id="journalModelScopeLabel">
+                    Active Scope: <strong class="text-indigo-300">All Models Combined</strong>
+                </div>
+            </div>
+
             <!-- Performance KPI Metrics Cards (Strict Isolation: Closed Trades Only) -->
             <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
                 <div class="card-bg p-3.5 rounded-xl border border-slate-800">
@@ -490,6 +520,26 @@
                     <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Average Net PnL</div>
                     <div class="text-lg font-bold text-white mt-1" id="journal-metric-avg-pnl">$0.00</div>
                     <div class="text-[10px] text-slate-500 font-mono mt-0.5">Per Closed Trade</div>
+                </div>
+            </div>
+
+            <!-- Per-Model Realized vs Open Segregation Strip -->
+            <div id="journalPerModelBreakdown" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+                <div class="p-3 rounded-lg bg-slate-900/90 border border-indigo-900/50 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+                        <span class="font-bold text-white">Model A:</span>
+                        <span class="text-slate-400" id="journal-scope-model-a">0 Closed &bull; 0 Open &bull; $0.00 Net Realized</span>
+                    </div>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950 border border-indigo-700 text-indigo-300">DEFENSIVE SMC/SNR</span>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-900/90 border border-amber-900/50 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                        <span class="font-bold text-white">Model B:</span>
+                        <span class="text-slate-400" id="journal-scope-model-b">0 Closed &bull; 1 Open &bull; $0.00 Net Realized</span>
+                    </div>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950 border border-amber-700 text-amber-300">AGGRESSIVE LIQUIDITY</span>
                 </div>
             </div>
 
@@ -573,6 +623,7 @@
                         <thead class="text-[11px] text-slate-400 uppercase bg-slate-900 border-b border-slate-800">
                             <tr>
                                 <th class="px-3 py-3">Trade / Setup ID</th>
+                                <th class="px-3 py-3">Model</th>
                                 <th class="px-3 py-3">Symbol & Side</th>
                                 <th class="px-3 py-3">Entry Category</th>
                                 <th class="px-3 py-3">Entry (UTC / Price)</th>
@@ -1063,6 +1114,7 @@
         let lastRawSetupsData = null;
 
         // Trading Journal filter states
+        let journalModelFilter = 'ALL';
         let journalOutcomeFilter = 'ALL';
         let journalCategoryFilter = 'ALL';
         let journalDirectionFilter = 'ALL';
@@ -2148,6 +2200,33 @@
             }
         }
 
+        function setJournalModelFilter(model) {
+            journalModelFilter = model;
+            ['ALL', 'MODEL_A', 'MODEL_B'].forEach(m => {
+                const btn = document.getElementById(`jModel-${m}`);
+                if (btn) {
+                    if (m === model) {
+                        btn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white border border-indigo-500 shadow-sm transition flex items-center gap-1.5';
+                    } else {
+                        btn.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5';
+                    }
+                }
+            });
+
+            const scopeLabel = document.getElementById('journalModelScopeLabel');
+            if (scopeLabel) {
+                if (model === 'MODEL_A') {
+                    scopeLabel.innerHTML = 'Active Scope: <strong class="text-indigo-400">Model A — Defensive SMC/SnR (Frozen Forward Cohort)</strong>';
+                } else if (model === 'MODEL_B') {
+                    scopeLabel.innerHTML = 'Active Scope: <strong class="text-amber-400">Model B — Aggressive Liquidity & Catalyst (Research Engine)</strong>';
+                } else {
+                    scopeLabel.innerHTML = 'Active Scope: <strong class="text-indigo-300">All Models Combined</strong>';
+                }
+            }
+
+            loadJournal();
+        }
+
         function setJournalOutcomeFilter(outcome) {
             journalOutcomeFilter = outcome;
             ['ALL', 'WIN', 'LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
@@ -2204,6 +2283,7 @@
             const symInp = document.getElementById('journalSymbolInput');
             if (symInp) symInp.value = '';
 
+            // Preserves journalModelFilter as requested
             loadJournal();
         }
 
@@ -2213,6 +2293,7 @@
 
             try {
                 const params = new URLSearchParams();
+                if (journalModelFilter && journalModelFilter !== 'ALL') params.append('model_id', journalModelFilter);
                 if (journalOutcomeFilter && journalOutcomeFilter !== 'ALL') params.append('outcome', journalOutcomeFilter);
                 if (journalCategoryFilter && journalCategoryFilter !== 'ALL') params.append('category', journalCategoryFilter);
                 if (journalDirectionFilter && journalDirectionFilter !== 'ALL') params.append('direction', journalDirectionFilter);
@@ -2270,8 +2351,32 @@
                     avgEl.className = `text-lg font-bold mt-1 ${avgNum > 0 ? 'text-emerald-400' : (avgNum < 0 ? 'text-red-400' : 'text-slate-300')}`;
                 }
 
+                // Update per-model breakdown indicators
+                const pmm = data.per_model_metrics || {};
+                const ma = pmm.MODEL_A || {};
+                const mb = pmm.MODEL_B || {};
+                const maEl = document.getElementById('journal-scope-model-a');
+                if (maEl) {
+                    const maNet = (ma.net_pnl || 0).toFixed(2);
+                    maEl.innerText = `${ma.closed_trades_count || 0} Closed \u2022 ${ma.open_trades_count || 0} Open \u2022 $${maNet} Net Realized`;
+                }
+                const mbEl = document.getElementById('journal-scope-model-b');
+                if (mbEl) {
+                    const mbNet = (mb.net_pnl || 0).toFixed(2);
+                    const mbNotional = mb.open_trades_notional ? ` ($${mb.open_trades_notional.toFixed(2)} Notional)` : '';
+                    mbEl.innerText = `${mb.closed_trades_count || 0} Closed \u2022 ${mb.open_trades_count || 0} Open \u2022 $${mbNet} Net Realized${mbNotional}`;
+                }
+
                 const openEl = document.getElementById('journal-metric-open-trades');
-                if (openEl) openEl.innerText = `Active Open Positions: ${openTradesCount}`;
+                if (openEl) {
+                    if (journalModelFilter === 'MODEL_A') {
+                        openEl.innerText = `Active Open Positions: ${m.open_trades_count || 0} (Model A)`;
+                    } else if (journalModelFilter === 'MODEL_B') {
+                        openEl.innerText = `Active Open Positions: ${m.open_trades_count || 0} (Model B)`;
+                    } else {
+                        openEl.innerText = `Active Open Positions: ${openTradesCount} (Model A: ${ma.open_trades_count || 0} \u2022 Model B: ${mb.open_trades_count || 0})`;
+                    }
+                }
 
                 // Populate table rows
                 const tbody = document.getElementById('journalTableBody');
@@ -2283,10 +2388,10 @@
                         emptyState.classList.remove('hidden');
                         const emptyTitle = document.getElementById('journalEmptyTitle');
                         const emptyMsg = document.getElementById('journalEmptyMessage');
-                        const hasActiveFilter = (journalOutcomeFilter !== 'ALL') || (journalCategoryFilter !== 'ALL') || (journalDirectionFilter !== 'ALL') || Boolean(journalSearchQuery) || (journalPeriodFilter !== 'all');
+                        const hasActiveFilter = (journalModelFilter !== 'ALL') || (journalOutcomeFilter !== 'ALL') || (journalCategoryFilter !== 'ALL') || (journalDirectionFilter !== 'ALL') || Boolean(journalSearchQuery) || (journalPeriodFilter !== 'all');
                         if (hasActiveFilter) {
                             if (emptyTitle) emptyTitle.innerText = 'No Trades Match Filter Criteria';
-                            if (emptyMsg) emptyMsg.innerText = 'No trade executions match the active filters. Try resetting filters or switching the outcome selection.';
+                            if (emptyMsg) emptyMsg.innerText = 'No trade executions match the active filters for the selected model scope. Try resetting filters or switching the model selector.';
                         } else {
                             if (emptyTitle) emptyTitle.innerText = 'No Paper Trades Recorded Yet';
                             if (emptyMsg) emptyMsg.innerText = 'Paper trades are recorded automatically when qualifying setups decisively fill simulated limit orders and subsequently trigger take-profit or stop-loss brackets.';
@@ -2296,6 +2401,15 @@
                 }
 
                 if (emptyState) emptyState.classList.add('hidden');
+
+                const fmtP = (p) => {
+                    if (p === undefined || p === null || isNaN(p)) return '--';
+                    const num = Number(p);
+                    if (num === 0) return '$0.00';
+                    if (Math.abs(num) < 0.001) return '$' + num.toFixed(6);
+                    if (Math.abs(num) < 1) return '$' + num.toFixed(4);
+                    return '$' + num.toFixed(2);
+                };
 
                 tbody.innerHTML = data.trades.map(t => {
                     const isLong = (t.direction || '').toUpperCase() === 'LONG';
@@ -2327,8 +2441,21 @@
                     const entryTime = t.entry_time_utc ? t.entry_time_utc.substring(5, 16).replace('T', ' ') + ' UTC' : '--';
                     const exitTime = t.exit_time_utc ? t.exit_time_utc.substring(5, 16).replace('T', ' ') + ' UTC' : (t.is_open ? '<span class="text-blue-400">In Progress</span>' : '--');
 
-                    const tradeIdShort = (t.trade_id || '').substring(0, 8);
-                    const setupIdShort = t.setup_id ? `<div class="text-[10px] text-slate-500">Ref: ${t.setup_id.substring(0, 8)}</div>` : '';
+                    const tradeId = t.trade_id || '--';
+                    const tradeIdShort = tradeId.length > 20 ? tradeId.substring(0, 20) + '...' : tradeId;
+                    const setupIdShort = t.setup_id ? `<div class="text-[10px] text-slate-500 font-mono" title="${t.setup_id}">Ref: ${t.setup_id.length > 18 ? t.setup_id.substring(0, 18) + '...' : t.setup_id}</div>` : '';
+
+                    const modelId = (t.model_id || 'UNKNOWN').toUpperCase();
+                    let modelBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 border border-slate-600 text-slate-400">UNKNOWN</span>';
+                    let modelSub = '<div class="text-[9px] text-slate-500">Unclassified</div>';
+
+                    if (modelId === 'MODEL_A') {
+                        modelBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/90 border border-indigo-600/80 text-indigo-300">Model A</span>';
+                        modelSub = '<div class="text-[9px] text-indigo-400/80">Defensive SMC/SnR</div>';
+                    } else if (modelId === 'MODEL_B') {
+                        modelBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/90 border border-amber-600/80 text-amber-300">Model B</span>';
+                        modelSub = '<div class="text-[9px] text-amber-400/80">Aggressive Liquidity</div>';
+                    }
 
                     return `
                         <tr class="hover:bg-slate-800/40 text-xs font-mono transition">
@@ -2337,11 +2464,15 @@
                                 ${setupIdShort}
                             </td>
                             <td class="px-3 py-3">
+                                ${modelBadge}
+                                ${modelSub}
+                            </td>
+                            <td class="px-3 py-3">
                                 <div class="font-bold text-white flex items-center gap-1.5">
                                     <span>${t.symbol}</span>
                                     <span class="px-1.5 py-0.2 rounded text-[10px] border ${sideBg} ${sideColor}">${t.direction}</span>
                                 </div>
-                                <div class="text-[10px] text-slate-500">10.0x Isolated</div>
+                                <div class="text-[10px] text-slate-500">${t.leverage || 10.0}x Isolated</div>
                             </td>
                             <td class="px-3 py-3">
                                 <div class="flex items-center gap-1 ${catColor}">
@@ -2350,16 +2481,16 @@
                                 </div>
                             </td>
                             <td class="px-3 py-3">
-                                <div class="text-white font-semibold">$${Number(t.entry_price).toFixed(2)}</div>
+                                <div class="text-white font-semibold">${fmtP(t.entry_price)}</div>
                                 <div class="text-[10px] text-slate-400">${entryTime}</div>
                             </td>
                             <td class="px-3 py-3">
-                                <div class="font-semibold ${t.exit_price ? 'text-white' : 'text-slate-500'}">${t.exit_price ? '$' + Number(t.exit_price).toFixed(2) : '--'}</div>
+                                <div class="font-semibold ${t.exit_price ? 'text-white' : 'text-slate-500'}">${t.exit_price ? fmtP(t.exit_price) : '--'}</div>
                                 <div class="text-[10px] text-slate-400">${exitTime}</div>
                             </td>
                             <td class="px-3 py-3 text-[11px]">
-                                <div>SL: <span class="text-rose-400">$${Number(t.stop_loss).toFixed(2)}</span></div>
-                                <div>TP: <span class="text-emerald-400">$${Number(t.take_profit).toFixed(2)}</span></div>
+                                <div>SL: <span class="text-rose-400">${fmtP(t.stop_loss)}</span></div>
+                                <div>TP: <span class="text-emerald-400">${fmtP(t.take_profit)}</span></div>
                             </td>
                             <td class="px-3 py-3 text-slate-300">
                                 ${t.duration_display || '--'}

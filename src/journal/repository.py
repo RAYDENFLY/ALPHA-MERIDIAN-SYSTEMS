@@ -255,9 +255,13 @@ class JournalRepository:
         conditions = []
         params: List[Any] = []
 
-        if model_id:
-            conditions.append("model_id = ?")
-            params.append(model_id)
+        if model_id and model_id.strip().upper() != "ALL":
+            m_upper = model_id.strip().upper()
+            if m_upper == "UNKNOWN":
+                conditions.append("(model_id IS NULL OR model_id = '' OR UPPER(model_id) = 'UNKNOWN')")
+            else:
+                conditions.append("UPPER(model_id) = ?")
+                params.append(m_upper)
         if open_only:
             conditions.append("is_open = 1")
         if symbol and symbol.strip():
@@ -334,6 +338,8 @@ class JournalRepository:
                 if exit_ts
                 else None
             )
+            m_val = str(d.get("model_id") or "").strip().upper()
+            d["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B") else ("UNKNOWN" if not m_val else m_val)
             results.append(d)
 
         return results
@@ -365,7 +371,14 @@ class JournalRepository:
         )
         net_pnl = round(sum(float(t.get("pnl_net", 0.0)) for t in closed_trades), 4)
         avg_net_pnl = round((net_pnl / closed_count), 4) if closed_count > 0 else 0.0
-        open_count = sum(1 for t in trades if t.get("is_open", False) or t.get("exit_timestamp_ms") is None)
+        open_trades = [t for t in trades if t.get("is_open", False) or t.get("exit_timestamp_ms") is None]
+        open_count = len(open_trades)
+        open_notional = round(sum(float(t.get("notional_usdt", 0.0)) for t in open_trades), 4)
+        open_margin = round(sum(float(t.get("margin_usdt", 0.0)) for t in open_trades), 4)
+        open_by_model: Dict[str, int] = {}
+        for ot in open_trades:
+            m = str(ot.get("model_id") or "UNKNOWN").upper()
+            open_by_model[m] = open_by_model.get(m, 0) + 1
 
         return {
             "closed_trades_count": closed_count,
@@ -378,6 +391,9 @@ class JournalRepository:
             "net_pnl": net_pnl,
             "avg_net_pnl": avg_net_pnl,
             "open_trades_count": open_count,
+            "open_trades_notional": open_notional,
+            "open_trades_margin": open_margin,
+            "open_trades_by_model": open_by_model,
         }
 
     def get_open_trades(self, model_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -451,9 +467,13 @@ class JournalRepository:
         """Retrieve paper orders with optional symbol, status, and model_id filters."""
         query = "SELECT * FROM paper_orders WHERE 1=1"
         params: List[Any] = []
-        if model_id:
-            query += " AND model_id = ?"
-            params.append(model_id)
+        if model_id and model_id.strip().upper() != "ALL":
+            m_upper = model_id.strip().upper()
+            if m_upper == "UNKNOWN":
+                query += " AND (model_id IS NULL OR model_id = '' OR UPPER(model_id) = 'UNKNOWN')"
+            else:
+                query += " AND UPPER(model_id) = ?"
+                params.append(m_upper)
         if symbol:
             query += " AND symbol = ?"
             params.append(symbol)
@@ -465,7 +485,11 @@ class JournalRepository:
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute(query, params)
-            return [dict(r) for r in cur.fetchall()]
+            rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            m_val = str(r.get("model_id") or "").strip().upper()
+            r["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B") else ("UNKNOWN" if not m_val else m_val)
+        return rows
 
     def save_lifecycle_event(
         self,
@@ -520,9 +544,13 @@ class JournalRepository:
         """Query recorded paper lifecycle transitions in chronological order."""
         conditions = []
         params: List[Any] = []
-        if model_id:
-            conditions.append("model_id = ?")
-            params.append(model_id)
+        if model_id and model_id.strip().upper() != "ALL":
+            m_upper = model_id.strip().upper()
+            if m_upper == "UNKNOWN":
+                conditions.append("(model_id IS NULL OR model_id = '' OR UPPER(model_id) = 'UNKNOWN')")
+            else:
+                conditions.append("UPPER(model_id) = ?")
+                params.append(m_upper)
         if candidate_id:
             conditions.append("candidate_id = ?")
             params.append(candidate_id)
@@ -550,6 +578,8 @@ class JournalRepository:
                 r["metadata"] = json.loads(r.get("metadata_json") or "{}")
             except Exception:
                 r["metadata"] = {}
+            m_val = str(r.get("model_id") or "").strip().upper()
+            r["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B") else ("UNKNOWN" if not m_val else m_val)
         return rows
 
     def compute_forward_validation_cohort(
