@@ -421,13 +421,87 @@ class ModelBRunner:
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=3.0)
 
+    def get_enriched_open_positions(self) -> List[Dict[str, Any]]:
+        """Return open paper positions enriched with live mark prices, UPnL, ROE, and exchange-style fields."""
+        enriched: List[Dict[str, Any]] = []
+        for pos in self.paper_engine.open_positions.values():
+            sym = pos.symbol
+            mark_p = pos.entry_price  # fallback
+            if self.exchange and hasattr(self.exchange, "get_premium_index"):
+                try:
+                    p_index = self.exchange.get_premium_index(sym)
+                    if p_index and float(p_index.get("mark_price", 0.0)) > 0:
+                        mark_p = float(p_index["mark_price"])
+                except Exception as ex_err:
+                    logger.debug(f"ModelBRunner: Failed to fetch live mark price for {sym}: {ex_err}")
+
+            if mark_p == pos.entry_price and self.db:
+                try:
+                    candles = self.db.get_candles(sym, "1h", limit=1)
+                    if candles:
+                        mark_p = candles[-1].close
+                except Exception:
+                    pass
+
+            is_long = (pos.direction.value if hasattr(pos.direction, "value") else str(pos.direction)).upper() == "LONG"
+            if is_long:
+                gross_upnl = (mark_p - pos.entry_price) * pos.quantity
+            else:
+                gross_upnl = (pos.entry_price - mark_p) * pos.quantity
+
+            est_exit_fee = (pos.quantity * mark_p) * 0.0005
+            net_upnl = gross_upnl - pos.entry_fee - est_exit_fee - (pos.funding_paid or 0.0)
+
+            margin = pos.margin_usdt or (pos.notional_usdt / (pos.leverage or 10.0))
+            roe_pct = (net_upnl / margin * 100.0) if margin > 0 else 0.0
+            roi_pct = (net_upnl / pos.notional_usdt * 100.0) if pos.notional_usdt > 0 else 0.0
+
+            entry_iso = (
+                datetime.fromtimestamp(pos.entry_timestamp_ms / 1000.0, tz=timezone.utc).isoformat()
+                if pos.entry_timestamp_ms
+                else None
+            )
+
+            tp_display = f"${pos.take_profit_1:.4f}" if pos.take_profit_1 else (f"${pos.take_profit:.4f}" if pos.take_profit else "None")
+            sl_display = f"${pos.stop_loss:.4f}" if pos.stop_loss else "None"
+
+            p_dict = pos.to_dict()
+            p_dict.update({
+                "side": "LONG" if is_long else "SHORT",
+                "mode": "SIMULATED (10x)",
+                "margin_mode": "SIMULATED_ISOLATED",
+                "margin_mode_display": f"SIMULATED ({int(pos.leverage or 10)}x)",
+                "position_amt": pos.quantity,
+                "notional_usdt": round(pos.notional_usdt, 4),
+                "entry_price": pos.entry_price,
+                "mark_price": mark_p,
+                "allocated_margin_usdt": round(margin, 4),
+                "allocated_margin_label": f"${margin:.2f}",
+                "take_profit_price": pos.take_profit_1 or pos.take_profit,
+                "take_profit_label": tp_display,
+                "stop_loss_price": pos.stop_loss,
+                "stop_loss_label": sl_display,
+                "protection_status": "PROTECTED",
+                "liquidation_price": None,
+                "liquidation_label": "NOT MODELED",
+                "unrealized_pnl_gross": round(gross_upnl, 4),
+                "unrealized_pnl_usdt": round(net_upnl, 4),
+                "unrealized_pnl_net_usdt": round(net_upnl, 4),
+                "roe_pct": round(roe_pct, 2),
+                "roi_pct": round(roi_pct, 2),
+                "entry_time_utc": entry_iso,
+                "entry_fee_paid": round(pos.entry_fee, 4),
+                "estimated_exit_fee": round(est_exit_fee, 4),
+                "is_simulated": True,
+            })
+            enriched.append(p_dict)
+        return enriched
+
     def get_status(self) -> Dict[str, Any]:
         """Aggregate real-time status, risk metrics, and active positions for Model B."""
         risk_summary = self.risk_manager.get_risk_summary()
 
-        open_positions = [
-            pos.to_dict() for pos in self.paper_engine.open_positions.values()
-        ]
+        open_positions = self.get_enriched_open_positions()
         pending_orders = [
             order.to_dict() for order in self.paper_engine.pending_orders.values()
         ]

@@ -4,6 +4,7 @@
         async function loadModelB() {
             await Promise.allSettled([
                 fetchModelBStatus(),
+                fetchModelBPositions(),
                 fetchModelBCoverage(),
                 fetchModelBSetups(),
                 fetchModelBOrders(),
@@ -55,6 +56,17 @@
 
                 const pendEl = document.getElementById('modelBPendingOrdersDisplay');
                 if (pendEl) pendEl.innerText = `${data.risk_limits.pending_orders_count || 0} Pending`;
+
+                const statPend = document.getElementById('modelBStatPendingOrders');
+                if (statPend) statPend.innerText = `${data.risk_limits.pending_orders_count || 0} Pending`;
+
+                const statOpen = document.getElementById('modelBStatOpenPositions');
+                if (statOpen) statOpen.innerText = `${data.risk_limits.open_positions_count || 0} Open`;
+
+                const statClosed = document.getElementById('modelBStatClosedTrades');
+                if (statClosed && data.execution_metrics) {
+                    statClosed.innerText = `${data.execution_metrics.trades_closed || 0} Closed`;
+                }
 
                 const discEl = document.getElementById('modelBDiscoveredCount');
                 if (discEl) discEl.innerText = `${data.discovered_markets_count || 0} Markets Discovered`;
@@ -224,6 +236,216 @@
             }
         }
 
+        let modelBCachedPositions = [];
+
+        async function fetchModelBPositions() {
+            try {
+                const res = await fetch('/api/model_b/positions');
+                if (!res.ok) return;
+                const data = await res.json();
+                const positions = data.positions || [];
+                modelBCachedPositions = positions;
+
+                const countBadge = document.getElementById('modelBPositionsCountBadge');
+                if (countBadge) {
+                    countBadge.innerText = `${positions.length} Open Position${positions.length === 1 ? '' : 's'}`;
+                    countBadge.className = positions.length > 0
+                        ? 'px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono'
+                        : 'px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono';
+                }
+
+                const syncTimeEl = document.getElementById('modelBPositionsSyncTime');
+                if (syncTimeEl) {
+                    syncTimeEl.innerText = `Sync: ${new Date().toLocaleTimeString()}`;
+                }
+
+                const statOpen = document.getElementById('modelBStatOpenPositions');
+                if (statOpen) statOpen.innerText = `${positions.length} Open`;
+
+                const tbody = document.getElementById('modelBPositionsTableBody');
+                if (!tbody) return;
+
+                if (positions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No open Model B paper positions. Filled paper limit orders will appear here with live mark-to-market PnL.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = positions.map(p => {
+                    const isLong = (p.side || '').toUpperCase() === 'LONG';
+                    const sideBadgeClass = isLong
+                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                        : 'bg-rose-950 text-rose-400 border border-rose-800';
+
+                    const baseCoin = (p.symbol || '').replace(/USDT$/i, '');
+                    const upnl = Number(p.unrealized_pnl_net_usdt !== undefined ? p.unrealized_pnl_net_usdt : (p.unrealized_pnl_usdt || 0));
+                    const isUpnlPositive = upnl >= 0;
+                    const upnlClass = isUpnlPositive ? 'text-emerald-400' : 'text-rose-400';
+                    const upnlSign = isUpnlPositive ? '+' : '';
+
+                    // Mode formatting
+                    const modeDisplay = escapeHtml(p.margin_mode_display || 'SIMULATED (10x)');
+
+                    // Take Profit formatting
+                    let tpDisplay = '<span class="text-slate-500 italic text-xs">None</span>';
+                    if (p.take_profit_price) {
+                        tpDisplay = `<span class="text-emerald-400 font-mono font-medium">${escapeHtml(p.take_profit_label || ('$' + formatPrice(p.take_profit_price)))}</span>`;
+                    }
+
+                    // Stop Loss formatting with explicit protection status
+                    let slDisplay = '<span class="text-rose-400/80 italic text-xs font-medium">None</span>';
+                    if (p.stop_loss_price) {
+                        const protBadge = `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-950 text-emerald-300 border border-emerald-800">PROTECTED</span>`;
+                        slDisplay = `<span class="text-rose-400 font-mono font-medium">${escapeHtml(p.stop_loss_label || ('$' + formatPrice(p.stop_loss_price)))}</span>${protBadge}`;
+                    }
+
+                    // Liquidation Price formatting
+                    const liqDisplay = `<span class="px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800 rounded font-semibold">${escapeHtml(p.liquidation_label || 'NOT MODELED')}</span>`;
+
+                    // Allocated Margin formatting
+                    const allocMarginDisplay = p.allocated_margin_label || `$${Number(p.allocated_margin_usdt || 0).toFixed(2)}`;
+
+                    return `
+                        <tr class="hover:bg-slate-800/30 transition font-mono text-xs border-b border-slate-800/60">
+                            <td class="py-3 px-4">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-white text-sm font-sans">${escapeHtml(p.symbol)}</span>
+                                    <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${sideBadgeClass}">${p.side} ${p.leverage}x</span>
+                                    <span class="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">PAPER</span>
+                                    <span class="px-1.5 py-0.5 text-[9px] font-mono font-semibold rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">${modeDisplay}</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="text-slate-200 font-medium">${p.position_amt} ${baseCoin}</div>
+                                <div class="text-[11px] text-slate-400 font-normal">$${Number(p.notional_usdt || 0).toFixed(2)} USDT</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="text-slate-200 font-medium">$${formatPrice(p.entry_price)}</div>
+                                <div class="text-[11px] text-slate-400 font-normal">Mark: $${formatPrice(p.mark_price)}</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="text-slate-200 font-semibold">${allocMarginDisplay}</div>
+                                <div class="text-[10px] text-slate-500">Simulated 10x Margin</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div>${tpDisplay}</div>
+                                <div class="mt-0.5">${slDisplay}</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div>${liqDisplay}</div>
+                            </td>
+                            <td class="py-3 px-4 text-right">
+                                <div class="font-bold ${upnlClass}">${upnlSign}$${upnl.toFixed(4)} USDT</div>
+                                <div class="text-[11px] ${upnlClass} font-semibold">${upnlSign}${Number(p.roe_pct || 0).toFixed(2)}% <span class="text-[10px] text-slate-400 font-normal">ROE</span></div>
+                                <div class="text-[10px] text-slate-500 font-normal">Net fees &amp; funding</div>
+                            </td>
+                            <td class="py-3 px-4 text-right">
+                                <button onclick="inspectModelBPosition('${escapeHtml(p.symbol)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1 ml-auto shadow-sm">
+                                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <span>Details</span>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Model B positions error:", err);
+            }
+        }
+
+        function inspectModelBPosition(symbol) {
+            const pos = modelBCachedPositions.find(p => p.symbol === symbol);
+            if (!pos) {
+                showNotice(`Position details for ${symbol} not found.`, 'info');
+                return;
+            }
+            const modal = document.getElementById('modelBPositionModal');
+            const titleEl = document.getElementById('modelBPosModalTitle');
+            const contentEl = document.getElementById('modelBPositionModalContent');
+
+            if (titleEl) titleEl.innerText = `Model B Paper Position: ${pos.symbol}`;
+
+            const isLong = (pos.side || '').toUpperCase() === 'LONG';
+            const netVal = Number(pos.unrealized_pnl_net_usdt !== undefined ? pos.unrealized_pnl_net_usdt : (pos.unrealized_pnl_usdt || 0));
+            const netClass = netVal >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            const sign = netVal >= 0 ? '+' : '';
+
+            if (contentEl) {
+                contentEl.innerHTML = `
+                    <div class="grid grid-cols-2 gap-3 text-xs font-mono">
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Trade ID</span>
+                            <span class="text-white font-semibold truncate block">${escapeHtml(pos.trade_id || '--')}</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Order ID</span>
+                            <span class="text-amber-400 font-semibold truncate block">${escapeHtml(pos.order_id || '--')}</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Direction & Leverage</span>
+                            <span class="font-bold ${isLong ? 'text-emerald-400' : 'text-rose-400'}">${pos.side} ${pos.leverage}x (${escapeHtml(pos.margin_mode_display || 'SIMULATED')})</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Allocated Margin</span>
+                            <span class="text-white font-semibold">${pos.allocated_margin_label || ('$' + Number(pos.allocated_margin_usdt || 0).toFixed(2))}</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Filled Quantity</span>
+                            <span class="text-white font-semibold">${pos.position_amt} ${(pos.symbol || '').replace(/USDT$/i, '')}</span>
+                            <span class="text-slate-500 block text-[10px]">$${Number(pos.notional_usdt || 0).toFixed(2)} USDT Notional</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Entry / Mark Price</span>
+                            <span class="text-white font-semibold">$${formatPrice(pos.entry_price)}</span>
+                            <span class="text-slate-400 block text-[10px]">Live Mark: $${formatPrice(pos.mark_price)}</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Entry Fee Paid</span>
+                            <span class="text-amber-400 font-semibold">$${Number(pos.entry_fee_paid || 0).toFixed(6)} USDT</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Estimated Exit Fee</span>
+                            <span class="text-amber-400 font-semibold">$${Number(pos.estimated_exit_fee || 0).toFixed(6)} USDT</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Unrealized Net PnL</span>
+                            <span class="font-bold text-sm ${netClass}">${sign}$${netVal.toFixed(4)} USDT</span>
+                            <span class="text-[10px] text-slate-500 block">Deducts fees & funding</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px] uppercase">Simulated ROE & ROI</span>
+                            <span class="font-bold ${netClass}">${sign}${Number(pos.roe_pct || 0).toFixed(2)}% ROE</span>
+                            <span class="text-[10px] text-slate-500 block">${sign}${Number(pos.roi_pct || 0).toFixed(2)}% ROI</span>
+                        </div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1 text-xs font-mono">
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Liquidation Modeling:</span>
+                            <span class="text-slate-400 italic font-semibold">NOT MODELED (Simulated 10x Isolated)</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Stop Loss Protection:</span>
+                            <span class="text-emerald-400 font-semibold">${escapeHtml(pos.stop_loss_label || 'None')} (PROTECTED)</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Take Profit:</span>
+                            <span class="text-emerald-400 font-semibold">${escapeHtml(pos.take_profit_label || 'None')}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Entry Timestamp UTC:</span>
+                            <span class="text-slate-300">${escapeHtml(pos.entry_time_utc || '--')}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeModelBPositionModal() {
+            const modal = document.getElementById('modelBPositionModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
         async function fetchModelBOrders() {
             try {
                 const res = await fetch('/api/model_b/orders?status=PENDING&limit=25');
@@ -294,11 +516,26 @@
                 const wrEl = document.getElementById('modelBWinRate');
                 if (wrEl) wrEl.innerText = `${metrics.win_rate_pct || 0.0}%`;
 
+                const statWr = document.getElementById('modelBStatWinRate');
+                if (statWr) statWr.innerText = `${metrics.win_rate_pct || 0.0}%`;
+
                 const netEl = document.getElementById('modelBNetPnl');
+                const statNet = document.getElementById('modelBStatRealizedPnl');
+                const netVal = Number(metrics.net_pnl || 0.0);
+                const netText = `${netVal >= 0 ? '+$' : '-$'}${Math.abs(netVal).toFixed(2)}`;
+                const netCls = netVal > 0 ? 'text-emerald-400' : (netVal < 0 ? 'text-rose-400' : 'text-white');
                 if (netEl) {
-                    const netVal = Number(metrics.net_pnl || 0.0);
-                    netEl.innerText = `${netVal >= 0 ? '+$' : '-$'}${Math.abs(netVal).toFixed(2)}`;
-                    netEl.className = netVal > 0 ? 'text-emerald-400' : (netVal < 0 ? 'text-rose-400' : 'text-white');
+                    netEl.innerText = netText;
+                    netEl.className = netCls;
+                }
+                if (statNet) {
+                    statNet.innerText = netText;
+                    statNet.className = `text-lg font-bold mt-0.5 ${netCls}`;
+                }
+
+                const statClosed = document.getElementById('modelBStatClosedTrades');
+                if (statClosed) {
+                    statClosed.innerText = `${metrics.closed_trades_count || 0} Closed`;
                 }
 
                 const badge = document.getElementById('modelBJournalMetricsBadge');

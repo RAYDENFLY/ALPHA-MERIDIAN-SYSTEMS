@@ -1731,6 +1731,18 @@ def get_model_b_orders(
         "pending_count": pending_count,
     }
 
+@app.get("/api/model_b/positions")
+def get_model_b_positions():
+    """Retrieve active open simulated paper positions for Model B enriched with live mark prices, UPnL, ROE, and margin."""
+    positions = model_b_runner.get_enriched_open_positions() if model_b_runner else []
+    return {
+        "model_id": "MODEL_B",
+        "positions": positions,
+        "count": len(positions),
+        "is_simulated": True,
+        "mode": "SIMULATED_ISOLATED",
+    }
+
 
 @app.get("/api/model_b/journal")
 def get_model_b_journal(

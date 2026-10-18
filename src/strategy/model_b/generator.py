@@ -101,8 +101,8 @@ class ModelBStrategyGenerator:
                 f"Position notional ${notional:.2f} below exchange minimum ${instrument.min_notional:.2f}."
             )
 
-        # 4. Leverage and margin check
-        leverage = float(self.config.max_leverage)
+        # 4. Leverage and margin check (clamped to max 10.0x per Model B risk policy)
+        leverage = min(max(1.0, float(self.config.max_leverage)), 10.0)
         required_margin = notional / leverage if leverage > 0 else notional
 
         if required_margin > self.config.max_margin_usdt:
