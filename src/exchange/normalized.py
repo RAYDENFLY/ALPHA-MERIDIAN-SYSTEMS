@@ -146,6 +146,8 @@ class NormalizedInstrument:
     volume_24h_usdt: Optional[float] = None
     is_active: bool = True
     discovered_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
+    volume_status: str = "AVAILABLE"
+    eligibility_reason: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -164,6 +166,8 @@ class NormalizedInstrument:
             "mark_price": self.mark_price,
             "last_price": self.last_price,
             "volume_24h_usdt": self.volume_24h_usdt,
+            "volume_status": self.volume_status,
+            "eligibility_reason": self.eligibility_reason,
             "is_active": self.is_active,
             "discovered_at_ms": self.discovered_at_ms,
         }

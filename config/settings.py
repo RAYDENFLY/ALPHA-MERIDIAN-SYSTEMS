@@ -164,9 +164,42 @@ class ModelBConfig(BaseModel):
         default_factory=lambda: ["asterdex", "binance", "hyperliquid"],
         description="Active exchanges for universal perpetual market discovery",
     )
+    # Engine 1: Liquidity Wall Hunter
+    wall_min_persistence_sec: int = Field(default=15, description="Minimum wall persistence duration")
+    wall_depth_ratio_threshold: float = Field(default=3.0, description="Minimum multiple over instrument baseline depth")
+    # Engine 2: New Market Opportunity Scanner
+    new_market_max_age_days: int = Field(default=14, description="Maximum listing age in days to qualify as new market")
+    # Engine 3: News & Catalyst Engine
+    enable_catalyst_engine: bool = Field(default=True, description="Enable news and catalyst intelligence")
+    catalyst_min_confidence: float = Field(default=0.70, description="Minimum catalyst confidence score")
     discord_webhook_url: Optional[str] = Field(
         default=None, description="Optional Discord webhook for Model B notifications"
     )
+
+
+class ModelCConfig(BaseModel):
+    """Configuration and Simulation Parameters for Model C (Pump.fun Rapid-Execution Research).
+    
+    Strictly paper research only. No live Solana wallet or private keys are utilized.
+    """
+    enabled: bool = Field(default=False, description="Enable Model C pump.fun simulation scanner")
+    model_id: str = "MODEL_C"
+    version: str = "0.1.0-spec"
+    initial_equity_usdt: float = Field(default=50.0, gt=0.0, description="Model C paper portfolio equity in USD equivalent")
+    target_trade_risk_usdt: float = Field(default=0.50, gt=0.0, description="Target risk per paper trade")
+    daily_loss_limit_usdt: float = Field(default=2.00, gt=0.0, description="Daily circuit breaker limit")
+    weekly_loss_limit_usdt: float = Field(default=5.00, gt=0.0, description="Weekly circuit breaker limit")
+    max_open_positions: int = Field(default=2, ge=1, le=5, description="Maximum simultaneous open token positions")
+    max_leverage: int = Field(default=1, ge=1, le=1, description="Always 1x spot; NO leverage or margin on spot meme tokens")
+    max_holding_time_minutes: int = Field(default=15, ge=1, le=120, description="Max holding time before mandatory emergency paper exit")
+    simulated_slippage_bps: float = Field(default=250.0, ge=50.0, description="Base simulated slippage in bps (2.5% to 25%+)")
+    simulated_priority_fee_sol: float = Field(default=0.005, description="Simulated Jito/Priority fee per transaction in SOL")
+    min_bonding_curve_pct: float = Field(default=10.0, description="Minimum bonding curve progress threshold")
+    max_bonding_curve_pct: float = Field(default=90.0, description="Maximum bonding curve progress before Raydium migration danger")
+    max_dev_holding_pct: float = Field(default=10.0, description="Maximum allowable developer wallet holding percentage")
+    max_top10_holding_pct: float = Field(default=25.0, description="Maximum allowable top 10 holders concentration percentage")
+    helius_rpc_url: Optional[str] = Field(default=None, description="Optional public/private Solana RPC endpoint for metadata reading")
+    jito_block_engine_url: Optional[str] = Field(default=None, description="Optional Jito block engine endpoint for bundle simulation")
 
 
 class AppConfig(BaseModel):
@@ -188,6 +221,7 @@ class AppConfig(BaseModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     paper: PaperExecutionConfig = Field(default_factory=PaperExecutionConfig)
     model_b: ModelBConfig = Field(default_factory=ModelBConfig)
+    model_c: ModelCConfig = Field(default_factory=ModelCConfig)
     discord_price_alert_webhook_url: Optional[str] = Field(
         default=None,
         description="Optional Discord webhook URL for universal perpetual price alerts notifications",

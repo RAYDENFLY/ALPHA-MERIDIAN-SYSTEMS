@@ -15,6 +15,7 @@ class ModelID(str, Enum):
     """Authoritative identifiers for trading research models."""
     MODEL_A = "MODEL_A"
     MODEL_B = "MODEL_B"
+    MODEL_C = "MODEL_C"
 
     @classmethod
     def from_str(cls, val: Union[str, "ModelID"]) -> "ModelID":
@@ -32,6 +33,7 @@ class ModelStatus(str, Enum):
     """Operational and governance status of a model."""
     FROZEN_VALIDATION = "FROZEN_VALIDATION"  # Model A: immutable strategy, active forward cohort
     RESEARCH_PAPER = "RESEARCH_PAPER"        # Model B: aggressive paper testing and liquidity research
+    DESIGN_SPEC = "DESIGN_SPEC"              # Model C: architecture specification & paper simulator design
     DISABLED = "DISABLED"
 
 
@@ -137,10 +139,10 @@ ModelRegistry.register(
 ModelRegistry.register(
     ModelMetadata(
         model_id=ModelID.MODEL_B,
-        name="Model B — Aggressive Liquidity Research",
+        name="Model B — Aggressive Liquidity & Catalyst",
         version="1.0.0-alpha",
         status=ModelStatus.RESEARCH_PAPER,
-        description="Aggressive multi-exchange perpetual market discovery with L2 order book depth, trade aggressor flow, liquidity sweep-reclaims, and absorption setups.",
+        description="Aggressive multi-exchange perpetual market discovery with three independent opportunity engines: Liquidity Wall Hunter, New Market Opportunity Scanner, and News & Catalyst Engine.",
         universe_type="UNIVERSAL_PERPETUAL",
         timeframe="1h",
         execution_mode="PAPER",
@@ -151,13 +153,41 @@ ModelRegistry.register(
         max_open_positions=3,
         max_leverage=10,
         features=[
-            "Universal Multi-Venue Perpetual Contract Discovery",
-            "L2 Order Book Depth Imbalance (10/25/50/100 bps bands)",
-            "Cumulative Volume Delta (CVD) & Aggressor Flow",
-            "Liquidity Sweep-and-Reclaim Detection",
-            "Resting Depth Absorption Recognition",
-            "Spread-Adjusted Execution Cost Filter",
-            "Independent Model Ledger & Risk Gating",
+            "Universal Multi-Venue Perpetual Contract Discovery (AsterDEX, Binance, Hyperliquid)",
+            "Engine 1: Liquidity Wall Hunter (L2 depth persistence, cancellation/withdrawal tracking, sweep/reclaim)",
+            "Engine 2: New Market Opportunity Scanner (listing age, spread, liquidity feasibility vs risk budget)",
+            "Engine 3: News & Catalyst Engine (structured verification, source URL, publication vs ingestion time, anti-hallucination)",
+            "Cadence Protocol: 1H Candle Context + Sub-Hourly Live Order Book Reactivity",
+            "Cumulative Volume Delta (CVD) & Aggressor Flow Absorption",
+            "Independent Model Ledger & Dedicated $100.00 Paper Portfolio",
+        ],
+    )
+)
+
+ModelRegistry.register(
+    ModelMetadata(
+        model_id=ModelID.MODEL_C,
+        name="Model C — Pump.fun Rapid-Execution Research",
+        version="0.1.0-spec",
+        status=ModelStatus.DESIGN_SPEC,
+        description="Solana-specific rapid token discovery, bonding-curve lifecycle tracking, rug-pull/security screening, and execution-void paper simulation.",
+        universe_type="SOLANA_BONDING_CURVES",
+        timeframe="sub_minute",
+        execution_mode="PAPER",
+        initial_equity_usdt=50.0,
+        target_trade_risk_usdt=0.50,
+        daily_loss_limit_usdt=2.00,
+        weekly_loss_limit_usdt=5.00,
+        max_open_positions=2,
+        max_leverage=1,
+        features=[
+            "Event-Driven Pump.fun Token Discovery & Metadata Ingestion",
+            "Bonding Curve vs Raydium AMM Transition State Machine",
+            "On-Chain Security Screening (Mint/Freeze Auth, Dev Wallet, Top-10 Concentration)",
+            "Simulated Jito MEV Priority Fees & Cluster Latency Modeling",
+            "Execution-Void & High Slippage Simulation (>10-25%)",
+            "Time-Based Emergency Exit & Stop-Loss Void Awareness",
+            "Zero-Leverage Spot Only Paper Ledger Isolation",
         ],
     )
 )

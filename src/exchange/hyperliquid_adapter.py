@@ -116,8 +116,14 @@ class HyperliquidAdapter:
             logger.error(f"Hyperliquid: Failed to discover instruments: {err}")
             return list(self._catalog_cache.values())
 
-    def get_order_book(self, symbol: str) -> Optional[NormalizedOrderBook]:
-        """Fetch Level-2 order book depth from Hyperliquid."""
+    def get_order_book(self, symbol: str, limit: Optional[int] = 50) -> Optional[NormalizedOrderBook]:
+        """Fetch Level-2 order book depth from Hyperliquid.
+        
+        Args:
+            symbol: Target perpetual symbol (e.g. 'BTCUSDT' or 'BTC').
+            limit: Maximum depth levels to return on each side. If None, returns all levels.
+                   If limit <= 0, returns empty bids and asks.
+        """
         # Symbol could be 'BTCUSDT' -> strip USDT to get Hyperliquid coin 'BTC'
         coin = symbol.removesuffix("USDT")
         payload = {"type": "l2Book", "coin": coin}
@@ -148,6 +154,14 @@ class HyperliquidAdapter:
 
             bids.sort(key=lambda x: x.price, reverse=True)
             asks.sort(key=lambda x: x.price, reverse=False)
+
+            if limit is not None:
+                if limit <= 0:
+                    bids = []
+                    asks = []
+                else:
+                    bids = bids[:limit]
+                    asks = asks[:limit]
 
             return NormalizedOrderBook(
                 symbol=symbol,

@@ -5,6 +5,7 @@ Reuses existing AsterDEX infrastructure and operates strictly in READ-ONLY mode.
 """
 
 from typing import Any, Dict, List, Optional
+import math
 import time
 import requests
 from requests.adapters import HTTPAdapter
@@ -67,6 +68,28 @@ class AsterAdapter:
             symbols_data = data.get("symbols", [])
             discovered: Dict[str, NormalizedInstrument] = {}
 
+            # Fetch 24-hour ticker turnover data to populate quote-volume
+            ticker_map: Dict[str, Dict[str, Any]] = {}
+            ticker_url = f"{self.base_url}/fapi/v1/ticker/24hr"
+            try:
+                t_resp = self.session.get(ticker_url, timeout=self.timeout_sec)
+                if t_resp.status_code == 200:
+                    t_data = t_resp.json()
+                    if isinstance(t_data, list):
+                        for item in t_data:
+                            if isinstance(item, dict) and "symbol" in item:
+                                sym_key = str(item["symbol"]).strip().upper()
+                                # Handle duplicate ticker records by prioritizing later closeTime
+                                existing = ticker_map.get(sym_key)
+                                if existing is None or int(item.get("closeTime", 0)) >= int(existing.get("closeTime", 0)):
+                                    ticker_map[sym_key] = item
+                    elif isinstance(t_data, dict) and "symbol" in t_data:
+                        ticker_map[str(t_data["symbol"]).strip().upper()] = t_data
+                else:
+                    logger.warning(f"AsterAdapter: ticker/24hr returned status {t_resp.status_code}")
+            except Exception as t_err:
+                logger.warning(f"AsterAdapter: Failed to fetch ticker/24hr: {t_err}")
+
             for s in symbols_data:
                 if s.get("contractType") and s.get("contractType") != "PERPETUAL":
                     continue
@@ -94,6 +117,38 @@ class AsterAdapter:
                     elif f_type == "MIN_NOTIONAL":
                         min_notional = float(f.get("notional", min_notional))
 
+                # Parse 24h ticker data strictly using quoteVolume (USDT notional, not base asset)
+                vol_24h = None
+                vol_status = "UNAVAILABLE"
+                eligibility_reason = None
+                last_price = None
+
+                ticker_item = ticker_map.get(sym.upper())
+                if ticker_item:
+                    try:
+                        raw_quote_vol = ticker_item.get("quoteVolume")
+                        if raw_quote_vol is not None and str(raw_quote_vol).strip() != "":
+                            vol_val = float(raw_quote_vol)
+                            if vol_val >= 0.0 and math.isfinite(vol_val):
+                                vol_24h = vol_val
+                                vol_status = "AVAILABLE"
+                            else:
+                                vol_status = "MALFORMED"
+                                eligibility_reason = f"Negative or non-finite quoteVolume: {raw_quote_vol}"
+                        else:
+                            vol_status = "MISSING_FIELD"
+                            eligibility_reason = "quoteVolume missing in ticker record"
+
+                        raw_last_px = ticker_item.get("lastPrice")
+                        if raw_last_px is not None:
+                            last_price = float(raw_last_px)
+                    except (ValueError, TypeError) as parse_err:
+                        vol_status = "PARSE_ERROR"
+                        eligibility_reason = f"Failed to parse quoteVolume: {parse_err}"
+                else:
+                    vol_status = "UNMATCHED_TICKER"
+                    eligibility_reason = "No matching 24hr ticker record returned by exchange"
+
                 inst = NormalizedInstrument(
                     symbol=sym,
                     exchange_name="asterdex",
@@ -104,7 +159,11 @@ class AsterAdapter:
                     tick_size=tick_size,
                     min_notional=min_notional,
                     contract_type="PERPETUAL",
+                    last_price=last_price,
+                    volume_24h_usdt=vol_24h,
                     is_active=True,
+                    volume_status=vol_status,
+                    eligibility_reason=eligibility_reason,
                 )
                 discovered[sym] = inst
 

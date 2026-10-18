@@ -5,7 +5,7 @@ Model B setup generation, risk-gated paper execution, and lifecycle monitoring.
 Completely isolated from Model A.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 import threading
 import time
@@ -13,12 +13,15 @@ import time
 from src.core.logger import logger
 from src.core.types import Candle, CandidateStatus, Direction, SetupCandidate
 from src.data.database import DatabaseManager
+from src.catalyst.engine import NewsCatalystEngine
 from src.exchange.base import BaseExchangeAdapter
+from src.exchange.new_market_scanner import NewMarketOpportunityScanner
 from src.exchange.normalized import NormalizedInstrument
 from src.exchange.service import MultiExchangeService
 from src.execution.paper_engine import PaperExecutionEngine
 from src.journal.repository import JournalRepository
 from src.liquidity.collector import LiquidityCollector
+from src.liquidity.wall_hunter import LiquidityWallHunter
 from src.risk.model_b_risk import ModelBRiskManager
 from src.strategy.model_b.generator import ModelBStrategyGenerator
 from config.settings import ModelBConfig, PaperExecutionConfig
@@ -37,6 +40,10 @@ class ModelBRunner:
         exchange_service: Optional[MultiExchangeService] = None,
         risk_manager: Optional[ModelBRiskManager] = None,
         paper_engine: Optional[PaperExecutionEngine] = None,
+        wall_hunter: Optional[LiquidityWallHunter] = None,
+        new_market_scanner: Optional[NewMarketOpportunityScanner] = None,
+        catalyst_engine: Optional[NewsCatalystEngine] = None,
+        generator: Optional[ModelBStrategyGenerator] = None,
     ) -> None:
         self.db = db
         self.journal = journal
@@ -46,10 +53,25 @@ class ModelBRunner:
 
         self.exchange_service = exchange_service or MultiExchangeService()
         self.liquidity_collector = LiquidityCollector(db=self.db, exchange_service=self.exchange_service)
-        self.generator = ModelBStrategyGenerator(
+
+        self.wall_hunter = wall_hunter or LiquidityWallHunter(
+            wall_multiple_threshold=self.config.wall_depth_ratio_threshold,
+            min_persistence_sec=self.config.wall_min_persistence_sec,
+        )
+        self.new_market_scanner = new_market_scanner or NewMarketOpportunityScanner(
+            max_listing_age_days=self.config.new_market_max_age_days,
+            target_risk_usdt=self.config.target_trade_risk_usdt,
+            max_margin_usdt=self.config.max_margin_usdt,
+        )
+        self.catalyst_engine = catalyst_engine or NewsCatalystEngine()
+
+        self.generator = generator or ModelBStrategyGenerator(
             config=self.config,
             exchange_service=self.exchange_service,
             liquidity_collector=self.liquidity_collector,
+            wall_hunter=self.wall_hunter,
+            new_market_scanner=self.new_market_scanner,
+            catalyst_engine=self.catalyst_engine,
         )
         self.risk_manager = risk_manager or ModelBRiskManager(config=self.config)
         self.paper_engine = paper_engine or PaperExecutionEngine(
@@ -65,7 +87,7 @@ class ModelBRunner:
         self._stop_event = threading.Event()
         self._worker_thread: Optional[threading.Thread] = None
 
-        # State tracking
+        # State tracking and engine telemetry
         self.last_scan_utc: Optional[str] = None
         self.last_successful_scan_utc: Optional[str] = None
         self.last_scan_status: str = "NEVER_RUN"
@@ -73,6 +95,7 @@ class ModelBRunner:
         self.last_error: Optional[str] = None
         self.discovered_universe: Dict[str, List[NormalizedInstrument]] = {}
         self.latest_candidates: List[SetupCandidate] = []
+        self.engine_telemetry: Dict[str, Any] = self.generator.engine_telemetry
 
     def discover_universe(self, force_refresh: bool = False) -> Dict[str, List[NormalizedInstrument]]:
         """Fetch instruments across all supported perpetual venues."""
@@ -93,8 +116,10 @@ class ModelBRunner:
         filtered: List[NormalizedInstrument] = []
 
         for inst in instruments:
-            vol = inst.volume_24h_usdt or 0.0
-            if vol >= self.config.min_24h_volume_usdt:
+            # Reject instruments where volume data is missing, malformed, or unmatched
+            if inst.volume_status != "AVAILABLE" or inst.volume_24h_usdt is None:
+                continue
+            if inst.volume_24h_usdt >= self.config.min_24h_volume_usdt:
                 filtered.append(inst)
 
         # Sort descending by 24h volume
@@ -152,16 +177,26 @@ class ModelBRunner:
                         found_candidates.append(candidate)
                         self.journal.save_setup(candidate)
 
-                        # Submit READY candidate to Model B Paper Engine
-                        if candidate.status == CandidateStatus.READY:
-                            self.paper_engine.submit_candidate(candidate, now_ms=current_ms)
+            # Deduplicate candidates by (symbol, direction) keeping highest confidence
+            dedup_candidates: Dict[Tuple[str, Direction], SetupCandidate] = {}
+            for cand in found_candidates:
+                key = (cand.symbol, cand.direction)
+                c_conf = cand.ml_probability or 0.0
+                best_conf = dedup_candidates[key].ml_probability or 0.0 if key in dedup_candidates else -1.0
+                if key not in dedup_candidates or c_conf > best_conf:
+                    dedup_candidates[key] = cand
+
+            # Submit deduplicated READY candidates to Model B Paper Engine
+            for cand in dedup_candidates.values():
+                if cand.status == CandidateStatus.READY:
+                    self.paper_engine.submit_candidate(cand, now_ms=current_ms)
 
             # 4. Evaluate pending orders and open positions against latest candles
             if candles_by_symbol:
                 self.paper_engine.evaluate_pending_orders(candles_by_symbol, now_ms=current_ms)
                 self.paper_engine.evaluate_open_positions(candles_by_symbol, now_ms=current_ms)
 
-            self.latest_candidates = found_candidates
+            self.latest_candidates = list(dedup_candidates.values()) if dedup_candidates else found_candidates
             self.last_successful_scan_utc = datetime.now(timezone.utc).isoformat()
             self.last_scan_status = "SUCCESS"
             self.last_error = None
@@ -239,6 +274,8 @@ class ModelBRunner:
             "scan_count": self.scan_count,
             "last_error": self.last_error,
             "discovered_markets_count": total_discovered,
+            "focus_symbols_count": len(self.get_focus_symbols(max_symbols=25)),
+            "engine_telemetry": self.engine_telemetry,
             "capital": {
                 "initial_equity_usdt": risk_summary["initial_equity_usdt"],
                 "current_equity_usdt": risk_summary["equity_usdt"],
