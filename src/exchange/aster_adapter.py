@@ -12,6 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from src.core.logger import logger
+from src.core.types import Candle
 from src.exchange.normalized import (
     NormalizedInstrument,
     NormalizedOrderBook,
@@ -242,3 +243,115 @@ class AsterAdapter:
         except Exception as err:
             logger.warning(f"AsterAdapter: Failed to fetch trades for {symbol}: {err}")
             return []
+
+    def get_klines(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int = 200,
+        start_time_ms: Optional[int] = None,
+        end_time_ms: Optional[int] = None,
+    ) -> List[Candle]:
+        """Fetch candlestick bars for a symbol and timeframe from AsterDEX."""
+        clean_symbol = symbol.upper().replace(".P", "")
+        url = f"{self.base_url}/fapi/v1/klines"
+        params: Dict[str, Any] = {
+            "symbol": clean_symbol,
+            "interval": timeframe,
+            "limit": min(limit, 1000),
+        }
+        if start_time_ms is not None:
+            params["startTime"] = start_time_ms
+        if end_time_ms is not None:
+            params["endTime"] = end_time_ms
+
+        try:
+            resp = self.session.get(url, params=params, timeout=self.timeout_sec)
+            if resp.status_code != 200:
+                logger.warning(f"AsterAdapter: klines for {symbol} returned status {resp.status_code}")
+                return []
+            raw_klines = resp.json()
+            if not isinstance(raw_klines, list):
+                return []
+            candles: List[Candle] = []
+            for row in raw_klines:
+                try:
+                    candles.append(Candle.from_raw_kline(row, clean_symbol, timeframe))
+                except (ValueError, IndexError):
+                    continue
+            return candles
+        except Exception as err:
+            logger.warning(f"AsterAdapter: Failed to fetch klines for {symbol}: {err}")
+            return []
+
+    def get_open_interest(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Fetch current open interest for a symbol from AsterDEX."""
+        clean_symbol = symbol.upper().replace(".P", "")
+        url = f"{self.base_url}/fapi/v1/openInterest"
+        params = {"symbol": clean_symbol}
+        try:
+            resp = self.session.get(url, params=params, timeout=self.timeout_sec)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if isinstance(data, dict) and "openInterest" in data:
+                return {
+                    "symbol": clean_symbol,
+                    "open_interest": float(data["openInterest"]),
+                    "timestamp_ms": int(data.get("time", int(time.time() * 1000))),
+                }
+            return None
+        except Exception as err:
+            logger.warning(f"AsterAdapter: Failed to fetch open interest for {symbol}: {err}")
+            return None
+
+    def get_premium_index(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Fetch mark price, index price, and funding rate from AsterDEX."""
+        clean_symbol = symbol.upper().replace(".P", "")
+        url = f"{self.base_url}/fapi/v1/premiumIndex"
+        params = {"symbol": clean_symbol}
+        try:
+            resp = self.session.get(url, params=params, timeout=self.timeout_sec)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if isinstance(data, dict):
+                return {
+                    "symbol": clean_symbol,
+                    "mark_price": float(data.get("markPrice", 0.0)),
+                    "index_price": float(data.get("indexPrice", 0.0)),
+                    "last_funding_rate": float(data.get("lastFundingRate", 0.0)),
+                    "interest_rate": float(data.get("interestRate", 0.0)),
+                    "next_funding_time_ms": int(data.get("nextFundingTime", 0)),
+                    "timestamp_ms": int(data.get("time", int(time.time() * 1000))),
+                }
+            return None
+        except Exception as err:
+            logger.warning(f"AsterAdapter: Failed to fetch premium index for {symbol}: {err}")
+            return None
+
+    def get_funding_rates(self, symbol: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Fetch historical funding rate records from AsterDEX."""
+        clean_symbol = symbol.upper().replace(".P", "")
+        url = f"{self.base_url}/fapi/v1/fundingRate"
+        params = {"symbol": clean_symbol, "limit": min(limit, 100)}
+        try:
+            resp = self.session.get(url, params=params, timeout=self.timeout_sec)
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+            if isinstance(data, list):
+                return [
+                    {
+                        "symbol": clean_symbol,
+                        "funding_rate": float(item.get("fundingRate", 0.0)),
+                        "funding_time_ms": int(item.get("fundingTime", 0)),
+                    }
+                    for item in data
+                    if isinstance(item, dict) and "fundingRate" in item
+                ]
+            return []
+        except Exception as err:
+            logger.warning(f"AsterAdapter: Failed to fetch funding rates for {symbol}: {err}")
+            return []
+

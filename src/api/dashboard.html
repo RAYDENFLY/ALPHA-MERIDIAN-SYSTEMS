@@ -156,6 +156,10 @@
                         <svg id="syncLiveSpinIcon" class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                         <span>Sync Live</span>
                     </button>
+                    <button onclick="openPortfolioAnalysisModal()" id="analyzePortfolioBtn" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-sm">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        <span>Analyze All Positions</span>
+                    </button>
                 </div>
             </div>
 
@@ -171,19 +175,24 @@
         </div>
 
         <!-- Tab Navigation -->
-        <div class="flex border-b border-slate-800 space-x-6 text-sm font-medium">
-            <button onclick="switchTab('setups')" id="tabBtn-setups" class="pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold">Candidate Setups</button>
-            <button onclick="switchTab('backtest')" id="tabBtn-backtest" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Historical Backtest</button>
-            <button onclick="switchTab('watchlist')" id="tabBtn-watchlist" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Watchlist & Controls</button>
-            <button onclick="switchTab('journal')" id="tabBtn-journal" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Trading Journal</button>
-            <button onclick="switchTab('alerts')" id="tabBtn-alerts" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+        <div class="flex border-b border-slate-800 space-x-6 text-sm font-medium overflow-x-auto pb-1">
+            <button onclick="switchTab('setups')" id="tabBtn-setups" class="pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold whitespace-nowrap">Candidate Setups</button>
+            <button onclick="switchTab('backtest')" id="tabBtn-backtest" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Historical Backtest</button>
+            <button onclick="switchTab('watchlist')" id="tabBtn-watchlist" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Watchlist & Controls</button>
+            <button onclick="switchTab('journal')" id="tabBtn-journal" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Trading Journal</button>
+            <button onclick="switchTab('alerts')" id="tabBtn-alerts" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap">
                 <span>Price Alerts</span>
                 <span id="alertsActiveBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-900 text-indigo-300 font-bold border border-indigo-700">0</span>
             </button>
-            <button onclick="switchTab('model_b')" id="tabBtn-model_b" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+            <button onclick="switchTab('model_b')" id="tabBtn-model_b" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap">
                 <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
                 <span>Model B (Liquidity Engine)</span>
                 <span id="modelBBadge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-900/60 text-amber-300 font-bold border border-amber-700">RESEARCH</span>
+            </button>
+            <button onclick="switchTab('liquidity_intel')" id="tabBtn-liquidity_intel" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span>Market Liquidity Intelligence</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-950 text-cyan-300 font-bold border border-cyan-800">HEATMAP &amp; WHALES</span>
             </button>
         </div>
 
@@ -1097,6 +1106,315 @@
 
         </div>
 
+        <!-- TAB 7: MARKET LIQUIDITY INTELLIGENCE -->
+        <div id="tab-liquidity_intel" class="hidden space-y-6">
+
+            <!-- Control Bar: Symbol Selector & Refresh -->
+            <div class="card-bg p-4 rounded-xl border border-cyan-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <span class="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <div>
+                        <h2 class="text-base font-bold text-white tracking-wide flex items-center gap-2">
+                            <span>Market Liquidity &amp; Order Flow Intelligence</span>
+                            <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-950 text-cyan-300 border border-cyan-800">PUBLIC TELEMETRY</span>
+                        </h2>
+                        <p class="text-xs text-slate-400">Order book depth, liquidation concentration models, CVD flow proxy, and whale activity.</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1">
+                        <span class="text-xs text-slate-400 font-mono">Pair:</span>
+                        <input id="intelSymbolInput" type="text" value="BTCUSDT" class="bg-transparent text-white text-xs font-mono font-bold w-24 uppercase focus:outline-none" placeholder="BTCUSDT" onkeydown="handleIntelSymbolKeydown(event)">
+                    </div>
+                    <button onclick="loadLiquidityIntel()" id="intelRefreshBtn" class="px-3 py-1 text-xs font-medium rounded bg-cyan-600 hover:bg-cyan-500 text-white transition flex items-center gap-1.5 shadow-sm">
+                        <svg id="intelSpinIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Analyze Symbol</span>
+                    </button>
+                    <!-- Quick Pair Buttons -->
+                    <div class="hidden sm:flex items-center gap-1 border-l border-slate-800 pl-2">
+                        <button onclick="quickSelectIntelSymbol('BTCUSDT')" class="px-2 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300">BTC</button>
+                        <button onclick="quickSelectIntelSymbol('ETHUSDT')" class="px-2 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300">ETH</button>
+                        <button onclick="quickSelectIntelSymbol('SOLUSDT')" class="px-2 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300">SOL</button>
+                        <button onclick="quickSelectIntelSymbol('AGTUSDT')" class="px-2 py-1 text-[11px] font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300">AGT</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 1: Unified Market Posture & Key Structural Levels -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-sm font-bold text-white tracking-wide">Unified Market Posture Indicators</h3>
+                        <span class="text-xs text-slate-400 font-mono" id="intelMarkPriceDisplay">Mark: --</span>
+                    </div>
+                    <span class="text-[11px] text-slate-400 font-mono" id="intelSyncTime">Updated: --</span>
+                </div>
+
+                <!-- Structural Indicators Grid (No fake composite scores) -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 text-center" id="intelIndicatorsGrid">
+                    <div class="card-inner p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[10px] text-slate-500 uppercase font-semibold block">4H Macro Trend</span>
+                        <span id="indMacroTrend" class="text-xs font-bold text-slate-300 mt-1 block">--</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[10px] text-slate-500 uppercase font-semibold block">1H Local Trend</span>
+                        <span id="indLocalTrend" class="text-xs font-bold text-slate-300 mt-1 block">--</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[10px] text-slate-500 uppercase font-semibold block">15M Momentum</span>
+                        <span id="ind15mMomentum" class="text-xs font-bold text-slate-300 mt-1 block">--</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[10px] text-slate-500 uppercase font-semibold block">Order Book Depth</span>
+                        <span id="indOrderBook" class="text-xs font-bold text-slate-300 mt-1 block">--</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[10px] text-slate-500 uppercase font-semibold block">Taker Flow (CVD)</span>
+                        <span id="indTakerFlow" class="text-xs font-bold text-slate-300 mt-1 block">--</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[10px] text-slate-500 uppercase font-semibold block">Liquidation Risk</span>
+                        <span id="indLiqRisk" class="text-xs font-bold text-slate-300 mt-1 block">--</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800/80">
+                        <span class="text-[10px] text-slate-500 uppercase font-semibold block">Whale Flow</span>
+                        <span id="indWhaleFlow" class="text-xs font-bold text-slate-300 mt-1 block">--</span>
+                    </div>
+                </div>
+
+                <!-- Narrative Posture Summary -->
+                <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 space-y-1">
+                    <span class="text-[11px] text-indigo-400 font-semibold uppercase block">Synthesis Posture Assessment:</span>
+                    <p id="intelPostureNarrative" class="font-normal leading-relaxed text-slate-300">Select a pair and click Analyze Symbol to generate unified technical context.</p>
+                </div>
+
+                <!-- Key Structural & Liquidation Levels to Watch -->
+                <div class="space-y-2 pt-2">
+                    <span class="text-xs font-semibold text-slate-400 block uppercase">Key Market Levels &amp; Magnets:</span>
+                    <div id="intelKeyLevelsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs font-mono">
+                        <div class="p-2.5 rounded-lg bg-slate-900/40 border border-slate-800/60 text-slate-500 text-center">No levels loaded yet.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: Long vs Short Liquidation Heatmap -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="p-1.5 rounded-lg bg-rose-950/60 text-rose-400 border border-rose-800/60">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-white tracking-wide">Long vs Short Liquidation Heatmap</h3>
+                            <span class="text-[11px] text-slate-400">Estimated leverage liquidation concentration bands</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="intelLiqRatioBadge" class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">Ratio: --</span>
+                        <span id="intelLiqRiskBadge" class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700">--</span>
+                    </div>
+                </div>
+
+                <!-- Methodology Disclosure Banner -->
+                <div class="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-900/50 text-[11px] text-indigo-300 flex items-start gap-2">
+                    <span class="text-indigo-400 text-sm">&#9432;</span>
+                    <span id="intelHeatmapMethodology">Methodology: Probabilistic estimation modeled from Open Interest, standard leverage distributions (5x to 50x), confirmed swing pivots, and funding rate skew. Exchange APIs do not provide private trader liquidation records.</span>
+                </div>
+
+                <!-- Heatmap Metrics Row -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                    <div class="card-inner p-3 rounded-lg border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Open Interest</span>
+                        <span id="intelOiDisplay" class="text-white font-bold text-sm">--</span>
+                        <span id="intelOiContracts" class="text-slate-400 text-[10px] block">-- contracts</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-lg border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Funding Rate (8h)</span>
+                        <span id="intelFundingDisplay" class="text-white font-bold text-sm">--</span>
+                        <span id="intelFundingAnnual" class="text-slate-400 text-[10px] block">-- % annualized</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-lg border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Est. Long Liq Pool</span>
+                        <span id="intelLongLiqPool" class="text-emerald-400 font-bold text-sm">--</span>
+                        <span id="intelNearestLongLiq" class="text-slate-400 text-[10px] block">Nearest: --</span>
+                    </div>
+                    <div class="card-inner p-3 rounded-lg border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Est. Short Liq Pool</span>
+                        <span id="intelShortLiqPool" class="text-rose-400 font-bold text-sm">--</span>
+                        <span id="intelNearestShortLiq" class="text-slate-400 text-[10px] block">Nearest: --</span>
+                    </div>
+                </div>
+
+                <!-- Visual Heatmap Bars Container -->
+                <div class="space-y-3 pt-2">
+                    <!-- Short Liquidation Clusters (Overhead) -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between text-xs text-rose-400 font-semibold px-1">
+                            <span class="flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                                <span>Short Liquidation Concentration (Above Mark Price)</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 font-normal">Triggers Short Squeeze</span>
+                        </div>
+                        <div id="intelShortClustersContainer" class="space-y-1 font-mono text-xs">
+                            <div class="text-slate-500 text-center py-2">No short clusters loaded.</div>
+                        </div>
+                    </div>
+
+                    <!-- Mark Price Indicator Divider -->
+                    <div class="relative py-2 flex items-center justify-center">
+                        <div class="absolute inset-0 flex items-center"><div class="w-full border-t-2 border-dashed border-indigo-500/60"></div></div>
+                        <span id="intelMarkPriceBadge" class="relative px-3 py-1 rounded-full text-xs font-bold bg-indigo-900 text-indigo-200 border border-indigo-700 shadow-md font-mono">
+                            CURRENT MARK PRICE: --
+                        </span>
+                    </div>
+
+                    <!-- Long Liquidation Clusters (Below) -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between text-xs text-emerald-400 font-semibold px-1">
+                            <span class="flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span>Long Liquidation Concentration (Below Mark Price)</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 font-normal">Triggers Long Cascade</span>
+                        </div>
+                        <div id="intelLongClustersContainer" class="space-y-1 font-mono text-xs">
+                            <div class="text-slate-500 text-center py-2">No long clusters loaded.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: Whale & Large-Order Activity Detector -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="p-1.5 rounded-lg bg-amber-950/60 text-amber-400 border border-amber-800/60">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-white tracking-wide">Whale &amp; Large-Order Activity Detector</h3>
+                            <span class="text-[11px] text-slate-400">Adaptive depth wall tracking, aggressive prints, spoofing, and absorption</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+                        <span id="intelWhaleBiasBadge" class="px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-300 border border-slate-700">Bias: --</span>
+                        <span id="intelActiveWallsBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">0 Active Walls</span>
+                        <span id="intelSpoofsBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">0 Spoofs</span>
+                    </div>
+                </div>
+
+                <!-- Event Filters -->
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="text-slate-400 text-[11px]">Filter Type:</span>
+                    <button onclick="setWhaleFilter('ALL')" id="whaleFilt-ALL" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium">All Events</button>
+                    <button onclick="setWhaleFilter('WALLS')" id="whaleFilt-WALLS" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium">Resting Walls</button>
+                    <button onclick="setWhaleFilter('TRADES')" id="whaleFilt-TRADES" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium">Aggressive Trades</button>
+                    <button onclick="setWhaleFilter('SPOOFS')" id="whaleFilt-SPOOFS" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium">Spoof Cancellations</button>
+                    <button onclick="setWhaleFilter('ABSORPTION')" id="whaleFilt-ABSORPTION" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium">Absorption / OI</button>
+                </div>
+
+                <!-- Whale Activity Stream Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs font-mono">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider font-semibold">
+                                <th class="py-2.5 px-3">Timestamp</th>
+                                <th class="py-2.5 px-3">Event Type</th>
+                                <th class="py-2.5 px-3">Side</th>
+                                <th class="py-2.5 px-3">Price &amp; Distance</th>
+                                <th class="py-2.5 px-3">Size &amp; Notional</th>
+                                <th class="py-2.5 px-3">Baseline Multiple</th>
+                                <th class="py-2.5 px-3">Details &amp; Tags</th>
+                            </tr>
+                        </thead>
+                        <tbody id="intelWhaleEventsTableBody" class="divide-y divide-slate-800/60">
+                            <tr><td colspan="7" class="py-6 text-center text-slate-500">No whale activity recorded yet for this symbol.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 1: Live Position Entry Intelligence & Risk Audit Modal          -->
+    <!-- ===================================================================== -->
+    <div id="positionAnalysisModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+        <div class="card-bg border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5 my-auto">
+            
+            <!-- Modal Header -->
+            <div class="flex items-start justify-between border-b border-slate-800 pb-4">
+                <div class="space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="text-lg font-bold text-white tracking-wide" id="modalPosTitle">Position Technical Analysis</h3>
+                        <span id="modalPosSideBadge" class="px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300 font-mono">LONG 10x</span>
+                        <span id="modalPosMarginBadge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">ISOLATED</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Multi-timeframe structural audit, thesis validation, all-in risk, and actionable conditional triggers.</p>
+                </div>
+                <button onclick="closePositionAnalysisModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Modal Content (Dynamically injected) -->
+            <div id="positionAnalysisModalContent" class="space-y-5">
+                <div class="py-12 text-center text-slate-500 font-mono text-sm">Loading position intelligence...</div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-between border-t border-slate-800 pt-4">
+                <button onclick="refreshActivePositionAnalysis()" class="px-3 py-1.5 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    <span>Refresh Analysis</span>
+                </button>
+                <button onclick="closePositionAnalysisModal()" class="px-4 py-1.5 text-xs font-semibold rounded bg-slate-700 hover:bg-slate-600 text-white transition">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 2: Portfolio Exposure & Directional Risk Audit Modal           -->
+    <!-- ===================================================================== -->
+    <div id="portfolioAnalysisModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+        <div class="card-bg border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5 my-auto">
+            
+            <!-- Modal Header -->
+            <div class="flex items-start justify-between border-b border-slate-800 pb-4">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-lg font-bold text-white tracking-wide">Live AsterDEX Portfolio Risk Audit</h3>
+                        <span id="modalPortHealthBadge" class="px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300 font-mono">ANALYZING...</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Aggregate notional, net directional exposure, margin utilization, and risk at stop loss.</p>
+                </div>
+                <button onclick="closePortfolioAnalysisModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Portfolio Modal Content -->
+            <div id="portfolioAnalysisModalContent" class="space-y-5">
+                <div class="py-12 text-center text-slate-500 font-mono text-sm">Computing portfolio risk metrics...</div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-between border-t border-slate-800 pt-4">
+                <button onclick="openPortfolioAnalysisModal()" class="px-3 py-1.5 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    <span>Refresh Portfolio Audit</span>
+                </button>
+                <button onclick="closePortfolioAnalysisModal()" class="px-4 py-1.5 text-xs font-semibold rounded bg-slate-700 hover:bg-slate-600 text-white transition">
+                    Close
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Toast Notification Container for Price Alerts -->
@@ -1345,6 +1663,12 @@
                             <div class="text-[11px] ${upnlClass} font-semibold">${upnlSign}${Number(p.roe_pct || 0).toFixed(2)}% <span class="text-[10px] text-slate-400 font-normal">(ROE vs Margin)</span></div>
                             <div class="text-[10px] text-slate-500 font-normal">${upnlSign}${Number(p.roi_pct || 0).toFixed(2)}% (ROI vs Notional)</div>
                         </td>
+                        <td class="py-3 px-3 text-right">
+                            <button onclick="analyzePositionEntry('${escapeHtml(p.symbol)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600/90 hover:bg-indigo-500 text-white transition flex items-center gap-1 ml-auto shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                                <span>Analyze Entry</span>
+                            </button>
+                        </td>
                     </tr>
                 `;
 
@@ -1397,6 +1721,14 @@
                             <span>Denominator: ${escapeHtml(p.denominator_label || 'Allocated Margin')}</span>
                             <span>ROI: ${upnlSign}${Number(p.roi_pct || 0).toFixed(2)}% (on Notional)</span>
                         </div>
+
+                        <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                            <span class="text-[11px] text-slate-400 font-medium">Position Intelligence</span>
+                            <button onclick="analyzePositionEntry('${escapeHtml(p.symbol)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 shadow-sm">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                                <span>Analyze Entry</span>
+                            </button>
+                        </div>
                     </div>
                 `;
             });
@@ -1414,6 +1746,7 @@
                                 <th class="py-2 px-3">TP / SL Targets</th>
                                 <th class="py-2 px-3">Liquidation</th>
                                 <th class="py-2 px-3 text-right">Unrealized PnL</th>
+                                <th class="py-2 px-3 text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2615,22 +2948,23 @@
         }
 
         function switchTab(tabId) {
-            ['setups', 'backtest', 'watchlist', 'journal', 'alerts', 'model_b'].forEach(t => {
+            ['setups', 'backtest', 'watchlist', 'journal', 'alerts', 'model_b', 'liquidity_intel'].forEach(t => {
                 const el = document.getElementById(`tab-${t}`);
                 if (el) el.classList.add('hidden');
                 const btn = document.getElementById(`tabBtn-${t}`);
-                if (btn) btn.className = 'pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2';
+                if (btn) btn.className = 'pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap';
             });
             const activeTab = document.getElementById(`tab-${tabId}`);
             if (activeTab) activeTab.classList.remove('hidden');
             const activeBtn = document.getElementById(`tabBtn-${tabId}`);
-            if (activeBtn) activeBtn.className = 'pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold flex items-center gap-2';
+            if (activeBtn) activeBtn.className = 'pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold flex items-center gap-2 whitespace-nowrap';
 
             if (tabId === 'watchlist') loadWatchlist();
             if (tabId === 'journal') loadJournal();
             if (tabId === 'backtest') loadBacktest();
             if (tabId === 'alerts') loadAlerts();
             if (tabId === 'model_b') loadModelB();
+            if (tabId === 'liquidity_intel') loadLiquidityIntel();
         }
 
         // =========================================================================
@@ -3734,6 +4068,722 @@
                 loadModelB();
             }
         }, 10000);
+
+        // =========================================================================
+        // ASTERDEX POSITION INTELLIGENCE & LIQUIDITY JAVASCRIPT
+        // =========================================================================
+        let currentAnalyzedSymbol = null;
+        let cachedWhaleEvents = [];
+        let currentWhaleFilter = 'ALL';
+
+        // -------------------------------------------------------------------------
+        // Single Position Intelligence & Entry Audit Modal
+        // -------------------------------------------------------------------------
+        async function analyzePositionEntry(symbol) {
+            currentAnalyzedSymbol = symbol;
+            const modal = document.getElementById('positionAnalysisModal');
+            const content = document.getElementById('positionAnalysisModalContent');
+            const titleEl = document.getElementById('modalPosTitle');
+            const sideEl = document.getElementById('modalPosSideBadge');
+            const marginEl = document.getElementById('modalPosMarginBadge');
+
+            if (!modal || !content) return;
+            modal.classList.remove('hidden');
+            content.innerHTML = `
+                <div class="py-16 text-center space-y-3">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                    <div class="text-sm font-mono text-slate-300">Auditing 4H/1H/15M structure &amp; risk for ${escapeHtml(symbol)}...</div>
+                    <div class="text-xs text-slate-500">Checking BOS/CHoCH, unmitigated order blocks, fee-adjusted SL, and liquidation distance.</div>
+                </div>
+            `;
+
+            try {
+                const res = await fetch('/api/intelligence/analyze_position', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: symbol }),
+                });
+
+                if (!res.ok) {
+                    throw new Error(`API responded with status ${res.status}`);
+                }
+
+                const data = await res.json();
+                renderPositionAnalysis(data);
+            } catch (err) {
+                content.innerHTML = `
+                    <div class="p-6 text-center rounded-xl bg-red-950/40 border border-red-800 text-rose-300 space-y-2">
+                        <div class="font-bold text-sm">Failed to generate position analysis</div>
+                        <div class="text-xs font-mono text-slate-400">${escapeHtml(err.message)}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function refreshActivePositionAnalysis() {
+            if (currentAnalyzedSymbol) {
+                analyzePositionEntry(currentAnalyzedSymbol);
+            }
+        }
+
+        function closePositionAnalysisModal() {
+            const modal = document.getElementById('positionAnalysisModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function renderPositionAnalysis(data) {
+            const content = document.getElementById('positionAnalysisModalContent');
+            const titleEl = document.getElementById('modalPosTitle');
+            const sideEl = document.getElementById('modalPosSideBadge');
+            const marginEl = document.getElementById('modalPosMarginBadge');
+            if (!content) return;
+
+            const isLong = data.side === 'LONG';
+            const sideBadgeClass = isLong ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800';
+            
+            if (titleEl) titleEl.innerText = `${data.symbol} Position Entry Audit`;
+            if (sideEl) {
+                sideEl.className = `px-2 py-0.5 rounded text-xs font-bold font-mono border ${sideBadgeClass}`;
+                sideEl.innerText = `${data.side}`;
+            }
+            if (marginEl) {
+                marginEl.innerText = data.risk.margin_mode || 'ISOLATED';
+            }
+
+            // Thesis Status Badge
+            let thesisBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+            if (data.thesis_status === 'VALID') thesisBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-700';
+            else if (data.thesis_status === 'WEAKENING') thesisBadgeClass = 'bg-amber-950 text-amber-300 border-amber-700';
+            else if (data.thesis_status === 'INVALIDATED') thesisBadgeClass = 'bg-rose-950 text-rose-300 border-rose-700';
+
+            // Action Badge
+            let actionBadgeClass = 'bg-indigo-950 text-indigo-300 border-indigo-700';
+            if (data.action === 'HOLD') actionBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-700';
+            else if (data.action === 'REDUCE') actionBadgeClass = 'bg-amber-950 text-amber-300 border-amber-700';
+            else if (data.action === 'CLOSE') actionBadgeClass = 'bg-rose-950 text-rose-300 border-rose-700';
+            else if (data.action === 'ADJUST') actionBadgeClass = 'bg-cyan-950 text-cyan-300 border-cyan-700';
+
+            // Liquidation Threat Badge
+            let liqBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+            if (data.risk.liquidation_threat === 'SAFE') liqBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+            else if (data.risk.liquidation_threat === 'MODERATE') liqBadgeClass = 'bg-yellow-950 text-yellow-300 border-yellow-800';
+            else if (data.risk.liquidation_threat === 'ELEVATED') liqBadgeClass = 'bg-amber-950 text-amber-300 border-amber-800';
+            else if (data.risk.liquidation_threat === 'CRITICAL') liqBadgeClass = 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse';
+
+            const upnl = Number(data.unrealized_pnl_usdt || 0);
+            const upnlClass = upnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            const upnlSign = upnl >= 0 ? '+' : '';
+
+            // Format Structural Evidence List
+            const evidenceHtml = (data.structural_evidence || []).map(e => `
+                <li class="flex items-start gap-2 text-xs text-slate-300">
+                    <span class="text-indigo-400 mt-0.5">&bull;</span>
+                    <span>${escapeHtml(e)}</span>
+                </li>
+            `).join('') || '<li class="text-xs text-slate-500 italic">No structural anomalies detected.</li>';
+
+            // Format Conditional Triggers
+            const triggersHtml = (data.conditional_triggers || []).map(t => `
+                <li class="flex items-start gap-2 text-xs text-slate-200 bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                    <span class="text-cyan-400 font-bold font-mono">&#10148;</span>
+                    <span>${escapeHtml(t)}</span>
+                </li>
+            `).join('') || '<div class="text-xs text-slate-500">Maintain standard parameters.</div>';
+
+            // Format Invalidation Conditions
+            const invalidationsHtml = (data.invalidation_conditions || []).map(inv => `
+                <li class="flex items-start gap-2 text-xs text-rose-200 bg-rose-950/30 p-2 rounded-lg border border-rose-900/40">
+                    <span class="text-rose-400 font-bold">&#9888;</span>
+                    <span>${escapeHtml(inv)}</span>
+                </li>
+            `).join('') || '<div class="text-xs text-slate-500">None specified.</div>';
+
+            content.innerHTML = `
+                <!-- Top Summary Metrics Cards -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Entry &amp; Mark</span>
+                        <div class="text-white font-bold text-sm">$${formatPrice(data.entry_price)}</div>
+                        <div class="text-slate-400 text-[11px]">Mark: $${formatPrice(data.mark_price)}</div>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Position Size &amp; Notional</span>
+                        <div class="text-white font-bold text-sm">${data.position_amt}</div>
+                        <div class="text-slate-400 text-[11px]">$${Number(data.risk.notional_usdt || 0).toFixed(2)} USDT</div>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Allocated Margin</span>
+                        <div class="text-white font-bold text-sm">$${Number(data.risk.allocated_margin_usdt || 0).toFixed(2)}</div>
+                        <div class="text-slate-400 text-[11px]">${data.risk.margin_mode}</div>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Unrealized PnL</span>
+                        <div class="font-bold text-sm ${upnlClass}">${upnlSign}$${upnl.toFixed(4)}</div>
+                        <div class="text-[11px] ${upnlClass} font-semibold">${upnlSign}${Number(data.roe_pct || 0).toFixed(2)}% ROE</div>
+                    </div>
+                </div>
+
+                <!-- Thesis Audit & Recommendation Section -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Thesis Audit Card -->
+                    <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                            <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Position Thesis Audit</span>
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border font-mono ${thesisBadgeClass}">${data.thesis_status}</span>
+                        </div>
+                        <p class="text-xs font-medium text-slate-200 leading-relaxed">${escapeHtml(data.thesis_summary)}</p>
+                        <div class="space-y-1.5 pt-1">
+                            <span class="text-[10px] text-slate-500 font-semibold uppercase block">Structural Evidence:</span>
+                            <ul class="space-y-1.5">${evidenceHtml}</ul>
+                        </div>
+                    </div>
+
+                    <!-- Action Recommendation Card -->
+                    <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                            <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Action Recommendation</span>
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border font-mono ${actionBadgeClass}">${data.action}</span>
+                        </div>
+                        <p class="text-xs font-medium text-slate-200 leading-relaxed">${escapeHtml(data.action_summary)}</p>
+                        <div class="space-y-2 pt-1">
+                            <span class="text-[10px] text-slate-500 font-semibold uppercase block">Conditional Triggers:</span>
+                            <ul class="space-y-1.5">${triggersHtml}</ul>
+                        </div>
+                        <div class="space-y-1 pt-1">
+                            <span class="text-[10px] text-rose-400 font-semibold uppercase block">Invalidation Criteria:</span>
+                            <ul class="space-y-1">${invalidationsHtml}</ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Risk & Protection Analysis Details -->
+                <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                        <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Risk &amp; Protection Breakdown</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${data.risk.protection_status === 'FULLY_PROTECTED' ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-amber-950 text-amber-300 border-amber-800'}">
+                            ${data.risk.protection_status}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                        <!-- Stop Loss & All-In Fee Loss -->
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1.5">
+                            <span class="text-slate-400 block text-[11px] font-semibold">STOP LOSS &amp; ALL-IN LOSS</span>
+                            <div class="text-slate-200">${data.risk.stop_loss_price ? '$' + formatPrice(data.risk.stop_loss_price) : '<span class="text-rose-400 italic">No Stop Loss set</span>'}</div>
+                            ${data.risk.has_stop_loss ? `
+                                <div class="text-slate-400 text-[11px]">Distance: $${Number(data.risk.sl_distance_usdt).toFixed(2)} (${data.risk.sl_distance_pct}%)</div>
+                                <div class="text-rose-400 font-bold pt-1 border-t border-slate-800">All-In Loss: -$${Number(data.risk.all_in_loss_at_sl_usdt).toFixed(2)} USDT</div>
+                                <div class="text-slate-500 text-[10px]">Gross: -$${Number(data.risk.gross_loss_at_sl_usdt).toFixed(2)} | Fees: $${data.risk.est_taker_fees_usdt} | Slip: $${data.risk.est_slippage_usdt}</div>
+                                ${data.risk.loss_equity_pct !== null ? `<div class="text-amber-400 text-[10px]">Equity Risk: ${data.risk.loss_equity_pct}% of total equity</div>` : ''}
+                            ` : '<div class="text-rose-400 text-[11px] font-semibold pt-1">Unprotected position: exposed to full liquidation.</div>'}
+                        </div>
+
+                        <!-- Take Profit & R:R -->
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1.5">
+                            <span class="text-slate-400 block text-[11px] font-semibold">TAKE PROFIT &amp; TARGETS</span>
+                            <div class="text-slate-200">${data.risk.take_profit_price ? '$' + formatPrice(data.risk.take_profit_price) : '<span class="text-slate-500 italic">No TP configured</span>'}</div>
+                            ${data.risk.has_take_profit ? `
+                                <div class="text-slate-400 text-[11px]">Distance: $${Number(data.risk.tp_distance_usdt).toFixed(2)} (${data.risk.tp_distance_pct}%)</div>
+                                <div class="text-emerald-400 font-bold pt-1 border-t border-slate-800">Net Profit: +$${Number(data.risk.net_profit_at_tp_usdt).toFixed(2)} USDT</div>
+                                ${data.risk.risk_reward_ratio !== null ? `<div class="text-indigo-400 text-[11px] font-bold">Risk-Reward Ratio: 1 : ${data.risk.risk_reward_ratio}</div>` : ''}
+                            ` : '<div class="text-slate-500 text-[11px] pt-1">Target exit level not set on exchange.</div>'}
+                        </div>
+
+                        <!-- Liquidation Distance & Threat Level -->
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-slate-400 text-[11px] font-semibold">LIQUIDATION PROXIMITY</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] font-bold border ${liqBadgeClass}">${data.risk.liquidation_threat}</span>
+                            </div>
+                            <div class="text-slate-200">${data.risk.liquidation_price ? '$' + formatPrice(data.risk.liquidation_price) : '<span class="text-slate-500 italic">Unavailable</span>'}</div>
+                            ${data.risk.has_liquidation_price ? `
+                                <div class="text-slate-400 text-[11px]">Distance: $${Number(data.risk.liquidation_distance_usdt).toFixed(2)} (${data.risk.liquidation_distance_pct}%)</div>
+                                <div class="text-[10px] text-slate-400 pt-1 border-t border-slate-800">${escapeHtml(data.risk.margin_mode_assessment)}</div>
+                            ` : '<div class="text-slate-500 text-[11px] pt-1">Exchange reported 0 or no liquidation.</div>'}
+                        </div>
+                    </div>
+
+                    ${(data.risk.protection_notes || []).length > 0 ? `
+                        <div class="p-2.5 rounded-lg bg-amber-950/40 border border-amber-900/50 text-[11px] text-amber-300 space-y-1">
+                            ${data.risk.protection_notes.map(n => `<div>&bull; ${escapeHtml(n)}</div>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- Multi-Timeframe Structure Section -->
+                <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wide block">Multi-Timeframe Structural Evidence</span>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                        <!-- 4H Primary -->
+                        <div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-indigo-400">4H PRIMARY</span>
+                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${data.timeframe_4h.trend === 'BULLISH' ? 'text-emerald-400 bg-emerald-950/60' : (data.timeframe_4h.trend === 'BEARISH' ? 'text-rose-400 bg-rose-950/60' : 'text-slate-400 bg-slate-800')}">${data.timeframe_4h.trend}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-300">Swing High: ${data.timeframe_4h.last_swing_high ? '$' + formatPrice(data.timeframe_4h.last_swing_high) : '--'}</div>
+                            <div class="text-[11px] text-slate-300">Swing Low: ${data.timeframe_4h.last_swing_low ? '$' + formatPrice(data.timeframe_4h.last_swing_low) : '--'}</div>
+                            <div class="text-[10px] text-slate-400">${data.timeframe_4h.bos_count} BOS | ${data.timeframe_4h.choch_count} CHoCH</div>
+                        </div>
+
+                        <!-- 1H Local -->
+                        <div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-indigo-400">1H LOCAL</span>
+                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${data.timeframe_1h.trend === 'BULLISH' ? 'text-emerald-400 bg-emerald-950/60' : (data.timeframe_1h.trend === 'BEARISH' ? 'text-rose-400 bg-rose-950/60' : 'text-slate-400 bg-slate-800')}">${data.timeframe_1h.trend}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-300">Swing High: ${data.timeframe_1h.last_swing_high ? '$' + formatPrice(data.timeframe_1h.last_swing_high) : '--'}</div>
+                            <div class="text-[11px] text-slate-300">Swing Low: ${data.timeframe_1h.last_swing_low ? '$' + formatPrice(data.timeframe_1h.last_swing_low) : '--'}</div>
+                            <div class="text-[10px] text-slate-400">${data.timeframe_1h.bos_count} BOS | ${data.timeframe_1h.choch_count} CHoCH</div>
+                        </div>
+
+                        <!-- 15M Execution -->
+                        <div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-indigo-400">15M MOMENTUM</span>
+                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${data.timeframe_15m.trend === 'BULLISH' ? 'text-emerald-400 bg-emerald-950/60' : (data.timeframe_15m.trend === 'BEARISH' ? 'text-rose-400 bg-rose-950/60' : 'text-slate-400 bg-slate-800')}">${data.timeframe_15m.trend}</span>
+                            </div>
+                            <div class="text-[11px] text-slate-300">Swing High: ${data.timeframe_15m.last_swing_high ? '$' + formatPrice(data.timeframe_15m.last_swing_high) : '--'}</div>
+                            <div class="text-[11px] text-slate-300">Swing Low: ${data.timeframe_15m.last_swing_low ? '$' + formatPrice(data.timeframe_15m.last_swing_low) : '--'}</div>
+                            <div class="text-[10px] text-slate-400">${data.timeframe_15m.bos_count} BOS | ${data.timeframe_15m.choch_count} CHoCH</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // -------------------------------------------------------------------------
+        // Portfolio-Level Exposure & Risk Audit Modal
+        // -------------------------------------------------------------------------
+        async function openPortfolioAnalysisModal() {
+            const modal = document.getElementById('portfolioAnalysisModal');
+            const content = document.getElementById('portfolioAnalysisModalContent');
+            const healthBadge = document.getElementById('modalPortHealthBadge');
+
+            if (!modal || !content) return;
+            modal.classList.remove('hidden');
+            if (healthBadge) {
+                healthBadge.innerText = 'ANALYZING...';
+                healthBadge.className = 'px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300 font-mono';
+            }
+
+            content.innerHTML = `
+                <div class="py-16 text-center space-y-3">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                    <div class="text-sm font-mono text-slate-300">Synthesizing live AsterDEX portfolio exposure &amp; directional risk...</div>
+                </div>
+            `;
+
+            try {
+                const res = await fetch('/api/intelligence/analyze_portfolio');
+                if (!res.ok) throw new Error(`API returned status ${res.status}`);
+                const data = await res.json();
+                renderPortfolioAnalysis(data);
+            } catch (err) {
+                content.innerHTML = `
+                    <div class="p-6 text-center rounded-xl bg-red-950/40 border border-red-800 text-rose-300 space-y-2">
+                        <div class="font-bold text-sm">Failed to generate portfolio risk analysis</div>
+                        <div class="text-xs font-mono text-slate-400">${escapeHtml(err.message)}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function closePortfolioAnalysisModal() {
+            const modal = document.getElementById('portfolioAnalysisModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function renderPortfolioAnalysis(data) {
+            const content = document.getElementById('portfolioAnalysisModalContent');
+            const healthBadge = document.getElementById('modalPortHealthBadge');
+            if (!content) return;
+
+            let healthClass = 'bg-slate-800 text-slate-300 border border-slate-700';
+            if (data.portfolio_health_status === 'HEALTHY') healthClass = 'bg-emerald-950 text-emerald-300 border border-emerald-800';
+            else if (data.portfolio_health_status === 'MODERATE_RISK') healthClass = 'bg-yellow-950 text-yellow-300 border border-yellow-800';
+            else if (data.portfolio_health_status === 'ELEVATED_RISK') healthClass = 'bg-amber-950 text-amber-300 border border-amber-800';
+            else if (data.portfolio_health_status === 'CRITICAL_ACTION_REQUIRED') healthClass = 'bg-rose-950 text-rose-300 border border-rose-800 animate-pulse';
+
+            if (healthBadge) {
+                healthBadge.className = `px-2 py-0.5 rounded text-xs font-bold font-mono ${healthClass}`;
+                healthBadge.innerText = data.portfolio_health_status;
+            }
+
+            // Concentration & Correlation Warnings
+            const allWarnings = [...(data.concentration_warnings || []), ...(data.correlation_warnings || [])];
+            const warningsHtml = allWarnings.length > 0 ? `
+                <div class="p-3 rounded-xl bg-amber-950/50 border border-amber-800/80 text-xs text-amber-300 space-y-1">
+                    <span class="font-bold block uppercase text-[10px] text-amber-400">&#9888; Portfolio Risk Alerts:</span>
+                    ${allWarnings.map(w => `<div>&bull; ${escapeHtml(w)}</div>`).join('')}
+                </div>
+            ` : '';
+
+            // Table of positions
+            const positionsRows = (data.positions_analyses || []).map(p => {
+                const isLong = p.side === 'LONG';
+                const sideClass = isLong ? 'text-emerald-400 bg-emerald-950/60' : 'text-rose-400 bg-rose-950/60';
+                const upnl = Number(p.unrealized_pnl_usdt || 0);
+                const upnlClass = upnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
+                const upnlSign = upnl >= 0 ? '+' : '';
+
+                return `
+                    <tr class="border-b border-slate-800/60 hover:bg-slate-800/30 transition font-mono text-xs">
+                        <td class="py-2.5 px-3">
+                            <span class="font-bold text-white">${escapeHtml(p.symbol)}</span>
+                            <span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] font-bold ${sideClass}">${p.side}</span>
+                        </td>
+                        <td class="py-2.5 px-3">$${Number(p.risk.notional_usdt || 0).toFixed(2)}</td>
+                        <td class="py-2.5 px-3">$${Number(p.risk.allocated_margin_usdt || 0).toFixed(2)}</td>
+                        <td class="py-2.5 px-3 ${upnlClass} font-bold">${upnlSign}$${upnl.toFixed(2)}</td>
+                        <td class="py-2.5 px-3">
+                            <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${p.thesis_status === 'VALID' ? 'text-emerald-300 bg-emerald-950' : 'text-amber-300 bg-amber-950'}">${p.thesis_status}</span>
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${p.action === 'HOLD' ? 'text-emerald-300 bg-emerald-950' : 'text-cyan-300 bg-cyan-950'}">${p.action}</span>
+                        </td>
+                        <td class="py-2.5 px-3 text-right">
+                            <button onclick="closePortfolioAnalysisModal(); analyzePositionEntry('${escapeHtml(p.symbol)}')" class="px-2 py-0.5 text-[11px] font-medium rounded bg-indigo-600 hover:bg-indigo-500 text-white transition">
+                                Inspect
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            content.innerHTML = `
+                <!-- Overview Metric Cards -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Open Positions</span>
+                        <div class="text-white font-bold text-base">${data.open_positions_count} Active</div>
+                        <div class="text-slate-400 text-[10px]">${data.unprotected_positions_count} Unprotected</div>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Total Notional Exposure</span>
+                        <div class="text-white font-bold text-base">$${Number(data.total_notional_usdt || 0).toFixed(2)}</div>
+                        <div class="text-indigo-400 text-[10px]">${data.net_directional_bias} ($${Number(data.net_exposure_usdt || 0).toFixed(2)})</div>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">Margin Utilization</span>
+                        <div class="text-white font-bold text-base">${Number(data.margin_utilization_pct || 0).toFixed(1)}%</div>
+                        <div class="text-slate-400 text-[10px]">$${Number(data.total_margin_committed_usdt || 0).toFixed(2)} Committed</div>
+                    </div>
+                    <div class="card-inner p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-500 block text-[10px] uppercase">All-In Stop Risk</span>
+                        <div class="text-rose-400 font-bold text-base">-$${Number(data.total_all_in_risk_at_stops_usdt || 0).toFixed(2)}</div>
+                        <div class="text-slate-400 text-[10px]">${data.portfolio_risk_equity_pct !== null ? data.portfolio_risk_equity_pct + '% Equity' : 'Equity N/A'}</div>
+                    </div>
+                </div>
+
+                <!-- Action Narrative -->
+                <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
+                    <span class="text-[10px] text-indigo-400 font-semibold uppercase block">Portfolio Governance Directive:</span>
+                    <p class="mt-1">${escapeHtml(data.portfolio_action_summary)}</p>
+                </div>
+
+                ${warningsHtml}
+
+                <!-- Active Positions Table -->
+                <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wide block">Audited Positions Matrix</span>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-slate-800 text-slate-400 text-[10px] uppercase tracking-wider font-semibold font-mono">
+                                    <th class="py-2 px-3">Symbol</th>
+                                    <th class="py-2 px-3">Notional</th>
+                                    <th class="py-2 px-3">Margin</th>
+                                    <th class="py-2 px-3">UPnL</th>
+                                    <th class="py-2 px-3">Thesis</th>
+                                    <th class="py-2 px-3">Action</th>
+                                    <th class="py-2 px-3 text-right">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${positionsRows || '<tr><td colspan="7" class="py-6 text-center text-slate-500 font-mono text-xs">No active positions to audit.</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // -------------------------------------------------------------------------
+        // Market Liquidity Intelligence Tab Engine
+        // -------------------------------------------------------------------------
+        function handleIntelSymbolKeydown(event) {
+            if (event && event.key === 'Enter') {
+                loadLiquidityIntel();
+            }
+        }
+
+        function quickSelectIntelSymbol(sym) {
+            const inp = document.getElementById('intelSymbolInput');
+            if (inp) inp.value = sym;
+            loadLiquidityIntel();
+        }
+
+        async function loadLiquidityIntel() {
+            const inp = document.getElementById('intelSymbolInput');
+            const sym = (inp && inp.value ? inp.value : 'BTCUSDT').trim().toUpperCase();
+            const btn = document.getElementById('intelRefreshBtn');
+            const spin = document.getElementById('intelSpinIcon');
+
+            if (btn) btn.disabled = true;
+            if (spin) spin.classList.add('animate-spin');
+
+            try {
+                const [ctxRes, hmRes, whaleRes] = await Promise.all([
+                    fetch(`/api/intelligence/market_context?symbol=${sym}`),
+                    fetch(`/api/intelligence/liquidation_heatmap?symbol=${sym}`),
+                    fetch(`/api/intelligence/whale_activity?symbol=${sym}`),
+                ]);
+
+                if (ctxRes.ok) {
+                    const ctxData = await ctxRes.json();
+                    renderMarketPosture(ctxData);
+                }
+                if (hmRes.ok) {
+                    const hmData = await hmRes.json();
+                    renderLiquidityHeatmap(hmData);
+                }
+                if (whaleRes.ok) {
+                    const whaleData = await whaleRes.json();
+                    cachedWhaleEvents = whaleData.recent_events || [];
+                    renderWhaleActivity(whaleData);
+                }
+            } catch (err) {
+                console.error("Failed to load liquidity intel:", err);
+                showNotice('Failed to load market liquidity intelligence: ' + err.message, 'error');
+            } finally {
+                if (btn) btn.disabled = false;
+                if (spin) spin.classList.remove('animate-spin');
+            }
+        }
+
+        function renderMarketPosture(ctx) {
+            const markEl = document.getElementById('intelMarkPriceDisplay');
+            const syncEl = document.getElementById('intelSyncTime');
+            const narrEl = document.getElementById('intelPostureNarrative');
+            const indMacro = document.getElementById('indMacroTrend');
+            const indLocal = document.getElementById('indLocalTrend');
+            const indMom = document.getElementById('ind15mMomentum');
+            const indDepth = document.getElementById('indOrderBook');
+            const indTaker = document.getElementById('indTakerFlow');
+            const indLiq = document.getElementById('indLiqRisk');
+            const indWhale = document.getElementById('indWhaleFlow');
+            const levelsContainer = document.getElementById('intelKeyLevelsContainer');
+
+            if (markEl) markEl.innerText = `Mark: $${formatPrice(ctx.mark_price)}`;
+            if (syncEl) syncEl.innerText = `Updated: ${new Date(ctx.generated_at_utc).toLocaleTimeString()}`;
+            if (narrEl) narrEl.innerText = ctx.market_posture_summary;
+
+            // Indicator tags styling helper
+            function styleTrendEl(el, val) {
+                if (!el) return;
+                el.innerText = val || '--';
+                if (val === 'BULLISH' || val === 'BID_HEAVY' || val === 'BUY_DOMINANT' || val === 'BULLISH_FLOW') {
+                    el.className = 'text-xs font-bold text-emerald-400 mt-1 block font-mono';
+                } else if (val === 'BEARISH' || val === 'ASK_HEAVY' || val === 'SELL_DOMINANT' || val === 'BEARISH_FLOW') {
+                    el.className = 'text-xs font-bold text-rose-400 mt-1 block font-mono';
+                } else {
+                    el.className = 'text-xs font-bold text-slate-300 mt-1 block font-mono';
+                }
+            }
+
+            styleTrendEl(indMacro, ctx.structural_indicators.macro_4h_trend);
+            styleTrendEl(indLocal, ctx.structural_indicators.local_1h_trend);
+            styleTrendEl(indMom, ctx.structural_indicators.execution_15m_momentum);
+            styleTrendEl(indDepth, ctx.structural_indicators.order_book_bias);
+            styleTrendEl(indTaker, ctx.structural_indicators.taker_flow_bias);
+            styleTrendEl(indLiq, ctx.structural_indicators.liquidation_risk_profile);
+            styleTrendEl(indWhale, ctx.structural_indicators.whale_flow_bias);
+
+            // Key levels cards
+            if (levelsContainer && ctx.key_levels_to_watch) {
+                levelsContainer.innerHTML = ctx.key_levels_to_watch.map(lvl => {
+                    const isRes = lvl.type === 'RESISTANCE' || lvl.type === 'LIQUIDATION_MAGNET' && lvl.label.includes('Short');
+                    const colorClass = isRes ? 'border-rose-900/60 bg-rose-950/20 text-rose-300' : 'border-emerald-900/60 bg-emerald-950/20 text-emerald-300';
+                    return `
+                        <div class="p-2.5 rounded-lg border ${colorClass} space-y-1">
+                            <div class="flex items-center justify-between text-[10px] text-slate-400">
+                                <span>${escapeHtml(lvl.type)}</span>
+                                <span>${lvl.distance_pct}% away</span>
+                            </div>
+                            <div class="text-sm font-bold text-white">$${formatPrice(lvl.price)}</div>
+                            <div class="text-[10px] text-slate-400 truncate">${escapeHtml(lvl.label)}</div>
+                        </div>
+                    `;
+                }).join('') || '<div class="text-xs text-slate-500 py-2">No key levels detected.</div>';
+            }
+        }
+
+        function renderLiquidityHeatmap(hm) {
+            const ratioBadge = document.getElementById('intelLiqRatioBadge');
+            const riskBadge = document.getElementById('intelLiqRiskBadge');
+            const oiDisplay = document.getElementById('intelOiDisplay');
+            const oiContracts = document.getElementById('intelOiContracts');
+            const fundingDisplay = document.getElementById('intelFundingDisplay');
+            const fundingAnnual = document.getElementById('intelFundingAnnual');
+            const longPool = document.getElementById('intelLongLiqPool');
+            const shortPool = document.getElementById('intelShortLiqPool');
+            const nearestLong = document.getElementById('intelNearestLongLiq');
+            const nearestShort = document.getElementById('intelNearestShortLiq');
+            const markBadge = document.getElementById('intelMarkPriceBadge');
+            const shortClustersEl = document.getElementById('intelShortClustersContainer');
+            const longClustersEl = document.getElementById('intelLongClustersContainer');
+
+            if (ratioBadge) ratioBadge.innerText = `L/S Liq Ratio: ${Number(hm.long_short_liquidation_ratio).toFixed(2)}`;
+            if (riskBadge) {
+                riskBadge.innerText = hm.predominant_risk_side;
+                riskBadge.className = hm.predominant_risk_side === 'LONG_CASCADE_RISK'
+                    ? 'px-2 py-0.5 rounded text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-800'
+                    : (hm.predominant_risk_side === 'SHORT_SQUEEZE_RISK'
+                        ? 'px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950 text-rose-300 border border-rose-800'
+                        : 'px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700');
+            }
+
+            if (oiDisplay) oiDisplay.innerText = hm.open_interest_usdt ? `$${(hm.open_interest_usdt / 1_000_000).toFixed(2)}M` : '--';
+            if (oiContracts) oiContracts.innerText = hm.open_interest_contracts ? `${Number(hm.open_interest_contracts).toFixed(1)} contracts` : '';
+            if (fundingDisplay) fundingDisplay.innerText = `${(Number(hm.funding_rate || 0) * 100).toFixed(4)}%`;
+            if (fundingAnnual) fundingAnnual.innerText = `${Number(hm.funding_rate_annualized_pct || 0).toFixed(2)}% Annualized`;
+            if (longPool) longPool.innerText = `$${(Number(hm.long_liquidation_volume_usdt || 0) / 1_000_000).toFixed(2)}M`;
+            if (shortPool) shortPool.innerText = `$${(Number(hm.short_liquidation_volume_usdt || 0) / 1_000_000).toFixed(2)}M`;
+            if (nearestLong) nearestLong.innerText = hm.nearest_long_cluster_pct !== null ? `Nearest: ${hm.nearest_long_cluster_pct}%` : '';
+            if (nearestShort) nearestShort.innerText = hm.nearest_short_cluster_pct !== null ? `Nearest: ${hm.nearest_short_cluster_pct}%` : '';
+            if (markBadge) markBadge.innerText = `CURRENT MARK PRICE: $${formatPrice(hm.mark_price)}`;
+
+            // Render Short Clusters (Overhead)
+            if (shortClustersEl) {
+                const sClusters = [...(hm.short_clusters || [])].reverse(); // higher prices at top
+                shortClustersEl.innerHTML = sClusters.map(c => `
+                    <div class="p-2 rounded-lg bg-slate-900/60 border border-slate-800 hover:border-rose-800/80 transition space-y-1">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-white">$${formatPrice(c.price_level)}</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-950 text-rose-300 border border-rose-800">${c.leverage_tier}</span>
+                                <span class="text-[10px] text-slate-400">+$${Number(c.distance_usdt).toFixed(2)} (+${c.distance_pct}%)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-rose-400 font-bold">$${(c.estimated_volume_usdt / 1_000).toFixed(1)}k</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] ${c.confidence_rating === 'HIGH' ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' : 'bg-slate-800 text-slate-400'}">${c.confidence_rating}</span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
+                            <div class="bg-rose-500 h-1.5 rounded-full" style="width: ${c.relative_intensity_pct}%"></div>
+                        </div>
+                    </div>
+                `).join('') || '<div class="text-xs text-slate-500 py-2">No short clusters detected.</div>';
+            }
+
+            // Render Long Clusters (Below)
+            if (longClustersEl) {
+                longClustersEl.innerHTML = (hm.long_clusters || []).map(c => `
+                    <div class="p-2 rounded-lg bg-slate-900/60 border border-slate-800 hover:border-emerald-800/80 transition space-y-1">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-white">$${formatPrice(c.price_level)}</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">${c.leverage_tier}</span>
+                                <span class="text-[10px] text-slate-400">-$${Number(c.distance_usdt).toFixed(2)} (-${c.distance_pct}%)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-emerald-400 font-bold">$${(c.estimated_volume_usdt / 1_000).toFixed(1)}k</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] ${c.confidence_rating === 'HIGH' ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' : 'bg-slate-800 text-slate-400'}">${c.confidence_rating}</span>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
+                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: ${c.relative_intensity_pct}%"></div>
+                        </div>
+                    </div>
+                `).join('') || '<div class="text-xs text-slate-500 py-2">No long clusters detected.</div>';
+            }
+        }
+
+        function renderWhaleActivity(whale) {
+            const biasBadge = document.getElementById('intelWhaleBiasBadge');
+            const wallsBadge = document.getElementById('intelActiveWallsBadge');
+            const spoofsBadge = document.getElementById('intelSpoofsBadge');
+
+            if (biasBadge) {
+                biasBadge.innerText = `Bias: ${whale.net_whale_bias}`;
+                biasBadge.className = whale.net_whale_bias === 'BULLISH_FLOW'
+                    ? 'px-2 py-0.5 rounded font-bold bg-emerald-950 text-emerald-300 border border-emerald-800'
+                    : (whale.net_whale_bias === 'BEARISH_FLOW'
+                        ? 'px-2 py-0.5 rounded font-bold bg-rose-950 text-rose-300 border border-rose-800'
+                        : 'px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-300 border border-slate-700');
+            }
+            if (wallsBadge) wallsBadge.innerText = `${whale.active_walls_count} Active Walls`;
+            if (spoofsBadge) spoofsBadge.innerText = `${whale.spoof_cancellation_count} Spoof(s)`;
+
+            renderWhaleEventsTable();
+        }
+
+        function setWhaleFilter(filt) {
+            currentWhaleFilter = filt;
+            ['ALL', 'WALLS', 'TRADES', 'SPOOFS', 'ABSORPTION'].forEach(f => {
+                const btn = document.getElementById(`whaleFilt-${f}`);
+                if (btn) {
+                    btn.className = f === filt
+                        ? 'px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium'
+                        : 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium';
+                }
+            });
+            renderWhaleEventsTable();
+        }
+
+        function renderWhaleEventsTable() {
+            const tbody = document.getElementById('intelWhaleEventsTableBody');
+            if (!tbody) return;
+
+            let filtered = cachedWhaleEvents;
+            if (currentWhaleFilter === 'WALLS') {
+                filtered = filtered.filter(e => e.event_type.includes('WALL') || e.event_type.includes('RESTING'));
+            } else if (currentWhaleFilter === 'TRADES') {
+                filtered = filtered.filter(e => e.event_type.includes('AGGRESSIVE'));
+            } else if (currentWhaleFilter === 'SPOOFS') {
+                filtered = filtered.filter(e => e.event_type.includes('SPOOF') || e.event_type.includes('CANCELLATION'));
+            } else if (currentWhaleFilter === 'ABSORPTION') {
+                filtered = filtered.filter(e => e.event_type.includes('ABSORPTION') || e.event_type.includes('OI_'));
+            }
+
+            if (!filtered || filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500">No events matching filter '${currentWhaleFilter}'.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(ev => {
+                let badgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+                if (ev.event_type.includes('BID') || ev.event_type.includes('BUY')) badgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+                else if (ev.event_type.includes('ASK') || ev.event_type.includes('SELL')) badgeClass = 'bg-rose-950 text-rose-300 border-rose-800';
+                else if (ev.event_type.includes('SPOOF') || ev.event_type.includes('CANCELLATION')) badgeClass = 'bg-amber-950 text-amber-300 border-amber-800';
+                else if (ev.event_type.includes('ABSORPTION')) badgeClass = 'bg-purple-950 text-purple-300 border-purple-800';
+
+                const timeStr = ev.timestamp_utc ? new Date(ev.timestamp_utc).toLocaleTimeString() : '--';
+                return `
+                    <tr class="hover:bg-slate-800/30 transition border-b border-slate-800/50">
+                        <td class="py-2.5 px-3 text-slate-400 whitespace-nowrap">${timeStr}</td>
+                        <td class="py-2.5 px-3">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}">${ev.event_type}</span>
+                        </td>
+                        <td class="py-2.5 px-3 font-semibold ${ev.side === 'BUY' || ev.side === 'BID' ? 'text-emerald-400' : (ev.side === 'SELL' || ev.side === 'ASK' ? 'text-rose-400' : 'text-slate-400')}">
+                            ${ev.side}
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <div class="text-white font-medium">$${formatPrice(ev.price)}</div>
+                            <div class="text-[10px] text-slate-400">${ev.distance_bps} bps</div>
+                        </td>
+                        <td class="py-2.5 px-3">
+                            <div class="text-slate-200 font-bold">$${Number(ev.notional_usdt).toFixed(2)}</div>
+                            <div class="text-[10px] text-slate-400">${Number(ev.size).toFixed(3)} qty</div>
+                        </td>
+                        <td class="py-2.5 px-3 font-bold text-indigo-300">${ev.baseline_multiple}x</td>
+                        <td class="py-2.5 px-3 max-w-xs truncate text-[11px] text-slate-300" title="${escapeHtml(ev.details)}">
+                            ${escapeHtml(ev.details)}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
 
         // Automatic Independent Periodic Polling
         // 1. Account status and risk limits refresh every 15 seconds

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from config.settings import ExecutionMode, ModelBConfig, get_default_config
 from src.core.logger import logger
-from src.core.types import CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
+from src.core.types import Candle, CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
 from src.data.database import DatabaseManager
 from src.exchange.aster import AsterDexAdapter
 from src.exchange.aster_v3 import AsterDexV3Adapter
@@ -47,6 +47,24 @@ from src.alerts.storage import AlertStorage
 from src.alerts.market_data import AlertMarketDataService
 from src.alerts.discord import AlertDiscordNotifier
 from src.alerts.engine import PriceAlertEngine
+from src.intelligence.position_analyzer import (
+    PositionAnalyzer,
+    SinglePositionAnalysis,
+    PortfolioAnalysis,
+)
+from src.intelligence.liquidation_heatmap import (
+    LiquidationHeatmapEngine,
+    LiquidationHeatmap,
+)
+from src.intelligence.whale_detector import (
+    WhaleDetector,
+    WhaleActivitySummary,
+)
+from src.intelligence.market_context import (
+    MarketContextService,
+    UnifiedMarketContext,
+)
+
 
 
 # App state containers
@@ -134,6 +152,9 @@ model_b_runner = ModelBRunner(
     paper_config=cfg.paper,
     risk_manager=model_b_risk_mgr,
 )
+
+# AsterDEX Position Intelligence & Market Liquidity Context Service
+market_context_service = MarketContextService()
 
 specs_map: Dict[str, Any] = {}
 runner: Optional[ScannerRunner] = None
@@ -579,6 +600,143 @@ def sync_account_status() -> Dict[str, Any]:
             "error_message": "Account service not initialized.",
         }
     return account_service.sync().to_dict()
+
+
+# =========================================================================
+# AsterDEX Position Intelligence & Market Liquidity Endpoints (Read-Only)
+# =========================================================================
+
+class PositionAnalysisPayload(BaseModel):
+    symbol: Optional[str] = None
+    position: Optional[Dict[str, Any]] = None
+
+
+@app.post("/api/intelligence/analyze_position")
+async def analyze_position_endpoint(payload: PositionAnalysisPayload) -> Dict[str, Any]:
+    """Perform multi-timeframe structural audit, thesis validation, fee/slippage risk, and conditional recommendation."""
+    target_pos = payload.position
+    sym = (payload.symbol or "").strip().upper()
+
+    snapshot = account_service.get_snapshot() if account_service else None
+    equity = snapshot.total_equity_usdt if snapshot else None
+
+    # If position not provided in payload, look up from live account positions
+    if not target_pos:
+        if not sym:
+            raise HTTPException(status_code=400, detail="Either 'symbol' or 'position' must be provided.")
+        if snapshot and snapshot.positions:
+            for p in snapshot.positions:
+                if str(p.get("symbol", "")).upper() == sym:
+                    target_pos = p
+                    break
+        if not target_pos and snapshot:
+            for p in snapshot.to_dict().get("positions_summary", []):
+                if str(p.get("symbol", "")).upper() == sym:
+                    target_pos = p
+                    break
+
+    if not target_pos:
+        # Create an observation position for the requested symbol
+        prem = market_context_service.adapter.get_premium_index(sym)
+        mark_px = float(prem.get("mark_price", 0.0)) if prem else 0.0
+        target_pos = {
+            "symbol": sym,
+            "side": "LONG",
+            "position_amt": 0.0,
+            "entry_price": mark_px,
+            "mark_price": mark_px,
+            "margin_mode": "ISOLATED",
+            "allocated_margin_usdt": 0.0,
+        }
+
+    pos_sym = str(target_pos.get("symbol", sym)).upper()
+    candles_4h = market_context_service.adapter.get_klines(pos_sym, "4h", limit=40)
+    candles_1h = market_context_service.adapter.get_klines(pos_sym, "1h", limit=50)
+    candles_15m = market_context_service.adapter.get_klines(pos_sym, "15m", limit=50)
+
+    analysis = PositionAnalyzer.analyze_position(
+        position=target_pos,
+        candles_4h=candles_4h,
+        candles_1h=candles_1h,
+        candles_15m=candles_15m,
+        account_equity=equity,
+    )
+    return analysis.to_dict()
+
+
+@app.get("/api/intelligence/analyze_portfolio")
+@app.post("/api/intelligence/analyze_portfolio")
+async def analyze_portfolio_endpoint() -> Dict[str, Any]:
+    """Perform portfolio-level risk aggregation, net directional exposure, and position thesis synthesis."""
+    snapshot = account_service.get_snapshot() if account_service else None
+    positions = snapshot.positions if snapshot else []
+    equity = snapshot.total_equity_usdt if snapshot else None
+    avail = snapshot.available_balance_usdt if snapshot else None
+
+    def _candle_prov(s: str, tf: str) -> List[Candle]:
+        return market_context_service.adapter.get_klines(s, tf, limit=40)
+
+    port_analysis = PositionAnalyzer.analyze_portfolio(
+        positions=positions,
+        account_equity=equity,
+        available_balance=avail,
+        candle_provider=_candle_prov,
+    )
+    return port_analysis.to_dict()
+
+
+@app.get("/api/intelligence/liquidation_heatmap")
+async def liquidation_heatmap_endpoint(symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT")) -> Dict[str, Any]:
+    """Generate Long vs Short estimated liquidation concentration bands."""
+    sym = symbol.strip().upper().replace(".P", "")
+    prem = market_context_service.adapter.get_premium_index(sym)
+    mark_px = float(prem.get("mark_price", 0.0)) if prem else 0.0
+    funding = float(prem.get("last_funding_rate", 0.0001)) if prem else 0.0001
+    oi_data = market_context_service.adapter.get_open_interest(sym)
+    oi_contracts = float(oi_data.get("open_interest", 0.0)) if oi_data else None
+    candles_1h = market_context_service.adapter.get_klines(sym, "1h", limit=40)
+
+    heatmap = LiquidationHeatmapEngine.generate_heatmap(
+        symbol=sym,
+        mark_price=mark_px,
+        open_interest_contracts=oi_contracts,
+        funding_rate=funding,
+        candles_1h=candles_1h,
+    )
+    return heatmap.to_dict()
+
+
+@app.get("/api/intelligence/whale_activity")
+async def whale_activity_endpoint(symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT")) -> Dict[str, Any]:
+    """Inspect order book and recent trades for institutional resting depth, aggressive executions, and spoofing."""
+    sym = symbol.strip().upper().replace(".P", "")
+    book = market_context_service.adapter.get_order_book(sym, limit=50)
+    trades = market_context_service.adapter.get_recent_trades(sym, limit=100)
+    oi_data = market_context_service.adapter.get_open_interest(sym)
+    oi_contracts = float(oi_data.get("open_interest", 0.0)) if oi_data else None
+    prem = market_context_service.adapter.get_premium_index(sym)
+    mark_px = float(prem.get("mark_price", 0.0)) if prem else (book.mid_price if book else 0.0)
+
+    summary = market_context_service.whale_detector.analyze_market_data(
+        symbol=sym,
+        book=book,
+        trades=trades,
+        current_oi_contracts=oi_contracts,
+        mark_price=mark_px,
+    )
+    return summary.to_dict()
+
+
+@app.get("/api/intelligence/market_context")
+async def market_context_endpoint(
+    symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT"),
+    force_refresh: bool = Query(False, description="Bypass cache and force fresh query"),
+) -> Dict[str, Any]:
+    """Retrieve unified market context synthesizing MTF structure, depth imbalance, CVD, liquidations, and whale activity."""
+    sym = symbol.strip().upper().replace(".P", "")
+    ctx = market_context_service.get_market_context(sym, force_refresh=force_refresh)
+    return ctx.to_dict()
+
 
 
 
