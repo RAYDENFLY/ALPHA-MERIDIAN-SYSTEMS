@@ -64,6 +64,7 @@ from src.intelligence.market_context import (
     MarketContextService,
     UnifiedMarketContext,
 )
+from src.intelligence.liquidity_chart_service import LiquidityChartService
 
 
 
@@ -155,6 +156,7 @@ model_b_runner = ModelBRunner(
 
 # AsterDEX Position Intelligence & Market Liquidity Context Service
 market_context_service = MarketContextService()
+liquidity_chart_service = LiquidityChartService(adapter=market_context_service.adapter)
 
 specs_map: Dict[str, Any] = {}
 runner: Optional[ScannerRunner] = None
@@ -736,6 +738,64 @@ async def market_context_endpoint(
     sym = symbol.strip().upper().replace(".P", "")
     ctx = market_context_service.get_market_context(sym, force_refresh=force_refresh)
     return ctx.to_dict()
+
+
+# =========================================================================
+# Feature E: Interactive Liquidity Sweep & Reclaim Chart Endpoints (Read-Only)
+# =========================================================================
+
+@app.get("/api/chart/klines")
+async def chart_klines_endpoint(
+    symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT"),
+    timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h"),
+    limit: int = Query(200, ge=10, le=500, description="Number of candles"),
+    start_time_ms: Optional[int] = Query(None, description="Start time in ms"),
+    end_time_ms: Optional[int] = Query(None, description="End time in ms"),
+) -> List[Dict[str, Any]]:
+    """Retrieve OHLCV candles formatted for TradingView Lightweight Charts."""
+    return liquidity_chart_service.get_chart_klines(
+        symbol=symbol,
+        timeframe=timeframe,
+        limit=limit,
+        start_time_ms=start_time_ms,
+        end_time_ms=end_time_ms,
+    )
+
+
+@app.get("/api/chart/liquidity_layers")
+async def chart_liquidity_layers_endpoint(
+    symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT"),
+    timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h"),
+    limit: int = Query(150, ge=20, le=400, description="Number of candles"),
+    as_of_index: Optional[int] = Query(None, description="Historical replay bar index limit"),
+    as_of_timestamp_ms: Optional[int] = Query(None, description="Historical replay timestamp cutoff"),
+) -> Dict[str, Any]:
+    """Retrieve complete liquidity layers: structural levels, sweep/reclaim events, order-book depth, and liquidation estimates."""
+    return liquidity_chart_service.get_liquidity_layers(
+        symbol=symbol,
+        timeframe=timeframe,
+        limit=limit,
+        as_of_index=as_of_index,
+        as_of_timestamp_ms=as_of_timestamp_ms,
+    )
+
+
+@app.get("/api/chart/symbols")
+async def chart_symbols_endpoint() -> Dict[str, Any]:
+    """Retrieve eligible perpetual symbols available for charting."""
+    catalog = liquidity_chart_service.adapter.discover_instruments()
+    symbols = [inst.symbol for inst in catalog if inst.is_active] if catalog else []
+    if not symbols:
+        symbols = list(cfg.watchlist)
+    priority = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AGTUSDT", "BNBUSDT", "DOGEUSDT"]
+    ordered_symbols = [s for s in priority if s in symbols] + [s for s in symbols if s not in priority]
+    return {
+        "symbols": ordered_symbols,
+        "default_symbol": ordered_symbols[0] if ordered_symbols else "BTCUSDT",
+        "default_timeframe": "1h",
+        "supported_timeframes": ["15m", "1h", "4h"],
+    }
+
 
 
 
