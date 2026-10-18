@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from config.settings import ExecutionMode, get_default_config
+from config.settings import ExecutionMode, ModelBConfig, get_default_config
 from src.core.logger import logger
 from src.core.types import CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
 from src.data.database import DatabaseManager
@@ -25,6 +25,8 @@ from src.exchange.aster_v3 import AsterDexV3Adapter
 from src.exchange.account_service import AsterAccountService, AccountConnectionStatus
 from src.journal.repository import JournalRepository
 from src.risk.manager import RiskManager
+from src.risk.model_b_risk import ModelBRiskManager
+from src.scheduler.model_b_runner import ModelBRunner
 from src.scheduler.runner import ScannerRunner, rank_candidates
 from src.backtest.engine import BacktestEngine
 from src.ml.models import ModelRegistry
@@ -119,6 +121,18 @@ alert_engine = PriceAlertEngine(
     market_data=alert_market_data,
     discord_notifier=alert_discord,
     cooldown_sec=60.0,
+)
+
+# Model B Aggressive Multi-Exchange Liquidity Research Engine
+model_b_config: ModelBConfig = getattr(cfg, "model_b", None) or ModelBConfig()
+model_b_risk_mgr = ModelBRiskManager(config=model_b_config)
+model_b_runner = ModelBRunner(
+    db=db,
+    journal=journal,
+    exchange=exchange,
+    config=model_b_config,
+    paper_config=cfg.paper,
+    risk_manager=model_b_risk_mgr,
 )
 
 specs_map: Dict[str, Any] = {}
@@ -307,6 +321,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to start price alerts market data service: {e}")
 
+    # Start Model B background research loop if enabled
+    if getattr(model_b_config, "enabled", False):
+        try:
+            model_b_runner.start_background_loop(interval_seconds=60.0)
+            logger.info("Model B background research loop started.")
+        except Exception as e:
+            logger.warning(f"Failed to start Model B runner: {e}")
+
     yield
 
     logger.info("Shutting down scanner API server...")
@@ -318,6 +340,13 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     logger.info("Background scanner worker shutdown cleanly.")
+
+    # Stop Model B runner
+    try:
+        model_b_runner.stop()
+        logger.info("Model B runner stopped.")
+    except Exception as e:
+        logger.warning(f"Error stopping Model B runner: {e}")
 
     # Stop price alerts market data service
     try:
@@ -1290,6 +1319,97 @@ def delete_alert(alert_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
     return {"deleted": True, "alert_id": alert_id}
+
+
+# =====================================================================
+# Model B — Aggressive Liquidity Research API Endpoints
+# =====================================================================
+
+@app.get("/api/model_b/status")
+def get_model_b_status():
+    """Retrieve runtime status, portfolio capital, and risk meters for Model B."""
+    return model_b_runner.get_status()
+
+
+@app.post("/api/model_b/scan")
+async def trigger_model_b_scan():
+    """Trigger an immediate 1H scan cycle across universal perpetual markets for Model B."""
+    candidates = await asyncio.to_thread(model_b_runner.run_scan_cycle)
+    ready_count = sum(1 for c in candidates if c.status == CandidateStatus.READY)
+    return {
+        "status": model_b_runner.last_scan_status,
+        "scan_count": model_b_runner.scan_count,
+        "total_evaluated": len(candidates),
+        "ready_count": ready_count,
+        "candidates": [c.to_dict() for c in candidates[:20]],
+    }
+
+
+@app.get("/api/model_b/setups")
+def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
+    """Retrieve latest Model B setup candidates from database."""
+    setups = journal.get_latest_setups(limit=limit, model_id="MODEL_B")
+    return {"setups": setups, "count": len(setups), "model_id": "MODEL_B"}
+
+
+@app.get("/api/model_b/journal")
+def get_model_b_journal(
+    outcome: Optional[str] = Query(None),
+    open_only: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Retrieve simulated paper trading journal and metrics isolated to Model B."""
+    trades = journal.get_trades(
+        outcome=outcome,
+        open_only=open_only,
+        limit=limit,
+        model_id="MODEL_B",
+    )
+    all_model_b_trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
+    metrics = journal.compute_trade_metrics(all_model_b_trades)
+    return {
+        "model_id": "MODEL_B",
+        "trades": trades,
+        "metrics": metrics,
+        "total_count": len(trades),
+    }
+
+
+@app.get("/api/model_b/coverage")
+def get_model_b_coverage():
+    """Retrieve multi-exchange perpetual coverage matrix and discovery status."""
+    if not model_b_runner.discovered_universe:
+        model_b_runner.discover_universe()
+
+    universe = model_b_runner.discovered_universe
+    summary = {
+        ex: {
+            "count": len(insts),
+            "sample_symbols": [inst.symbol for inst in insts[:5]],
+            "status": "CONNECTED" if len(insts) > 0 else "EMPTY",
+        }
+        for ex, insts in universe.items()
+    }
+    return {
+        "model_id": "MODEL_B",
+        "total_discovered": sum(len(v) for v in universe.values()),
+        "venues": summary,
+        "verified_venues": ["asterdex", "binance", "hyperliquid"],
+        "planned_venues": ["okx", "bybit"],
+    }
+
+
+@app.get("/api/model_b/orderbook/{symbol}")
+def get_model_b_orderbook(symbol: str):
+    """Fetch live multi-venue Level-2 order book depth for a symbol."""
+    books = model_b_runner.exchange_service.get_aggregated_order_books(symbol)
+    result: Dict[str, Any] = {}
+    for ex, b in books.items():
+        if b is not None:
+            result[ex] = b.to_dict()
+        else:
+            result[ex] = None
+    return {"symbol": symbol, "books": result}
 
 
 if __name__ == "__main__":

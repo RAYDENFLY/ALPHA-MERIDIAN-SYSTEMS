@@ -78,3 +78,23 @@ ml:
   calibration_method: "isotonic"
   min_confidence_threshold: 0.55
   min_samples_required: 100
+
+model_b:
+  enabled: true
+  model_id: "MODEL_B"
+  version: "1.0.0-alpha"
+  initial_equity_usdt: 100.0
+  target_trade_risk_usdt: 1.00
+  daily_loss_limit_usdt: 3.00
+  weekly_loss_limit_usdt: 7.50
+  max_open_positions: 3
+  max_leverage: 10
+  min_risk_reward: 1.5
+  max_spread_bps: 15.0
+  min_depth_imbalance: 0.20
+  min_24h_volume_usdt: 1000000.0
+  scan_interval_sec: 60
+  enabled_venues:
+    - "asterdex"
+    - "binance"
+    - "hyperliquid"

@@ -57,7 +57,12 @@ class RiskManager:
             self.weekly_loss_usdt = 0.0
             self.weekly_entries_count = 0
 
-    def sync_state_from_journal(self, journal: Any, now_ms: Optional[int] = None) -> None:
+    def sync_state_from_journal(
+        self,
+        journal: Any,
+        now_ms: Optional[int] = None,
+        model_id: Optional[str] = "MODEL_A",
+    ) -> None:
         """Authoritatively restore realized loss counters, equity, and weekly entry counts from trade_journal.
 
         Calculates:
@@ -75,7 +80,7 @@ class RiskManager:
         self._sync_calendar_buckets(current_ms)
 
         try:
-            all_trades = journal.get_trades(limit=5000)
+            all_trades = journal.get_trades(limit=5000, model_id=model_id)
         except Exception:
             all_trades = []
 

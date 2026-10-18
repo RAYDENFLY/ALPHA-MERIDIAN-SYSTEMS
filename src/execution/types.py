@@ -74,6 +74,7 @@ class PaperLifecycleEvent:
     reason_detail: str = ""
     order_id: str = ""
     trade_id: str = ""
+    model_id: str = "MODEL_A"
     created_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -87,6 +88,7 @@ class PaperLifecycleEvent:
             "reason_detail": self.reason_detail,
             "order_id": self.order_id,
             "trade_id": self.trade_id,
+            "model_id": self.model_id,
             "created_at_utc": self.created_at_utc,
             "metadata": dict(self.metadata),
         }
@@ -119,6 +121,7 @@ class PaperOrder:
     updated_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     entry_category: str = "Unclassified"
     take_profit_2: Optional[float] = None
+    model_id: str = "MODEL_A"
 
     def transition_to(self, new_status: PaperOrderStatus, reason: Optional[str] = None) -> None:
         """Validate and apply a state transition.
@@ -168,6 +171,7 @@ class PaperOrder:
             "rejection_reason": self.rejection_reason,
             "created_at_utc": self.created_at_utc,
             "updated_at_utc": self.updated_at_utc,
+            "model_id": self.model_id,
         }
 
     @classmethod
@@ -207,6 +211,7 @@ class PaperOrder:
             updated_at_utc=data.get("updated_at_utc", ""),
             entry_category=data.get("entry_category", "Unclassified"),
             take_profit_2=tp2_val,
+            model_id=data.get("model_id", "MODEL_A"),
         )
 
 
@@ -227,6 +232,7 @@ class PaperPosition:
     margin_usdt: float
     leverage: float
     entry_fee: float
+    model_id: str = "MODEL_A"
     funding_paid: float = 0.0
     funding_data_missing: bool = False
     is_open: bool = True
@@ -263,6 +269,7 @@ class PaperPosition:
             "margin_usdt": self.margin_usdt,
             "leverage": self.leverage,
             "entry_fee": self.entry_fee,
+            "model_id": self.model_id,
             "funding_paid": self.funding_paid,
             "funding_data_missing": self.funding_data_missing,
             "is_open": self.is_open,

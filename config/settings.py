@@ -139,6 +139,36 @@ class PaperExecutionConfig(BaseModel):
     )
 
 
+class ModelBConfig(BaseModel):
+    """Configuration for Model B Aggressive Liquidity Research Engine."""
+    enabled: bool = Field(default=True, description="Enable Model B liquidity engine scanner")
+    model_id: str = "MODEL_B"
+    version: str = "1.0.0-alpha"
+    initial_equity_usdt: float = Field(default=100.0, gt=0.0, description="Independent Model B paper equity")
+    target_account_equity_usdt: float = Field(default=100.0, gt=0.0, description="Target account equity reference")
+    target_trade_risk_usdt: float = Field(default=1.00, gt=0.0, description="Target dollar risk per trade")
+    daily_loss_limit_usdt: float = Field(default=3.00, gt=0.0, description="Daily circuit breaker loss limit")
+    weekly_loss_limit_usdt: float = Field(default=7.50, gt=0.0, description="Weekly circuit breaker loss limit")
+    max_open_positions: int = Field(default=3, ge=1, le=10, description="Max concurrent open paper positions")
+    max_leverage: int = Field(default=10, ge=1, le=20, description="Max leverage allowed")
+    max_margin_usdt: float = Field(default=15.00, gt=0.0, description="Max isolated margin allowed per position")
+    min_risk_reward: float = Field(default=1.5, gt=0.0, description="Minimum net reward-to-risk ratio")
+    max_spread_bps: float = Field(default=15.0, gt=0.0, description="Max allowable bid-ask spread in bps")
+    min_depth_imbalance: float = Field(default=0.20, ge=0.0, le=1.0, description="Minimum order book depth imbalance")
+    min_imbalance_ratio: float = Field(default=0.05, description="Minimum depth imbalance ratio for signal confirmation")
+    min_absorption_score: float = Field(default=0.25, description="Minimum volume absorption score")
+    pending_order_ttl_hours: float = Field(default=6.0, gt=0.0, description="Simulated limit order TTL in hours")
+    min_24h_volume_usdt: float = Field(default=1000000.0, ge=0.0, description="Minimum 24h volume filter")
+    scan_interval_sec: int = Field(default=60, ge=5, le=3600, description="Evaluation loop cadence")
+    enabled_venues: List[str] = Field(
+        default_factory=lambda: ["asterdex", "binance", "hyperliquid"],
+        description="Active exchanges for universal perpetual market discovery",
+    )
+    discord_webhook_url: Optional[str] = Field(
+        default=None, description="Optional Discord webhook for Model B notifications"
+    )
+
+
 class AppConfig(BaseModel):
     app_name: str = "SMC-SNR ML Perpetual Scanner"
     version: str = "1.0.0"
@@ -157,6 +187,7 @@ class AppConfig(BaseModel):
     ml: MLConfig = Field(default_factory=MLConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     paper: PaperExecutionConfig = Field(default_factory=PaperExecutionConfig)
+    model_b: ModelBConfig = Field(default_factory=ModelBConfig)
     discord_price_alert_webhook_url: Optional[str] = Field(
         default=None,
         description="Optional Discord webhook URL for universal perpetual price alerts notifications",
@@ -233,6 +264,39 @@ def _apply_env_overrides(cfg: AppConfig) -> AppConfig:
     env_token = os.getenv("QWEN_API_TOKEN")
     if env_token:
         cfg.ai.api_token = env_token.strip()
+
+    # Model B Environment Overrides
+    env_mb_enabled = os.getenv("MODEL_B_ENABLED")
+    if env_mb_enabled is not None:
+        cfg.model_b.enabled = env_mb_enabled.strip().lower() in ("true", "1", "yes")
+    env_mb_equity = os.getenv("MODEL_B_INITIAL_EQUITY_USDT")
+    if env_mb_equity:
+        try:
+            cfg.model_b.initial_equity_usdt = float(env_mb_equity)
+        except ValueError:
+            pass
+    env_mb_risk = os.getenv("MODEL_B_TARGET_TRADE_RISK_USDT")
+    if env_mb_risk:
+        try:
+            cfg.model_b.target_trade_risk_usdt = float(env_mb_risk)
+        except ValueError:
+            pass
+    env_mb_daily = os.getenv("MODEL_B_DAILY_LOSS_LIMIT_USDT")
+    if env_mb_daily:
+        try:
+            cfg.model_b.daily_loss_limit_usdt = float(env_mb_daily)
+        except ValueError:
+            pass
+    env_mb_weekly = os.getenv("MODEL_B_WEEKLY_LOSS_LIMIT_USDT")
+    if env_mb_weekly:
+        try:
+            cfg.model_b.weekly_loss_limit_usdt = float(env_mb_weekly)
+        except ValueError:
+            pass
+    env_mb_discord = os.getenv("DISCORD_MODEL_B_WEBHOOK_URL")
+    if env_mb_discord:
+        cfg.model_b.discord_webhook_url = env_mb_discord.strip()
+
     return cfg
 
 

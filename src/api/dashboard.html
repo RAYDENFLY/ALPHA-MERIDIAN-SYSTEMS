@@ -180,6 +180,11 @@
                 <span>Price Alerts</span>
                 <span id="alertsActiveBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-900 text-indigo-300 font-bold border border-indigo-700">0</span>
             </button>
+            <button onclick="switchTab('model_b')" id="tabBtn-model_b" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span>Model B (Liquidity Engine)</span>
+                <span id="modelBBadge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-900/60 text-amber-300 font-bold border border-amber-700">RESEARCH</span>
+            </button>
         </div>
 
         <!-- TAB 1: CANDIDATE SETUPS -->
@@ -839,6 +844,167 @@
 
                 <div id="alertHistoryEmptyState" class="hidden p-6 text-center text-xs text-slate-500">
                     No triggered alert events recorded yet.
+                </div>
+            </div>
+
+        </div>
+
+        <!-- TAB 6: MODEL B AGGRESSIVE LIQUIDITY RESEARCH ENGINE -->
+        <div id="tab-model_b" class="hidden space-y-6">
+
+            <!-- Model B Top Banner & Action Bar -->
+            <div class="card-bg p-5 rounded-xl border border-amber-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
+                        <h2 class="text-lg font-bold text-white tracking-wide">Model B: Aggressive Liquidity Research Engine</h2>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-700">PAPER RESEARCH</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700">1H EVALUATION</span>
+                    </div>
+                    <p class="text-xs text-slate-400 max-w-2xl">
+                        Scans the universal perpetual universe (~578 contracts) using 1H structural sweep-reclaims, multi-exchange order book depth (AsterDEX, Binance, Hyperliquid), and CVD absorption flow. Model A remains 100% frozen.
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="triggerModelBScan()" id="modelBScanBtn" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs rounded-lg shadow transition flex items-center gap-2">
+                        <svg id="modelBScanSpin" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Scan Universal Markets Now</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Model B Risk & Portfolio Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-medium">Model B Paper Equity</div>
+                    <div class="text-xl font-bold text-white mt-1" id="modelBEquityDisplay">$100.00 USDT</div>
+                    <div class="text-xs text-slate-500 mt-1 font-mono">Baseline: $100.00</div>
+                </div>
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-medium">Target Trade Risk</div>
+                    <div class="text-xl font-bold text-amber-400 mt-1">$1.00 USDT</div>
+                    <div class="text-xs text-slate-500 mt-1 font-mono">Max Margin: $15.00 (10x)</div>
+                </div>
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-medium">Daily Loss Limit</div>
+                    <div class="text-xl font-bold text-white mt-1" id="modelBDailyLossDisplay">$0.00 / $3.00</div>
+                    <div class="text-xs text-emerald-400 mt-1 font-mono" id="modelBDailyStatus">Active (3R Cap)</div>
+                </div>
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-medium">Weekly Loss Limit</div>
+                    <div class="text-xl font-bold text-white mt-1" id="modelBWeeklyLossDisplay">$0.00 / $7.50</div>
+                    <div class="text-xs text-emerald-400 mt-1 font-mono" id="modelBWeeklyStatus">Active (7.5R Cap)</div>
+                </div>
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-medium">Active Exposure</div>
+                    <div class="text-xl font-bold text-white mt-1" id="modelBExposureDisplay">0 / 3 Positions</div>
+                    <div class="text-xs text-indigo-400 mt-1 font-mono" id="modelBDiscoveredCount">-- Markets Discovered</div>
+                </div>
+            </div>
+
+            <!-- Multi-Exchange Order Book Depth Visualizer & Cross-Venue Matrix -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Order Book Depth Inspector -->
+                <div class="lg:col-span-2 card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-base font-bold text-white">Live L2 Order Book Depth Visualizer</span>
+                            <span class="text-xs text-slate-400 font-mono">(10/25/50 bps Imbalance)</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="modelBInspectSymbol" value="BTCUSDT" class="px-2.5 py-1 bg-slate-900 text-xs font-mono text-white rounded border border-slate-700 w-28 uppercase" />
+                            <button onclick="fetchModelBOrderBook()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded border border-slate-700 transition">
+                                Inspect Depth
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Depth Visualization Cards across AsterDEX, Binance, Hyperliquid -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3" id="modelBOrderBookContainer">
+                        <div class="p-4 rounded-lg bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-500">
+                            Loading AsterDEX L2 depth...
+                        </div>
+                        <div class="p-4 rounded-lg bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-500">
+                            Loading Binance L2 depth...
+                        </div>
+                        <div class="p-4 rounded-lg bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-500">
+                            Loading Hyperliquid L2 depth...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multi-Exchange Coverage Status -->
+                <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                    <div class="border-b border-slate-800 pb-3">
+                        <h3 class="text-base font-bold text-white">Exchange Coverage Status</h3>
+                        <p class="text-xs text-slate-400">Verified market-data feeds & public endpoints</p>
+                    </div>
+                    <div class="space-y-3" id="modelBCoverageContainer">
+                        <div class="text-xs text-slate-500">Checking exchange coverage...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model B Setup Candidates Table -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-base font-bold text-white">Model B 1H Candidates Pipeline</h3>
+                        <span id="modelBSetupsCountBadge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-950 text-amber-300 border border-amber-800">0 Candidates</span>
+                    </div>
+                    <span class="text-xs text-slate-400 font-mono" id="modelBLastScanTime">Last Scan: Never</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono text-slate-300">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+                            <tr>
+                                <th class="px-4 py-2.5">Symbol & Side</th>
+                                <th class="px-4 py-2.5">Entry Price</th>
+                                <th class="px-4 py-2.5">Stop Loss</th>
+                                <th class="px-4 py-2.5">Take Profit (TP1/TP2)</th>
+                                <th class="px-4 py-2.5">Sizing / Risk</th>
+                                <th class="px-4 py-2.5">Liquidity Metrics</th>
+                                <th class="px-4 py-2.5">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelBSetupsTableBody" class="divide-y divide-slate-800">
+                            <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B setups recorded yet. Click "Scan Universal Markets Now" to trigger a 1H cycle.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Model B Paper Portfolio & Journal -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-base font-bold text-white">Model B Paper Portfolio & Journal</h3>
+                        <span id="modelBJournalMetricsBadge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-800 text-slate-300">0 Trades</span>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs font-mono" id="modelBJournalSummary">
+                        <span>Win Rate: <strong class="text-white" id="modelBWinRate">0.0%</strong></span>
+                        <span>Net PnL: <strong class="text-white" id="modelBNetPnl">$0.00</strong></span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono text-slate-300">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+                            <tr>
+                                <th class="px-4 py-2.5">Trade ID / Symbol</th>
+                                <th class="px-4 py-2.5">Direction</th>
+                                <th class="px-4 py-2.5">Entry / Exit Price</th>
+                                <th class="px-4 py-2.5">Gross PnL</th>
+                                <th class="px-4 py-2.5">Total Fees</th>
+                                <th class="px-4 py-2.5">Net Realized PnL</th>
+                                <th class="px-4 py-2.5">Outcome</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelBJournalTableBody" class="divide-y divide-slate-800">
+                            <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -2282,17 +2448,22 @@
         }
 
         function switchTab(tabId) {
-            ['setups', 'backtest', 'watchlist', 'journal', 'alerts'].forEach(t => {
-                document.getElementById(`tab-${t}`).classList.add('hidden');
-                document.getElementById(`tabBtn-${t}`).className = 'pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+            ['setups', 'backtest', 'watchlist', 'journal', 'alerts', 'model_b'].forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                if (el) el.classList.add('hidden');
+                const btn = document.getElementById(`tabBtn-${t}`);
+                if (btn) btn.className = 'pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2';
             });
-            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
-            document.getElementById(`tabBtn-${tabId}`).className = 'pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold';
+            const activeTab = document.getElementById(`tab-${tabId}`);
+            if (activeTab) activeTab.classList.remove('hidden');
+            const activeBtn = document.getElementById(`tabBtn-${tabId}`);
+            if (activeBtn) activeBtn.className = 'pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold flex items-center gap-2';
 
             if (tabId === 'watchlist') loadWatchlist();
             if (tabId === 'journal') loadJournal();
             if (tabId === 'backtest') loadBacktest();
             if (tabId === 'alerts') loadAlerts();
+            if (tabId === 'model_b') loadModelB();
         }
 
         // =========================================================================
@@ -2959,6 +3130,328 @@
 
         // Fetch initial alerts telemetry on page load
         fetchAlertSymbols();
+
+        // =========================================================================
+        // MODEL B LIQUIDITY RESEARCH ENGINE JAVASCRIPT
+        // =========================================================================
+        let modelBCachedStatus = null;
+
+        async function loadModelB() {
+            await Promise.allSettled([
+                fetchModelBStatus(),
+                fetchModelBCoverage(),
+                fetchModelBSetups(),
+                fetchModelBJournal(),
+                fetchModelBOrderBook(),
+            ]);
+        }
+
+        async function fetchModelBStatus() {
+            try {
+                const res = await fetch('/api/model_b/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                modelBCachedStatus = data;
+
+                const eqEl = document.getElementById('modelBEquityDisplay');
+                if (eqEl) eqEl.innerText = `$${Number(data.capital.current_equity_usdt || 100.0).toFixed(2)} USDT`;
+
+                const dailyEl = document.getElementById('modelBDailyLossDisplay');
+                if (dailyEl) dailyEl.innerText = `$${Number(data.risk_limits.daily_loss_realized_usdt || 0).toFixed(2)} / $${Number(data.risk_limits.daily_loss_limit_usdt || 3.0).toFixed(2)}`;
+
+                const dailyStat = document.getElementById('modelBDailyStatus');
+                if (dailyStat) {
+                    if (data.risk_limits.daily_circuit_breaker_active) {
+                        dailyStat.innerText = 'CIRCUIT BREAKER (HALTED)';
+                        dailyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
+                    } else {
+                        dailyStat.innerText = 'Active (3R Cap)';
+                        dailyStat.className = 'text-xs text-emerald-400 font-mono';
+                    }
+                }
+
+                const weeklyEl = document.getElementById('modelBWeeklyLossDisplay');
+                if (weeklyEl) weeklyEl.innerText = `$${Number(data.risk_limits.weekly_loss_realized_usdt || 0).toFixed(2)} / $${Number(data.risk_limits.weekly_loss_limit_usdt || 7.5).toFixed(2)}`;
+
+                const weeklyStat = document.getElementById('modelBWeeklyStatus');
+                if (weeklyStat) {
+                    if (data.risk_limits.weekly_circuit_breaker_active) {
+                        weeklyStat.innerText = 'CIRCUIT BREAKER (HALTED)';
+                        weeklyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
+                    } else {
+                        weeklyStat.innerText = 'Active (7.5R Cap)';
+                        weeklyStat.className = 'text-xs text-emerald-400 font-mono';
+                    }
+                }
+
+                const expEl = document.getElementById('modelBExposureDisplay');
+                if (expEl) expEl.innerText = `${data.risk_limits.open_positions_count || 0} / ${data.risk_limits.max_open_positions || 3} Positions`;
+
+                const discEl = document.getElementById('modelBDiscoveredCount');
+                if (discEl) discEl.innerText = `${data.discovered_markets_count || 0} Markets Discovered`;
+
+                const scanTimeEl = document.getElementById('modelBLastScanTime');
+                if (scanTimeEl) {
+                    scanTimeEl.innerText = data.last_scan_utc ? `Last Scan: ${new Date(data.last_scan_utc).toLocaleTimeString()}` : 'Last Scan: Never';
+                }
+
+            } catch (err) {
+                console.error("Model B status error:", err);
+            }
+        }
+
+        async function fetchModelBCoverage() {
+            try {
+                const res = await fetch('/api/model_b/coverage');
+                if (!res.ok) return;
+                const data = await res.json();
+                const container = document.getElementById('modelBCoverageContainer');
+                if (!container) return;
+
+                const venues = data.venues || {};
+                container.innerHTML = Object.entries(venues).map(([vName, vData]) => {
+                    const isConn = vData.status === 'CONNECTED';
+                    const badgeClass = isConn ? 'bg-emerald-950 text-emerald-400 border-emerald-700' : 'bg-slate-800 text-slate-400 border-slate-700';
+                    const sample = (vData.sample_symbols || []).slice(0, 3).join(', ');
+
+                    return `
+                        <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between">
+                            <div>
+                                <div class="font-bold text-white uppercase text-xs">${escapeHtml(vName)}</div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">Sample: ${sample || 'None'}</div>
+                            </div>
+                            <div class="text-right">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}">
+                                    ${vData.count} Perps
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error("Model B coverage error:", err);
+            }
+        }
+
+        async function fetchModelBSetups() {
+            try {
+                const res = await fetch('/api/model_b/setups?limit=25');
+                if (!res.ok) return;
+                const data = await res.json();
+                const tbody = document.getElementById('modelBSetupsTableBody');
+                const badge = document.getElementById('modelBSetupsCountBadge');
+                if (!tbody) return;
+
+                const setups = data.setups || [];
+                if (badge) badge.innerText = `${setups.length} Candidate${setups.length === 1 ? '' : 's'}`;
+
+                if (setups.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B setups recorded. Click "Scan Universal Markets Now" to trigger a 1H cycle.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = setups.map(s => {
+                    const isLong = (s.direction || '').toUpperCase() === 'LONG';
+                    const dirClass = isLong ? 'text-emerald-400' : 'text-rose-400';
+                    const dirBg = isLong ? 'border-emerald-600 bg-emerald-950/40' : 'border-rose-600 bg-rose-950/40';
+
+                    let statusBadge = 'bg-slate-800 text-slate-300 border-slate-700';
+                    if (s.status === 'READY') statusBadge = 'bg-emerald-950 text-emerald-300 border-emerald-600 font-bold';
+                    else if (s.status === 'WATCHLIST') statusBadge = 'bg-amber-950 text-amber-300 border-amber-600';
+                    else if (s.status === 'INFEASIBLE') statusBadge = 'bg-rose-950 text-rose-300 border-rose-600';
+                    else if (s.status === 'INVALIDATED') statusBadge = 'bg-orange-950 text-orange-300 border-orange-600';
+
+                    const meta = s.metadata || {};
+                    const spreadStr = meta.spread_bps !== undefined ? `${meta.spread_bps.toFixed(1)} bps` : '--';
+                    const imbStr = meta.imbalance_25bps !== undefined ? `${(meta.imbalance_25bps * 100).toFixed(1)}%` : '--';
+                    const cvdStr = meta.cvd_1h !== undefined ? `$${Math.round(meta.cvd_1h).toLocaleString()}` : '--';
+
+                    return `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="px-4 py-3">
+                                <div class="font-bold text-white flex items-center gap-1.5">
+                                    <span>${escapeHtml(s.symbol)}</span>
+                                    <span class="px-1.5 py-0.2 rounded text-[10px] font-bold border ${dirBg} ${dirClass}">${s.direction}</span>
+                                </div>
+                                <div class="text-[10px] text-slate-500">${meta.signal_type || 'SWEEP_RECLAIM'}</div>
+                            </td>
+                            <td class="px-4 py-3 font-semibold text-white">$${formatPrice(s.entry_price)}</td>
+                            <td class="px-4 py-3 text-rose-400 font-medium">$${formatPrice(s.stop_loss)}</td>
+                            <td class="px-4 py-3">
+                                <div class="text-emerald-400 font-medium">TP1: $${formatPrice(s.take_profit_1)}</div>
+                                <div class="text-slate-400 text-[10px]">TP2: ${s.take_profit_2 ? '$' + formatPrice(s.take_profit_2) : '--'}</div>
+                            </td>
+                            <td class="px-4 py-3 text-[11px]">
+                                <div>Risk: <strong class="text-amber-300">$1.00 USDT</strong></div>
+                                <div class="text-slate-400 text-[10px]">Qty: ${s.risk_assessment ? s.risk_assessment.quantity : '--'}</div>
+                            </td>
+                            <td class="px-4 py-3 text-[10px] text-slate-400">
+                                <div>Spread: <span class="text-slate-300">${spreadStr}</span></div>
+                                <div>Depth Imb: <span class="${meta.imbalance_25bps >= 0 ? 'text-emerald-400' : 'text-rose-400'} font-bold">${imbStr}</span></div>
+                                <div>CVD: <span class="text-slate-300">${cvdStr}</span></div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-0.5 rounded text-[10px] border ${statusBadge}">${s.status}</span>
+                                ${s.rejection_reasons && s.rejection_reasons.length ? `<div class="text-[10px] text-slate-500 max-w-xs truncate mt-0.5">${escapeHtml(s.rejection_reasons[0])}</div>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error("Model B setups error:", err);
+            }
+        }
+
+        async function fetchModelBJournal() {
+            try {
+                const res = await fetch('/api/model_b/journal?limit=25');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const metrics = data.metrics || {};
+                const wrEl = document.getElementById('modelBWinRate');
+                if (wrEl) wrEl.innerText = `${metrics.win_rate_pct || 0.0}%`;
+
+                const netEl = document.getElementById('modelBNetPnl');
+                if (netEl) {
+                    const netVal = Number(metrics.net_pnl || 0.0);
+                    netEl.innerText = `${netVal >= 0 ? '+$' : '-$'}${Math.abs(netVal).toFixed(2)}`;
+                    netEl.className = netVal > 0 ? 'text-emerald-400' : (netVal < 0 ? 'text-rose-400' : 'text-white');
+                }
+
+                const badge = document.getElementById('modelBJournalMetricsBadge');
+                if (badge) badge.innerText = `${metrics.closed_trades_count || 0} Closed / ${metrics.open_trades_count || 0} Open`;
+
+                const tbody = document.getElementById('modelBJournalTableBody');
+                if (!tbody) return;
+
+                const trades = data.trades || [];
+                if (trades.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = trades.map(t => {
+                    const isLong = (t.direction || '').toUpperCase() === 'LONG';
+                    const dirClass = isLong ? 'text-emerald-400' : 'text-rose-400';
+                    const netPnl = Number(t.pnl_net || 0);
+                    const netClass = netPnl > 0 ? 'text-emerald-400' : (netPnl < 0 ? 'text-rose-400' : 'text-slate-300');
+
+                    return `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="px-4 py-3">
+                                <div class="font-bold text-white">${escapeHtml(t.symbol)}</div>
+                                <div class="text-[10px] text-slate-500">${escapeHtml(t.trade_id.substring(0, 10))}</div>
+                            </td>
+                            <td class="px-4 py-3 ${dirClass} font-semibold">${t.direction}</td>
+                            <td class="px-4 py-3">
+                                <div class="text-white">$${formatPrice(t.entry_price)}</div>
+                                <div class="text-[10px] text-slate-400">Exit: ${t.exit_price ? '$' + formatPrice(t.exit_price) : 'OPEN'}</div>
+                            </td>
+                            <td class="px-4 py-3 text-slate-300">$${Number(t.pnl_gross || 0).toFixed(3)}</td>
+                            <td class="px-4 py-3 text-amber-400">$${Number(t.fee_paid || 0).toFixed(3)}</td>
+                            <td class="px-4 py-3 font-bold ${netClass}">${netPnl >= 0 ? '+$' : '-$'}${Math.abs(netPnl).toFixed(3)}</td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${t.outcome === 'WIN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' : (t.outcome === 'LOSS' ? 'bg-rose-950 text-rose-300 border border-rose-600' : 'bg-slate-800 text-slate-300')}">
+                                    ${t.outcome || (t.is_open ? 'OPEN' : 'CLOSED')}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error("Model B journal error:", err);
+            }
+        }
+
+        async function fetchModelBOrderBook() {
+            const symInput = document.getElementById('modelBInspectSymbol');
+            const sym = symInput ? symInput.value.trim().toUpperCase() : 'BTCUSDT';
+            const container = document.getElementById('modelBOrderBookContainer');
+            if (!container) return;
+
+            try {
+                const res = await fetch(`/api/model_b/orderbook/${sym}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const books = data.books || {};
+
+                container.innerHTML = ['asterdex', 'binance', 'hyperliquid'].map(ex => {
+                    const b = books[ex];
+                    if (!b) {
+                        return `
+                            <div class="p-4 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-2">
+                                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                                    <span class="font-bold text-white uppercase text-xs">${escapeHtml(ex)}</span>
+                                    <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-800 text-slate-400">UNAVAILABLE</span>
+                                </div>
+                                <div class="text-xs text-slate-500 py-4 text-center">No depth data for ${sym}</div>
+                            </div>
+                        `;
+                    }
+
+                    const imb = b.spread_bps !== undefined ? b.spread_bps : 0.0;
+                    const bb = b.best_bid !== null ? `$${formatPrice(b.best_bid)}` : '--';
+                    const ba = b.best_ask !== null ? `$${formatPrice(b.best_ask)}` : '--';
+
+                    return `
+                        <div class="p-4 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-3">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                                <span class="font-bold text-white uppercase text-xs">${escapeHtml(ex)}</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">LIVE FEED</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                                <div>
+                                    <span class="text-slate-500 block text-[10px]">Best Bid</span>
+                                    <span class="text-emerald-400 font-bold">${bb}</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-500 block text-[10px]">Best Ask</span>
+                                    <span class="text-rose-400 font-bold">${ba}</span>
+                                </div>
+                            </div>
+                            <div class="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs font-mono">
+                                <span class="text-slate-400">Spread: <strong class="text-white">${b.spread_bps || 0} bps</strong></span>
+                                <span class="text-slate-400">Mid: <strong class="text-white">$${formatPrice(b.mid_price)}</strong></span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.error("Model B orderbook error:", err);
+            }
+        }
+
+        async function triggerModelBScan() {
+            const btn = document.getElementById('modelBScanBtn');
+            const spin = document.getElementById('modelBScanSpin');
+            if (btn) btn.disabled = true;
+            if (spin) spin.classList.add('animate-spin');
+
+            try {
+                const res = await fetch('/api/model_b/scan', { method: 'POST' });
+                const data = await res.json();
+                showNotice(`Model B scan completed: evaluated ${data.total_evaluated || 0} pairs, found ${data.ready_count || 0} READY setups.`, 'info');
+                await loadModelB();
+            } catch (err) {
+                showNotice('Model B scan error: ' + err, 'error');
+            } finally {
+                if (btn) btn.disabled = false;
+                if (spin) spin.classList.remove('animate-spin');
+            }
+        }
+
+        // Periodic Model B refresh when Model B tab is active
+        setInterval(() => {
+            const tab = document.getElementById('tab-model_b');
+            if (tab && !tab.classList.contains('hidden')) {
+                loadModelB();
+            }
+        }, 10000);
 
         // Automatic Independent Periodic Polling
         // 1. Account status and risk limits refresh every 15 seconds

@@ -264,18 +264,18 @@ class SnRZone:
 @dataclass
 class RiskAssessment:
     """Results of position sizing and risk validation."""
-    symbol: str
-    entry_price: float
-    stop_loss: float
-    stop_distance_pct: float
-    risk_budget_usdt: float
-    position_notional_usdt: float
-    quantity: float
-    required_margin_usdt: float
-    effective_leverage: float
-    estimated_fee_usdt: float
-    estimated_slippage_usdt: float
-    is_feasible: bool
+    symbol: str = ""
+    entry_price: float = 0.0
+    stop_loss: float = 0.0
+    stop_distance_pct: float = 0.0
+    risk_budget_usdt: float = 0.0
+    position_notional_usdt: float = 0.0
+    quantity: float = 0.0
+    required_margin_usdt: float = 0.0
+    effective_leverage: float = 0.0
+    estimated_fee_usdt: float = 0.0
+    estimated_slippage_usdt: float = 0.0
+    is_feasible: bool = True
     infeasible_reason: Optional[str] = None
     target_isolated_margin_usdt: float = 6.0
     estimated_loss_usdt: float = 0.0
@@ -283,6 +283,15 @@ class RiskAssessment:
     position_leverage: float = 10.0
     equity_exposure_ratio: float = 0.0
     estimated_funding_usdt: float = 0.0
+    rejection_reasons: List[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        if not self.rejection_reasons and self.infeasible_reason:
+            self.rejection_reasons = [self.infeasible_reason]
+        elif not self.infeasible_reason and self.rejection_reasons:
+            self.infeasible_reason = "; ".join(self.rejection_reasons)
+        if self.required_margin_usdt == 0.0 and self.target_isolated_margin_usdt > 0.0:
+            self.required_margin_usdt = self.target_isolated_margin_usdt
 
     @property
     def actual_margin_usdt(self) -> float:
@@ -330,6 +339,7 @@ class SetupCandidate:
     status: CandidateStatus = CandidateStatus.WATCHLIST
     rejection_reasons: List[str] = field(default_factory=list)
     entry_category: EntryCategory = EntryCategory.UNCLASSIFIED
+    model_id: str = "MODEL_A"
     expires_at_ms: int = 0
     ai_analysis: Optional[Dict[str, Any]] = None
     execution_status: ExecutionStatus = ExecutionStatus.NOT_SUBMITTED
@@ -510,6 +520,7 @@ class SetupCandidate:
             "eval_sample_count": self.eval_sample_count,
             "status": self.status.value,
             "entry_category": self.entry_category.value if hasattr(self.entry_category, "value") else str(self.entry_category),
+            "model_id": self.model_id,
             "rejection_reasons": self.rejection_reasons,
             "expires_at_ms": self.expires_at_ms,
             "expires_at_utc": datetime.fromtimestamp(self.expires_at_ms / 1000.0, tz=timezone.utc).isoformat() if self.expires_at_ms else None,
@@ -574,6 +585,7 @@ class TradeRecord:
     funding_data_missing: bool = False
     details_json: str = "{}"
     entry_category: EntryCategory = EntryCategory.UNCLASSIFIED
+    model_id: str = "MODEL_A"
 
     @property
     def outcome(self) -> str:
@@ -659,6 +671,7 @@ class TradeRecord:
             "order_status": self.order_status,
             "leverage": self.leverage,
             "margin_usdt": self.margin_usdt,
+            "model_id": self.model_id,
             "details_json": self.details_json,
         }
 

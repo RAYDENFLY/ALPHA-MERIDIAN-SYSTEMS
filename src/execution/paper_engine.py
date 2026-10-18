@@ -33,12 +33,14 @@ class PaperExecutionEngine:
         risk_manager: RiskManager,
         config: Optional[PaperExecutionConfig] = None,
         event_dispatcher: Optional[PaperEventDispatcher] = None,
+        model_id: str = "MODEL_A",
     ) -> None:
         self.db = db
         self.journal = journal
         self.risk_manager = risk_manager
         self.config = config or PaperExecutionConfig()
         self.event_dispatcher = event_dispatcher or PaperEventDispatcher(self.config.discord_webhook_url)
+        self.model_id = model_id
 
         self.pending_orders: Dict[str, PaperOrder] = {}
         self.open_positions: Dict[str, PaperPosition] = {}
@@ -78,6 +80,7 @@ class PaperExecutionEngine:
             funding_data_missing=pos.funding_data_missing,
             details_json=self._serialize_position_details(pos),
             entry_category=EntryCategory(pos.entry_category),
+            model_id=pos.model_id or self.model_id,
         )
 
     def recover_state(self) -> None:
@@ -87,10 +90,10 @@ class PaperExecutionEngine:
 
         # 0. Recover RiskManager authoritative realized losses, equity, and quota counters
         if hasattr(self.risk_manager, "sync_state_from_journal") and self.journal is not None:
-            self.risk_manager.sync_state_from_journal(self.journal)
+            self.risk_manager.sync_state_from_journal(self.journal, model_id=self.model_id)
 
         # 1. Recover pending orders
-        raw_orders = self.journal.get_paper_orders(status=PaperOrderStatus.PENDING.value)
+        raw_orders = self.journal.get_paper_orders(status=PaperOrderStatus.PENDING.value, model_id=self.model_id)
         for row in raw_orders:
             try:
                 order = PaperOrder.from_dict(row)
@@ -99,7 +102,7 @@ class PaperExecutionEngine:
                 logger.error(f"Failed to recover paper order from row {row}: {err}")
 
         # 2. Recover open trades into active positions & sync with RiskManager
-        raw_trades = self.journal.get_open_trades()
+        raw_trades = self.journal.get_open_trades(model_id=self.model_id)
         for row in raw_trades:
             try:
                 direction_str = row["direction"]
@@ -136,6 +139,7 @@ class PaperExecutionEngine:
                     margin_usdt=float(row.get("margin_usdt", 5.0)),
                     leverage=float(row.get("leverage", 10.0)),
                     entry_fee=entry_fee,
+                    model_id=str(row.get("model_id") or self.model_id),
                     funding_paid=float(row.get("funding_paid", 0.0)),
                     funding_data_missing=bool(row.get("funding_data_missing", False)),
                     settled_funding_timestamps=list(details.get("settled_funding_timestamps", [])),
@@ -208,7 +212,7 @@ class PaperExecutionEngine:
         order_id = f"PORD_{sym}_{candidate.timestamp_ms}"
 
         # 3. Prevent duplicate order submission across restarts
-        existing_orders = self.journal.get_paper_orders(symbol=sym)
+        existing_orders = self.journal.get_paper_orders(symbol=sym, model_id=self.model_id)
         if any(o["order_id"] == order_id for o in existing_orders):
             logger.info(f"PaperEngine: Order {order_id} already exists in database; skipping.")
             return None
@@ -241,6 +245,7 @@ class PaperExecutionEngine:
                 status=PaperOrderStatus.REJECTED,
                 rejection_reason=reason or "Account risk limits exceeded.",
                 entry_category=entry_cat_str,
+                model_id=self.model_id,
             )
             self.journal.save_paper_order(rejected_order.to_dict())
             self._log_lifecycle_event(
@@ -292,6 +297,7 @@ class PaperExecutionEngine:
             created_bar_time_ms=candidate.timestamp_ms,
             status=PaperOrderStatus.CREATED,
             entry_category=entry_cat_str,
+            model_id=self.model_id,
         )
         order.transition_to(PaperOrderStatus.PENDING)
 
@@ -357,6 +363,7 @@ class PaperExecutionEngine:
                     order_id=order_id,
                     trade_id=trade_id,
                     metadata=metadata,
+                    model_id=self.model_id,
                 )
             except Exception as lc_err:
                 logger.debug(f"Lifecycle event log skipped: {lc_err}")
@@ -570,6 +577,7 @@ class PaperExecutionEngine:
             margin_usdt=order.margin_usdt,
             leverage=order.leverage,
             entry_fee=order.fee_paid,
+            model_id=self.model_id,
             funding_paid=0.0,
             is_open=True,
             entry_category=order.entry_category,
@@ -935,6 +943,7 @@ class PaperExecutionEngine:
                         funding_data_missing=pos.funding_data_missing,
                         details_json=self._serialize_position_details(pos),
                         entry_category=EntryCategory(pos.entry_category),
+                        model_id=pos.model_id or self.model_id,
                     )
 
                     # Update database and risk governance

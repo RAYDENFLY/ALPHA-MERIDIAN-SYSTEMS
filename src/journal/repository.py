@@ -19,14 +19,15 @@ class JournalRepository:
         now_utc = datetime.now(timezone.utc).isoformat()
         details_json = json.dumps(candidate.to_dict())
         entry_cat_val = candidate.entry_category.value if hasattr(candidate.entry_category, "value") else str(candidate.entry_category)
+        model_id_val = getattr(candidate, "model_id", "MODEL_A")
 
         query = """
         INSERT OR REPLACE INTO setup_candidates (
             candidate_id, symbol, timestamp_ms, direction, bias_4h, structure_1h,
             entry_price, stop_loss, take_profit_1, take_profit_2, gross_rr, net_rr,
             invalidation_price, ml_probability, calibration_status, eval_sample_count,
-            status, details_json, created_at_utc, entry_category
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            status, details_json, created_at_utc, entry_category, model_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         params = (
             candidate.candidate_id,
@@ -49,6 +50,7 @@ class JournalRepository:
             details_json,
             now_utc,
             entry_cat_val,
+            model_id_val,
         )
         with self.db.get_connection() as conn:
             conn.execute(query, params)
@@ -59,11 +61,15 @@ class JournalRepository:
         symbol: Optional[str] = None,
         status: Optional[CandidateStatus] = None,
         limit: int = 50,
+        model_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Fetch latest setups from the journal."""
+        """Fetch latest setups from the journal with optional model isolation."""
         conditions = []
         params: List[Any] = []
 
+        if model_id:
+            conditions.append("model_id = ?")
+            params.append(model_id)
         if symbol:
             conditions.append("symbol = ?")
             params.append(symbol)
@@ -76,7 +82,7 @@ class JournalRepository:
         SELECT candidate_id, symbol, timestamp_ms, direction, bias_4h, structure_1h,
                entry_price, stop_loss, take_profit_1, take_profit_2, gross_rr, net_rr,
                invalidation_price, ml_probability, calibration_status, eval_sample_count,
-               status, details_json, created_at_utc, entry_category
+               status, details_json, created_at_utc, entry_category, model_id
         FROM setup_candidates
         {where_clause}
         ORDER BY timestamp_ms DESC
@@ -184,6 +190,7 @@ class JournalRepository:
             if hasattr(trade.entry_category, "value")
             else str(getattr(trade, "entry_category", "Unclassified"))
         )
+        model_id_val = getattr(trade, "model_id", "MODEL_A")
         query = """
         INSERT OR REPLACE INTO trade_journal (
             trade_id, symbol, direction, entry_timestamp_ms, entry_price,
@@ -192,8 +199,8 @@ class JournalRepository:
             is_open, created_at_utc, setup_id, timeframe, order_status,
             leverage, margin_usdt, slippage_paid, fill_model_version,
             data_source, rejection_reason, funding_data_missing, details_json,
-            entry_category
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            entry_category, model_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         params = (
             trade.trade_id,
@@ -226,6 +233,7 @@ class JournalRepository:
             1 if getattr(trade, "funding_data_missing", False) else 0,
             getattr(trade, "details_json", "{}"),
             entry_cat_val,
+            model_id_val,
         )
         with self.db.get_connection() as conn:
             conn.execute(query, params)
@@ -241,11 +249,15 @@ class JournalRepository:
         start_time_ms: Optional[int] = None,
         end_time_ms: Optional[int] = None,
         limit: int = 100,
+        model_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Retrieve trade history with rich filtering and outcome calculation."""
+        """Retrieve trade history with rich filtering and model isolation."""
         conditions = []
         params: List[Any] = []
 
+        if model_id:
+            conditions.append("model_id = ?")
+            params.append(model_id)
         if open_only:
             conditions.append("is_open = 1")
         if symbol and symbol.strip():
@@ -368,9 +380,9 @@ class JournalRepository:
             "open_trades_count": open_count,
         }
 
-    def get_open_trades(self) -> List[Dict[str, Any]]:
+    def get_open_trades(self, model_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Retrieve all currently active open trades."""
-        return self.get_trades(open_only=True)
+        return self.get_trades(open_only=True, model_id=model_id)
 
     def save_paper_order(self, order_dict: Dict[str, Any]) -> None:
         """Store or update a simulated paper order."""
@@ -387,6 +399,7 @@ class JournalRepository:
         if hasattr(entry_cat, "value"):
             entry_cat = entry_cat.value
         entry_cat_val = str(entry_cat) if entry_cat else "Unclassified"
+        model_id_val = order_dict.get("model_id", "MODEL_A")
 
         query = """
         INSERT OR REPLACE INTO paper_orders (
@@ -395,8 +408,8 @@ class JournalRepository:
             margin_usdt, leverage, status, created_bar_time_ms,
             evaluated_bars_count, filled_time_ms, fill_price,
             slippage_paid, fee_paid, rejection_reason, created_at_utc, updated_at_utc,
-            entry_category
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            entry_category, model_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         params = (
             order_dict["order_id"],
@@ -423,15 +436,24 @@ class JournalRepository:
             order_dict.get("created_at_utc", now_utc),
             now_utc,
             entry_cat_val,
+            model_id_val,
         )
         with self.db.get_connection() as conn:
             conn.execute(query, params)
             conn.commit()
 
-    def get_paper_orders(self, symbol: Optional[str] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Retrieve paper orders with optional symbol and status filters."""
+    def get_paper_orders(
+        self,
+        symbol: Optional[str] = None,
+        status: Optional[str] = None,
+        model_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve paper orders with optional symbol, status, and model_id filters."""
         query = "SELECT * FROM paper_orders WHERE 1=1"
         params: List[Any] = []
+        if model_id:
+            query += " AND model_id = ?"
+            params.append(model_id)
         if symbol:
             query += " AND symbol = ?"
             params.append(symbol)
@@ -456,6 +478,7 @@ class JournalRepository:
         order_id: str = "",
         trade_id: str = "",
         metadata: Optional[Dict[str, Any]] = None,
+        model_id: str = "MODEL_A",
     ) -> None:
         """Persist a state transition in paper_lifecycle_events."""
         now_utc = datetime.now(timezone.utc).isoformat()
@@ -464,8 +487,8 @@ class JournalRepository:
         query = """
         INSERT INTO paper_lifecycle_events (
             candidate_id, symbol, stage, reason_code, reason_detail,
-            order_id, trade_id, timestamp_ms, created_at_utc, metadata_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            order_id, trade_id, timestamp_ms, created_at_utc, metadata_json, model_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         with self.db.get_connection() as conn:
             conn.execute(
@@ -481,6 +504,7 @@ class JournalRepository:
                     int(timestamp_ms),
                     now_utc,
                     meta_json,
+                    model_id,
                 ),
             )
             conn.commit()
@@ -491,10 +515,14 @@ class JournalRepository:
         symbol: Optional[str] = None,
         stage: Optional[str] = None,
         limit: int = 200,
+        model_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Query recorded paper lifecycle transitions in chronological order."""
         conditions = []
         params: List[Any] = []
+        if model_id:
+            conditions.append("model_id = ?")
+            params.append(model_id)
         if candidate_id:
             conditions.append("candidate_id = ?")
             params.append(candidate_id)
@@ -528,24 +556,25 @@ class JournalRepository:
         self,
         min_required_trades: int = 30,
         min_sample_size: Optional[int] = None,
+        model_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Compute truthful forward paper validation cohort metrics and explicit profitability status."""
         if min_sample_size is not None:
             min_required_trades = int(min_sample_size)
-        all_trades = self.get_trades(limit=5000)
+        all_trades = self.get_trades(limit=5000, model_id=model_id)
         trade_metrics = self.compute_trade_metrics(all_trades)
         closed_count = int(trade_metrics.get("closed_trades_count", 0))
         open_count = int(trade_metrics.get("open_trades_count", 0))
         net_pnl = float(trade_metrics.get("net_pnl", 0.0))
         avg_net_pnl = float(trade_metrics.get("avg_net_pnl", 0.0))
 
-        all_orders = self.get_paper_orders()
+        all_orders = self.get_paper_orders(model_id=model_id)
         orders_by_status: Dict[str, int] = {}
         for o in all_orders:
             st = str(o.get("status", "UNKNOWN"))
             orders_by_status[st] = orders_by_status.get(st, 0) + 1
 
-        all_setups = self.get_latest_setups(limit=5000)
+        all_setups = self.get_latest_setups(limit=5000, model_id=model_id)
         setups_by_status: Dict[str, int] = {}
         for s in all_setups:
             st = str(s.get("status", "UNKNOWN"))

@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS setup_candidates (
     status TEXT NOT NULL,
     details_json TEXT NOT NULL,
     created_at_utc TEXT NOT NULL,
-    entry_category TEXT DEFAULT 'Unclassified'
+    entry_category TEXT DEFAULT 'Unclassified',
+    model_id TEXT NOT NULL DEFAULT 'MODEL_A'
 );
 
 CREATE INDEX IF NOT EXISTS idx_setups_sym_time 
@@ -111,7 +112,8 @@ CREATE TABLE IF NOT EXISTS trade_journal (
     rejection_reason TEXT DEFAULT '',
     funding_data_missing INTEGER DEFAULT 0,
     details_json TEXT DEFAULT '{}',
-    entry_category TEXT DEFAULT 'Unclassified'
+    entry_category TEXT DEFAULT 'Unclassified',
+    model_id TEXT NOT NULL DEFAULT 'MODEL_A'
 );
 
 CREATE TABLE IF NOT EXISTS paper_orders (
@@ -138,7 +140,8 @@ CREATE TABLE IF NOT EXISTS paper_orders (
     rejection_reason TEXT DEFAULT '',
     created_at_utc TEXT NOT NULL,
     updated_at_utc TEXT NOT NULL,
-    entry_category TEXT DEFAULT 'Unclassified'
+    entry_category TEXT DEFAULT 'Unclassified',
+    model_id TEXT NOT NULL DEFAULT 'MODEL_A'
 );
 
 CREATE INDEX IF NOT EXISTS idx_paper_orders_sym_status
@@ -155,11 +158,29 @@ CREATE TABLE IF NOT EXISTS paper_lifecycle_events (
     trade_id TEXT DEFAULT '',
     timestamp_ms INTEGER NOT NULL,
     created_at_utc TEXT NOT NULL,
-    metadata_json TEXT NOT NULL DEFAULT '{}'
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    model_id TEXT NOT NULL DEFAULT 'MODEL_A'
 );
 
 CREATE INDEX IF NOT EXISTS idx_lifecycle_cand_time
 ON paper_lifecycle_events (candidate_id, timestamp_ms);
+
+CREATE TABLE IF NOT EXISTS order_book_snapshots (
+    snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    venue TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    bids_json TEXT NOT NULL,
+    asks_json TEXT NOT NULL,
+    mid_price REAL NOT NULL,
+    spread_bps REAL NOT NULL,
+    imbalance_25bps REAL NOT NULL,
+    imbalance_50bps REAL NOT NULL,
+    created_at_utc TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_snapshots_sym_time 
+ON order_book_snapshots (venue, symbol, timestamp_ms);
 """
 
 
@@ -201,6 +222,7 @@ class DatabaseManager:
             ("funding_data_missing", "INTEGER DEFAULT 0"),
             ("details_json", "TEXT DEFAULT '{}'"),
             ("entry_category", "TEXT DEFAULT 'Unclassified'"),
+            ("model_id", "TEXT NOT NULL DEFAULT 'MODEL_A'"),
         ]
 
         for col_name, col_def in new_columns:
@@ -212,6 +234,8 @@ class DatabaseManager:
         sc_columns = {row["name"] for row in cur.fetchall()}
         if "entry_category" not in sc_columns:
             cur.execute("ALTER TABLE setup_candidates ADD COLUMN entry_category TEXT DEFAULT 'Unclassified';")
+        if "model_id" not in sc_columns:
+            cur.execute("ALTER TABLE setup_candidates ADD COLUMN model_id TEXT NOT NULL DEFAULT 'MODEL_A';")
 
         # paper_orders migrations
         cur.execute("PRAGMA table_info(paper_orders);")
@@ -220,6 +244,20 @@ class DatabaseManager:
             cur.execute("ALTER TABLE paper_orders ADD COLUMN entry_category TEXT DEFAULT 'Unclassified';")
         if "take_profit_2" not in po_columns:
             cur.execute("ALTER TABLE paper_orders ADD COLUMN take_profit_2 REAL;")
+        if "model_id" not in po_columns:
+            cur.execute("ALTER TABLE paper_orders ADD COLUMN model_id TEXT NOT NULL DEFAULT 'MODEL_A';")
+
+        # paper_lifecycle_events migrations
+        cur.execute("PRAGMA table_info(paper_lifecycle_events);")
+        ple_columns = {row["name"] for row in cur.fetchall()}
+        if "model_id" not in ple_columns:
+            cur.execute("ALTER TABLE paper_lifecycle_events ADD COLUMN model_id TEXT NOT NULL DEFAULT 'MODEL_A';")
+
+        # Create compound indexes for multi-model queries
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_setups_model_sym ON setup_candidates(model_id, symbol, timestamp_ms);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_journal_model_time ON trade_journal(model_id, entry_timestamp_ms);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_paper_orders_model_status ON paper_orders(model_id, symbol, status);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_lifecycle_model_cand ON paper_lifecycle_events(model_id, candidate_id);")
 
 
     def init_db(self) -> None:
