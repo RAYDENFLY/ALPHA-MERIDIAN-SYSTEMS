@@ -216,8 +216,8 @@ def test_api_setups_never_scanned_vs_completed_empty_scan():
 
 def test_target_isolated_margin_6_usdt_and_risk_step_down():
     cfg = get_default_config()
-    assert cfg.risk.target_isolated_margin_usdt == 6.0
-    assert cfg.risk.target_isolated_margin_max_usdt == 6.5
+    assert cfg.risk.target_isolated_margin_usdt == 1.0
+    assert cfg.risk.target_isolated_margin_max_usdt == 1.5
     assert cfg.risk.hard_risk_limit_usdt == 1.50
     assert cfg.risk.max_leverage == 10
 
@@ -237,7 +237,7 @@ def test_target_isolated_margin_6_usdt_and_risk_step_down():
         maint_margin_percent=2.5,
     )
 
-    # Test stop distances 1.5%, 2.3%, 2.45%, and 3.5% for both LONG and SHORT
+    # Test stop distances 1.5%, 2.3%, 2.45%, and 3.5% for both LONG and SHORT under 6.0 margin step-down
     stop_distances = [0.015, 0.023, 0.0245, 0.035]
     for direction in (Direction.LONG, Direction.SHORT):
         for d in stop_distances:
@@ -247,6 +247,8 @@ def test_target_isolated_margin_6_usdt_and_risk_step_down():
                 symbol_specs=specs,
                 entry_price=entry_p,
                 stop_loss=sl_p,
+                target_isolated_margin=6.0,
+                target_isolated_margin_max=6.5,
                 direction=direction,
             )
             if d == 0.015:

@@ -282,6 +282,7 @@ class RiskAssessment:
     estimated_loss_pct: float = 0.0
     position_leverage: float = 10.0
     equity_exposure_ratio: float = 0.0
+    estimated_funding_usdt: float = 0.0
 
     @property
     def actual_margin_usdt(self) -> float:
@@ -532,6 +533,7 @@ class SetupCandidate:
                 "estimated_loss_pct": round(self.risk_assessment.estimated_loss_pct, 2),
                 "estimated_fee_usdt": round(self.risk_assessment.estimated_fee_usdt, 4),
                 "estimated_slippage_usdt": round(self.risk_assessment.estimated_slippage_usdt, 4),
+                "estimated_funding_usdt": round(self.risk_assessment.estimated_funding_usdt, 4),
                 "risk_budget_usdt": round(self.risk_assessment.risk_budget_usdt, 4),
                 "is_feasible": self.risk_assessment.is_feasible,
                 "infeasible_reason": self.risk_assessment.infeasible_reason,

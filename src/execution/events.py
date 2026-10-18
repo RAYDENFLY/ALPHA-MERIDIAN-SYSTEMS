@@ -47,7 +47,17 @@ def validate_webhook_url(url: Optional[str]) -> bool:
     if not url:
         return False
     cleaned = url.strip()
-    return cleaned.startswith("https://discord.com/api/webhooks/") or cleaned.startswith("https://discordapp.com/api/webhooks/")
+    prefix1 = "https://discord.com/api/webhooks/"
+    prefix2 = "https://discordapp.com/api/webhooks/"
+    rest = None
+    if cleaned.startswith(prefix1):
+        rest = cleaned[len(prefix1):]
+    elif cleaned.startswith(prefix2):
+        rest = cleaned[len(prefix2):]
+    else:
+        return False
+    parts = [p for p in rest.split("/") if p]
+    return len(parts) >= 2
 
 
 def format_price(price: Any) -> str:

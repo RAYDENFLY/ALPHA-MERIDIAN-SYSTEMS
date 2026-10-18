@@ -9,6 +9,7 @@ Enforces hard maximum isolated margin cap ($5.50) to prevent silent over-allocat
 from typing import Optional
 from src.core.types import Direction, RiskAssessment
 from src.exchange.metadata import SymbolSpecs
+from src.risk.tier import EquityTierConfig, resolve_equity_tier
 
 
 class PositionSizer:
@@ -19,17 +20,19 @@ class PositionSizer:
         symbol_specs: SymbolSpecs,
         entry_price: float,
         stop_loss: float,
-        target_isolated_margin: float = 6.0,
+        target_isolated_margin: float = 1.0,
         available_equity_usdt: float = 16.0,
         max_leverage: int = 10,
         hard_risk_limit_usdt: Optional[float] = 1.50,
         fee_rate: float = 0.0005,
         slippage_rate: float = 0.0005,
         risk_budget_usdt: Optional[float] = None,
-        target_isolated_margin_max: Optional[float] = 6.5,
+        target_isolated_margin_max: Optional[float] = None,
         direction: Optional[Direction] = None,
         enforce_risk_budget: bool = False,
         allow_risk_step_down: bool = True,
+        tier_config: Optional[EquityTierConfig] = None,
+        funding_rate: float = 0.0,
     ) -> RiskAssessment:
         """Calculate and validate position sizing for a candidate trade.
 
@@ -42,13 +45,13 @@ class PositionSizer:
         stop_loss : float
             Structural stop loss price (never altered for sizing).
         target_isolated_margin : float
-            Target isolated margin in USDT (default $6.00).
+            Target isolated margin in USDT (default $1.00 for Tier 1 micro-margin).
         available_equity_usdt : float
             Current available equity in USDT (e.g. $16.0).
         max_leverage : int
             Exchange isolated leverage cap (max 10).
         hard_risk_limit_usdt : Optional[float]
-            Hard risk limit for loss at SL in USDT (default $1.50).
+            Hard risk limit ceiling for loss at SL in USDT (default $1.50).
         fee_rate : float
             Taker fee rate per side (default 0.05% = 0.0005).
         slippage_rate : float
@@ -56,7 +59,7 @@ class PositionSizer:
         risk_budget_usdt : Optional[float]
             Effective account trade risk budget in USDT (consulted for tracking and enforced when enforce_risk_budget=True).
         target_isolated_margin_max : Optional[float]
-            Upper bound of target margin range (default $6.50).
+            Upper bound of target margin range (default $1.50 for Tier 1 micro-margin).
         direction : Optional[Direction]
             Trade direction (LONG or SHORT).
         enforce_risk_budget : bool
@@ -64,8 +67,40 @@ class PositionSizer:
         allow_risk_step_down : bool
             When True, steps down quantity from target isolated margin if initial quantity exceeds the active risk cap,
             provided the reduced quantity still satisfies min_qty and min_notional.
+        tier_config : Optional[EquityTierConfig]
+            When provided and enabled, dynamically resolves target margin bounds from verified account equity.
+        funding_rate : float
+            Applicable perpetual funding rate to incorporate into stop-loss risk.
         """
         symbol = symbol_specs.symbol
+
+        # Equity Tier resolution: resolve dynamic target margin bounds if tier_config is active
+        if tier_config is not None and tier_config.enabled:
+            tier_res = resolve_equity_tier(available_equity_usdt, tier_config)
+            if not tier_res.is_trading_allowed:
+                return RiskAssessment(
+                    symbol=symbol,
+                    entry_price=entry_price,
+                    stop_loss=stop_loss,
+                    stop_distance_pct=0.0,
+                    risk_budget_usdt=risk_budget_usdt or 0.0,
+                    position_notional_usdt=0.0,
+                    quantity=0.0,
+                    required_margin_usdt=0.0,
+                    effective_leverage=0.0,
+                    position_leverage=float(min(max(1, int(max_leverage)), 10)),
+                    equity_exposure_ratio=0.0,
+                    estimated_fee_usdt=0.0,
+                    estimated_slippage_usdt=0.0,
+                    is_feasible=False,
+                    infeasible_reason=tier_res.rejection_reason or "Equity tier trading halted.",
+                    target_isolated_margin_usdt=0.0,
+                    estimated_loss_usdt=0.0,
+                    estimated_loss_pct=0.0,
+                )
+            target_isolated_margin = tier_res.target_margin_min
+            target_isolated_margin_max = tier_res.target_margin_max
+
         stop_distance = abs(entry_price - stop_loss)
         if stop_distance <= 0 or entry_price <= 0:
             return RiskAssessment(
@@ -128,11 +163,12 @@ class PositionSizer:
             ext_notional = q * stop_loss
             est_fee = (ent_notional * fee_rate) + (ext_notional * fee_rate)
             est_slip = (ent_notional * slippage_rate) + (ext_notional * slippage_rate)
-            tx_cost = est_fee + est_slip
+            est_funding = (ent_notional * abs(funding_rate)) if funding_rate else 0.0
+            tx_cost = est_fee + est_slip + est_funding
             nom_loss = q * stop_distance
             est_loss = nom_loss + tx_cost
             loss_pct = (est_loss / available_equity_usdt * 100.0) if available_equity_usdt > 0 else 0.0
-            return notional, margin, pos_lev, eq_ratio, est_fee, est_slip, tx_cost, est_loss, loss_pct
+            return notional, margin, pos_lev, eq_ratio, est_fee, est_slip, est_funding, tx_cost, est_loss, loss_pct
 
         (
             actual_notional,
@@ -141,6 +177,7 @@ class PositionSizer:
             equity_exposure_ratio,
             estimated_fee,
             estimated_slippage,
+            estimated_funding,
             total_transaction_cost,
             estimated_loss,
             loss_pct_equity,
@@ -163,6 +200,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Effective risk budget exhausted (${risk_budget_usdt:.2f} remaining). Trade is INFEASIBLE."
@@ -177,18 +215,19 @@ class PositionSizer:
         if enforce_risk_budget and risk_budget_usdt is not None and risk_budget_usdt > 0:
             active_loss_cap = min(active_loss_cap, risk_budget_usdt) if active_loss_cap is not None else risk_budget_usdt
 
-        # 5b. Legitimate risk-based quantity step-down when initial $6.00-margin lot slightly exceeds the active risk cap
-        # (e.g. $60 notional at ~2.4% stop distance produces ~$1.56 loss > $1.50 cap; stepping down to ~$57 notional keeps loss <= $1.50)
-        # Note: Only reduce if the reduced quantity still satisfies min_qty, min_notional, and preserves at least $4.50 isolated margin
-        # (unless enforce_risk_budget is explicitly requested for micro-sizing).
+        # 5b. Legitimate risk-based quantity step-down when initial lot slightly exceeds the active risk cap
+        # (e.g. stepping down quantity keeps loss <= active_loss_cap)
+        # Note: Only reduce if the reduced quantity still satisfies min_qty, min_notional, and preserves at least min_acceptable_margin.
         if allow_risk_step_down and active_loss_cap is not None and estimated_loss > active_loss_cap:
-            per_unit_loss = stop_distance + (entry_price * (fee_rate + slippage_rate)) + (stop_loss * (fee_rate + slippage_rate))
+            per_unit_carry = (entry_price * (fee_rate + slippage_rate + abs(funding_rate))) + (stop_loss * (fee_rate + slippage_rate))
+            per_unit_loss = stop_distance + per_unit_carry
             if per_unit_loss > 0:
                 max_safe_raw_qty = active_loss_cap / per_unit_loss
                 reduced_qty = symbol_specs.round_quantity(max_safe_raw_qty)
                 # Ensure float precision does not leave estimated_loss slightly above active_loss_cap
                 while reduced_qty >= symbol_specs.min_qty:
-                    _, _, _, _, _, _, _, cand_loss, _ = _compute_metrics_for_qty(reduced_qty)
+                    metrics = _compute_metrics_for_qty(reduced_qty)
+                    cand_loss = metrics[8]
                     if cand_loss <= active_loss_cap + 1e-9 or reduced_qty <= symbol_specs.min_qty:
                         break
                     next_q = symbol_specs.round_quantity(reduced_qty - symbol_specs.step_size)
@@ -196,7 +235,7 @@ class PositionSizer:
                         break
                     reduced_qty = next_q
 
-                min_acceptable_margin = 0.50 if enforce_risk_budget else min(4.50, target_isolated_margin * 0.75)
+                min_acceptable_margin = 0.50 if (enforce_risk_budget or target_isolated_margin <= 2.0) else min(4.50, target_isolated_margin * 0.75)
                 if reduced_qty >= symbol_specs.min_qty:
                     (
                         r_notional,
@@ -205,6 +244,7 @@ class PositionSizer:
                         r_eq_ratio,
                         r_fee,
                         r_slip,
+                        r_funding,
                         r_tx_cost,
                         r_loss,
                         r_loss_pct,
@@ -223,6 +263,7 @@ class PositionSizer:
                         effective_leverage = r_eq_ratio
                         estimated_fee = r_fee
                         estimated_slippage = r_slip
+                        estimated_funding = r_funding
                         total_transaction_cost = r_tx_cost
                         estimated_loss = r_loss
                         loss_pct_equity = r_loss_pct
@@ -245,6 +286,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Target margin (${target_isolated_margin:.2f}) exceeds available capital (${available_equity_usdt:.2f})."
@@ -270,6 +312,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Position notional (${actual_notional:.2f}) is below exchange minimum notional "
@@ -297,6 +340,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Minimum lot size ({quantity}) requires isolated margin of ${actual_margin:.2f}, "
@@ -323,6 +367,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Order quantity ({quantity}) exceeds exchange maximum quantity ({symbol_specs.max_qty})."
@@ -348,6 +393,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Required margin (${actual_margin:.2f}) + costs (${total_transaction_cost:.2f}) "
@@ -374,6 +420,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Order produces estimated loss at SL of ${estimated_loss:.2f} "
@@ -399,6 +446,7 @@ class PositionSizer:
                 equity_exposure_ratio=equity_exposure_ratio,
                 estimated_fee_usdt=estimated_fee,
                 estimated_slippage_usdt=estimated_slippage,
+                estimated_funding_usdt=estimated_funding,
                 is_feasible=False,
                 infeasible_reason=(
                     f"Order produces estimated loss at SL of ${estimated_loss:.2f}, "
@@ -423,6 +471,7 @@ class PositionSizer:
             equity_exposure_ratio=equity_exposure_ratio,
             estimated_fee_usdt=estimated_fee,
             estimated_slippage_usdt=estimated_slippage,
+            estimated_funding_usdt=estimated_funding,
             is_feasible=True,
             infeasible_reason=None,
             target_isolated_margin_usdt=target_isolated_margin,

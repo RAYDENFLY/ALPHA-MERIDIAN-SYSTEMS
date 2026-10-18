@@ -42,7 +42,7 @@
                     <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">PAPER / RESEARCH — NO LIVE ORDERS</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 mt-1">
-                    <span>Zero-LLM Institutional Setup Engine &bull; Aster DEX Perpetuals &bull; Initial Equity: $16.00 USDT &bull; ML Score is Informative (Unproven Edge)</span>
+                    <span>Zero-LLM Institutional Setup Engine &bull; Aster DEX Perpetuals &bull; Paper Baseline: $16.00 USDT &bull; Live Exchange Equity: <strong id="headerLiveEquityDisplay" class="text-emerald-400 font-mono">--</strong></span>
                     <span class="text-slate-600">|</span>
                     <span id="dataFreshnessHeader" class="text-slate-400 font-mono">Candle Age: --</span>
                 </div>
@@ -74,9 +74,20 @@
         <!-- Account Health & Risk Governance Metrics (Auto-refreshed every 15s) -->
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
             <div class="card-bg p-4 rounded-xl">
-                <div class="text-xs text-slate-400 font-medium">Account Equity</div>
-                <div class="text-xl font-bold text-white mt-1" id="equityDisplay">$16.00 USDT</div>
-                <div class="text-xs text-emerald-400 mt-1 font-mono">ISOLATED &bull; 10x Max</div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-400 font-medium">Live AsterDEX Equity</span>
+                    <span id="accountConnBadge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">Connecting...</span>
+                </div>
+                <div class="text-xl font-bold text-white mt-1" id="equityDisplay">-- USDT</div>
+                <div class="text-[11px] text-slate-400 mt-1 flex flex-wrap gap-x-2 font-mono" id="accountSubDetails">
+                    <span>Avail: <span id="availBalDisplay" class="text-emerald-400">--</span></span>
+                    <span>Used: <span id="usedMarginDisplay" class="text-amber-400">--</span></span>
+                    <span>UPnL: <span id="unrealizedPnlDisplay" class="text-slate-300">--</span></span>
+                </div>
+                <div class="text-[10px] text-slate-500 mt-1 font-mono flex items-center justify-between" id="accountSyncFooter">
+                    <span id="accountSyncTimeDisplay">Sync: --</span>
+                    <span id="accountMarginModeDisplay">ISOLATED &bull; 10x Max</span>
+                </div>
             </div>
             <div class="card-bg p-4 rounded-xl">
                 <div class="text-xs text-slate-400 font-medium">Target Isolated Margin</div>
@@ -94,9 +105,13 @@
                 <div class="text-xs text-emerald-400 mt-1 font-mono" id="weeklyStatus">Active (0 Losses)</div>
             </div>
             <div class="card-bg p-4 rounded-xl">
-                <div class="text-xs text-slate-400 font-medium">Exposure Caps</div>
-                <div class="text-xl font-bold text-white mt-1" id="capsDisplay">0 / 1 Open Pos</div>
-                <div class="text-xs text-slate-400 mt-1 font-mono" id="entriesDisplay">Entries This Week: 0</div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-400 font-medium">Position Exposure</span>
+                    <span id="exposureSplitBadge" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-800 text-slate-400">PAPER / LIVE</span>
+                </div>
+                <div class="text-xl font-bold text-white mt-1" id="capsDisplay">0 / 1 Paper Pos</div>
+                <div class="text-xs text-indigo-400 mt-1 font-mono" id="livePosCardCount">Live Exchange Pos: --</div>
+                <div class="text-[10px] text-slate-500 mt-0.5 font-mono" id="entriesDisplay">Entries This Week: 0 (Paper)</div>
             </div>
         </div>
 
@@ -118,12 +133,53 @@
             </div>
         </div>
 
+        <!-- Live AsterDEX Open Positions Panel (Read-Only Telemetry) -->
+        <div id="livePositionsSection" class="card-bg p-4 md:p-5 rounded-xl border border-indigo-900/40 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="relative flex h-3 w-3">
+                            <span id="livePosPulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span id="livePosDot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                        </span>
+                        <h2 class="text-base font-bold text-white tracking-wide">Live AsterDEX Positions</h2>
+                    </div>
+                    <span id="livePosCountBadge" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono">Loading...</span>
+                    <span class="px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider bg-slate-800 text-slate-400 border border-slate-700">READ-ONLY TELEMETRY</span>
+                </div>
+                
+                <div class="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-400">
+                    <span id="livePosSourceBadge" class="text-slate-400">Source: AsterDEX V3 REST</span>
+                    <span class="text-slate-600">&bull;</span>
+                    <span id="livePosSyncTime" class="text-slate-400">Sync: Checking...</span>
+                    <button onclick="syncLiveAccount()" id="syncLiveAccountBtn" class="px-2.5 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
+                        <svg id="syncLiveSpinIcon" class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Sync Live</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stale / Offline Notice Banner (conditional) -->
+            <div id="livePosWarningBanner" class="hidden p-3 rounded-lg text-xs font-medium bg-amber-950/60 border border-amber-800/80 text-amber-300 flex items-center justify-between">
+                <span id="livePosWarningText"></span>
+            </div>
+
+            <!-- Content Container: Desktop Table, Mobile Cards, or Empty State -->
+            <div id="livePositionsContainer">
+                <div class="text-center py-6 text-sm text-slate-500 font-mono">Checking live exchange positions...</div>
+            </div>
+        </div>
+
         <!-- Tab Navigation -->
         <div class="flex border-b border-slate-800 space-x-6 text-sm font-medium">
             <button onclick="switchTab('setups')" id="tabBtn-setups" class="pb-3 border-b-2 border-indigo-500 text-indigo-400 font-semibold">Candidate Setups</button>
             <button onclick="switchTab('backtest')" id="tabBtn-backtest" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Historical Backtest</button>
             <button onclick="switchTab('watchlist')" id="tabBtn-watchlist" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Watchlist & Controls</button>
             <button onclick="switchTab('journal')" id="tabBtn-journal" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Trading Journal</button>
+            <button onclick="switchTab('alerts')" id="tabBtn-alerts" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                <span>Price Alerts</span>
+                <span id="alertsActiveBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-900 text-indigo-300 font-bold border border-indigo-700">0</span>
+            </button>
         </div>
 
         <!-- TAB 1: CANDIDATE SETUPS -->
@@ -543,7 +599,255 @@
             </div>
         </div>
 
+        <!-- TAB 5: UNIVERSAL PERPETUAL PRICE ALERTS -->
+        <div id="tab-alerts" class="space-y-6 hidden">
+
+            <!-- Metrics & Market Telemetry Row -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-400 font-medium">Configured Alerts</span>
+                        <span id="alertsActivePill" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-900/60 text-indigo-300 border border-indigo-700/60">0 Active</span>
+                    </div>
+                    <div class="text-xl font-bold text-white mt-1" id="alertsTotalCount">0</div>
+                    <div class="text-[11px] text-slate-400 mt-1 flex gap-2 font-mono">
+                        <span>Triggered: <strong id="alertsTriggeredCount" class="text-amber-400">0</strong></span>
+                        <span>Stale: <strong id="alertsStaleCount" class="text-slate-400">0</strong></span>
+                    </div>
+                </div>
+
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-400 font-medium">AsterDEX Perp Universe</span>
+                        <span id="universeLiveBadge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">BULK STREAM</span>
+                    </div>
+                    <div class="text-xl font-bold text-white mt-1" id="universeSymbolsCount">-- Contracts</div>
+                    <div class="text-[11px] text-slate-400 mt-1 font-mono">
+                        <span>USDT Perps &bull; Independent of scanner</span>
+                    </div>
+                </div>
+
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-400 font-medium">Market Data Feed</span>
+                        <span id="feedHealthBadge" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">HEALTHY</span>
+                    </div>
+                    <div class="text-xl font-bold text-white mt-1 font-mono" id="feedAgeDisplay">Age: --s</div>
+                    <div class="text-[11px] text-slate-400 mt-1 font-mono flex items-center justify-between">
+                        <span id="feedPollsDisplay">Polls: 0</span>
+                        <span class="text-slate-500">Bulk REST (1 call/4s)</span>
+                    </div>
+                </div>
+
+                <div class="card-bg p-4 rounded-xl border border-slate-800">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-400 font-medium">Alert Notifications</span>
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="testAlertAudio()" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold underline">Sound</button>
+                            <span class="text-slate-600">|</span>
+                            <button onclick="testAlertDiscord()" id="testDiscordBtn" class="hidden text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold underline">Discord</button>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-center justify-between">
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                            <input type="checkbox" id="soundToggleCheckbox" onchange="toggleSoundAlerts(this.checked)" checked class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                            <span>Audio Chime</span>
+                        </label>
+                        <span id="discordAlertBadge" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">DISCORD: OFF</span>
+                    </div>
+                    <div class="text-[10px] text-slate-500 mt-1.5 font-mono truncate" id="discordWebhookDisplay">
+                        Webhook: [NOT CONFIGURED]
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create / Edit Price Alert Card -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>
+                        <h2 class="text-base font-bold text-white" id="alertFormHeading">Create Price Alert</h2>
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-300 border border-slate-700">READ-ONLY TELEMETRY</span>
+                    </div>
+                    <span class="text-xs text-slate-400">Supports all 578+ tradable AsterDEX USDT perpetual contracts</span>
+                </div>
+
+                <!-- Form Grid -->
+                <form id="priceAlertForm" onsubmit="handleAlertFormSubmit(event)" class="space-y-4">
+                    <input type="hidden" id="editingAlertId" value="">
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <!-- Symbol Search & Select (Autocomplete) -->
+                        <div class="relative md:col-span-1">
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Contract Symbol <span class="text-red-400">*</span></label>
+                            <div class="relative">
+                                <input type="text" id="alertSymbolInput" oninput="handleSymbolSearch(this.value)" onfocus="handleSymbolFocus()" placeholder="Search (e.g. HYPE, BTC)..." autocomplete="off" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500 uppercase font-mono" required>
+                                <div id="symbolDropdownList" class="hidden absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs divide-y divide-slate-800">
+                                    <!-- Populated dynamically with all tradable symbols -->
+                                </div>
+                            </div>
+                            <div id="selectedSymbolDetails" class="hidden mt-1 text-[11px] font-mono text-slate-400">
+                                <span>Mark: <strong id="symMarkDisplay" class="text-emerald-400">--</strong></span>
+                                <span class="mx-1">&bull;</span>
+                                <span>Last: <strong id="symLastDisplay" class="text-indigo-400">--</strong></span>
+                            </div>
+                        </div>
+
+                        <!-- Target Crossing Price -->
+                        <div class="md:col-span-1">
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-xs font-medium text-slate-300">Target Crossing Price <span class="text-red-400">*</span></label>
+                                <button type="button" onclick="fillSelectedPrice()" id="fillPriceBtn" class="hidden text-[10px] text-indigo-400 hover:text-indigo-300 font-mono">Use Current</button>
+                            </div>
+                            <input type="number" step="any" min="0.0000001" id="alertTargetPrice" placeholder="e.g. 68500.5" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white font-mono focus:outline-none focus:border-indigo-500" required>
+                        </div>
+
+                        <!-- Crossing Direction -->
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Crossing Direction <span class="text-red-400">*</span></label>
+                            <select id="alertDirection" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500">
+                                <option value="PRICE_ABOVE">Crosses Above Target (&ge; Target)</option>
+                                <option value="PRICE_BELOW">Crosses Below Target (&le; Target)</option>
+                            </select>
+                        </div>
+
+                        <!-- Price Source -->
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Price Source</label>
+                            <select id="alertPriceSource" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500">
+                                <option value="MARK_PRICE">Mark Price (Recommended)</option>
+                                <option value="LAST_PRICE">Last Traded Price</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <!-- Recurrence Mode -->
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Alert Recurrence</label>
+                            <select id="alertRecurrence" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500">
+                                <option value="ONE_OFF">One-Off (Disable after 1 trigger)</option>
+                                <option value="RECURRING">Recurring (Auto re-arm on crossback)</option>
+                            </select>
+                        </div>
+
+                        <!-- Note / Label -->
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-medium text-slate-300 mb-1">User Note / Label (Optional)</label>
+                            <input type="text" id="alertNote" maxlength="200" placeholder="e.g. Resistance breakout, TP zone, Support bounce" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-indigo-500">
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="md:col-span-1 flex items-center gap-2">
+                            <button type="submit" id="alertSubmitBtn" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-lg shadow transition flex items-center justify-center gap-1.5">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                <span id="alertSubmitBtnText">Create Alert</span>
+                            </button>
+                            <button type="button" id="alertCancelBtn" onclick="resetAlertForm()" class="hidden px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Configured Price Alerts Table Card -->
+            <div class="card-bg rounded-xl border border-slate-800 overflow-hidden">
+                <div class="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-base font-bold text-white">Configured Alerts</h3>
+                        <!-- Filter Pills -->
+                        <div class="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+                            <button onclick="setAlertsFilter('ALL')" id="alertFilter-ALL" class="px-2.5 py-1 rounded-md font-semibold bg-indigo-600 text-white">All</button>
+                            <button onclick="setAlertsFilter('ACTIVE')" id="alertFilter-ACTIVE" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white">Active</button>
+                            <button onclick="setAlertsFilter('TRIGGERED')" id="alertFilter-TRIGGERED" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white">Triggered</button>
+                            <button onclick="setAlertsFilter('DISABLED')" id="alertFilter-DISABLED" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white">Disabled</button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button onclick="loadAlerts(true)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-300">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase font-mono text-[11px] border-b border-slate-800">
+                            <tr>
+                                <th class="px-4 py-3">Symbol & Source</th>
+                                <th class="px-4 py-3">Target & Direction</th>
+                                <th class="px-4 py-3">Live Price & Distance</th>
+                                <th class="px-4 py-3">Mode & Armed</th>
+                                <th class="px-4 py-3">Status</th>
+                                <th class="px-4 py-3">Note / Label</th>
+                                <th class="px-4 py-3">Triggered / Created</th>
+                                <th class="px-4 py-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableBody" class="divide-y divide-slate-800">
+                            <!-- Populated dynamically via loadAlerts() -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="alertsEmptyState" class="hidden p-8 text-center space-y-2">
+                    <div class="w-10 h-10 mx-auto text-slate-600">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                    </div>
+                    <h4 class="text-sm font-semibold text-white">No Price Alerts Configured</h4>
+                    <p class="text-xs text-slate-400 max-w-sm mx-auto">Create an alert using the form above to monitor any of AsterDEX's 578+ USDT perpetual contracts.</p>
+                </div>
+            </div>
+
+            <!-- Triggered Alert History Section -->
+            <div class="card-bg rounded-xl border border-slate-800 overflow-hidden">
+                <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-base font-bold text-white">Triggered Alert History</h3>
+                        <span id="unackBadge" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-900/60 text-amber-300 border border-amber-700/60">0 Unack</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="ackAllAlertEvents()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded transition font-medium">Acknowledge All</button>
+                        <button onclick="clearAlertHistory()" class="px-2.5 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 text-xs rounded border border-red-800/60 transition font-medium">Clear History</button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto max-h-80">
+                    <table class="w-full text-left text-xs text-slate-300">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase font-mono text-[11px] border-b border-slate-800 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2.5">Time (UTC)</th>
+                                <th class="px-4 py-2.5">Symbol</th>
+                                <th class="px-4 py-2.5">Direction</th>
+                                <th class="px-4 py-2.5">Target Price</th>
+                                <th class="px-4 py-2.5">Trigger Price</th>
+                                <th class="px-4 py-2.5">Source</th>
+                                <th class="px-4 py-2.5">Note</th>
+                                <th class="px-4 py-2.5">State</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertHistoryTableBody" class="divide-y divide-slate-800">
+                            <!-- Populated dynamically via loadAlertHistory() -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="alertHistoryEmptyState" class="hidden p-6 text-center text-xs text-slate-500">
+                    No triggered alert events recorded yet.
+                </div>
+            </div>
+
+        </div>
+
     </div>
+
+    <!-- Toast Notification Container for Price Alerts -->
+    <div id="alertToastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
     <!-- Frontend Script -->
     <script>
@@ -580,6 +884,297 @@
             document.getElementById('noticeBanner').classList.add('hidden');
         }
 
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function formatPrice(val) {
+            if (val === null || val === undefined || isNaN(val)) return '--';
+            const num = Number(val);
+            if (num >= 100) return num.toFixed(2);
+            if (num >= 1) return num.toFixed(4);
+            return num.toFixed(5);
+        }
+
+        async function syncLiveAccount() {
+            const btn = document.getElementById('syncLiveAccountBtn');
+            const spinIcon = document.getElementById('syncLiveSpinIcon');
+            if (btn) btn.disabled = true;
+            if (spinIcon) spinIcon.classList.add('animate-spin');
+            try {
+                const res = await fetch('/api/account/sync', { method: 'POST' });
+                if (res.ok) {
+                    const accData = await res.json();
+                    renderLivePositions(accData);
+                    await fetchStatus();
+                    showNotice('Live AsterDEX account state refreshed successfully.', 'info');
+                } else {
+                    showNotice('Failed to refresh live AsterDEX account state.', 'error');
+                }
+            } catch (e) {
+                showNotice('Live sync error: ' + e.message, 'error');
+            } finally {
+                if (btn) btn.disabled = false;
+                if (spinIcon) spinIcon.classList.remove('animate-spin');
+            }
+        }
+
+        function renderLivePositions(acc) {
+            const container = document.getElementById('livePositionsContainer');
+            const countBadge = document.getElementById('livePosCountBadge');
+            const syncTimeEl = document.getElementById('livePosSyncTime');
+            const warningBanner = document.getElementById('livePosWarningBanner');
+            const warningText = document.getElementById('livePosWarningText');
+            const pulseEl = document.getElementById('livePosPulse');
+            const dotEl = document.getElementById('livePosDot');
+
+            if (!container) return;
+
+            // Handle missing or uninitialized account data
+            if (!acc || acc.status === 'ACCOUNT_DATA_UNAVAILABLE' || acc.status === 'UNAUTHENTICATED' || acc.status === 'ERROR') {
+                if (countBadge) {
+                    countBadge.innerText = 'OFFLINE';
+                    countBadge.className = 'px-2.5 py-0.5 text-xs font-semibold rounded-full bg-red-950 text-rose-300 border border-red-800 font-mono';
+                }
+                if (pulseEl) pulseEl.className = 'hidden';
+                if (dotEl) dotEl.className = 'relative inline-flex rounded-full h-3 w-3 bg-rose-500';
+                if (syncTimeEl) syncTimeEl.innerText = 'Sync: Unavailable';
+
+                if (warningBanner && warningText) {
+                    warningText.innerText = `Exchange account data unavailable (${acc && acc.error_message ? acc.error_message : 'No response'}). Paper trading and forward cohort continue unaffected.`;
+                    warningBanner.classList.remove('hidden');
+                }
+
+                container.innerHTML = `
+                    <div class="p-6 text-center rounded-lg bg-slate-900/40 border border-slate-800 text-slate-400 space-y-2">
+                        <div class="text-rose-400 font-semibold text-sm">Live Account Data Unavailable</div>
+                        <div class="text-xs text-slate-500 max-w-md mx-auto font-mono">
+                            ${escapeHtml(acc && acc.error_message ? acc.error_message : 'Unable to query Aster DEX authenticated endpoints.')}
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Staleness notification
+            if (acc.status === 'STALE_ACCOUNT_DATA' || acc.is_stale) {
+                if (warningBanner && warningText) {
+                    warningText.innerText = `Notice: Displaying cached AsterDEX position state (${acc.last_sync_age_seconds !== null && acc.last_sync_age_seconds !== undefined ? acc.last_sync_age_seconds + 's' : ''} old). New live orders cannot be fetched until connectivity restores.`;
+                    warningBanner.classList.remove('hidden');
+                }
+                if (pulseEl) pulseEl.className = 'hidden';
+                if (dotEl) dotEl.className = 'relative inline-flex rounded-full h-3 w-3 bg-amber-500';
+            } else {
+                if (warningBanner) warningBanner.classList.add('hidden');
+                if (pulseEl) pulseEl.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
+                if (dotEl) dotEl.className = 'relative inline-flex rounded-full h-3 w-3 bg-emerald-500';
+            }
+
+            // Sync timing display
+            const ageStr = (acc.last_sync_age_seconds !== null && acc.last_sync_age_seconds !== undefined)
+                ? `${acc.last_sync_age_seconds}s ago`
+                : (acc.last_sync_utc ? new Date(acc.last_sync_utc).toLocaleTimeString() : 'just now');
+            if (syncTimeEl) {
+                syncTimeEl.innerText = `Sync: ${ageStr}`;
+            }
+
+            const positions = acc.positions_summary || [];
+            if (countBadge) {
+                countBadge.innerText = `${positions.length} Open Position${positions.length === 1 ? '' : 's'}`;
+                countBadge.className = positions.length > 0
+                    ? 'px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono'
+                    : 'px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono';
+            }
+
+            // Zero-positions empty state
+            if (positions.length === 0) {
+                container.innerHTML = `
+                    <div class="p-6 text-center rounded-lg bg-slate-900/30 border border-slate-800 text-slate-400 space-y-2">
+                        <div class="text-slate-300 font-semibold text-sm">No open AsterDEX positions detected. Account is currently in cash.</div>
+                        <div class="text-xs text-slate-500 font-mono">
+                            Last checked at ${acc.last_sync_utc ? new Date(acc.last_sync_utc).toUTCString() : 'recent sync'} &bull; Ready to track live positions on AsterDEX perpetuals.
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render Desktop Table and Mobile Cards
+            let desktopRowsHtml = '';
+            let mobileCardsHtml = '';
+
+            positions.forEach(p => {
+                const isLong = p.side === 'LONG';
+                const sideBadgeClass = isLong
+                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                    : 'bg-rose-950 text-rose-400 border border-rose-800';
+
+                const marginModeBadge = p.margin_mode === 'ISOLATED'
+                    ? '<span class="px-1.5 py-0.5 text-[9px] font-mono font-semibold rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">ISOLATED</span>'
+                    : '<span class="px-1.5 py-0.5 text-[9px] font-mono font-semibold rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60">CROSS</span>';
+
+                const baseCoin = p.symbol ? p.symbol.replace(/USDT$/i, '') : '';
+                const upnl = Number(p.unrealized_pnl_usdt || 0);
+                const isUpnlPositive = upnl >= 0;
+                const upnlClass = isUpnlPositive ? 'text-emerald-400' : 'text-rose-400';
+                const upnlSign = isUpnlPositive ? '+' : '';
+
+                // Take Profit formatting
+                let tpDisplay = '<span class="text-slate-500 italic text-xs">Not configured</span>';
+                if (p.take_profit_price) {
+                    tpDisplay = `<span class="text-emerald-400 font-mono font-medium">${escapeHtml(p.take_profit_label || ('$' + formatPrice(p.take_profit_price)))}</span>`;
+                }
+
+                // Stop Loss formatting with explicit protection status
+                let slDisplay = '<span class="text-rose-400/80 italic text-xs font-medium">SL: Not configured (UNPROTECTED)</span>';
+                if (p.stop_loss_price) {
+                    const protBadge = p.protection_status === 'PARTIALLY_PROTECTED'
+                        ? '<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">PARTIAL</span>'
+                        : '<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-950 text-emerald-300 border border-emerald-800">PROTECTED</span>';
+                    slDisplay = `<span class="text-rose-400 font-mono font-medium">${escapeHtml(p.stop_loss_label || ('$' + formatPrice(p.stop_loss_price)))}</span>${protBadge}`;
+                }
+
+                // Liquidation Price formatting
+                let liqDisplay = '<span class="text-slate-500 italic text-xs">Unavailable</span>';
+                if (p.liquidation_price && Number(p.liquidation_price) > 0) {
+                    liqDisplay = `<span class="text-amber-400 font-mono font-semibold">$${formatPrice(p.liquidation_price)}</span>`;
+                } else if (p.liquidation_label) {
+                    liqDisplay = `<span class="text-slate-500 italic text-xs">${escapeHtml(p.liquidation_label)}</span>`;
+                }
+
+                // Allocated Margin formatting
+                const allocMarginDisplay = p.allocated_margin_label || `$${Number(p.allocated_margin_usdt || 0).toFixed(2)}`;
+
+                // Hedge mode indicator
+                const hedgeBadge = (p.position_side && p.position_side !== 'BOTH')
+                    ? `<span class="px-1.5 py-0.5 text-[9px] font-mono font-semibold rounded bg-purple-950 text-purple-300 border border-purple-800/60">${p.position_side}</span>`
+                    : '';
+
+                // Desktop Table Row
+                desktopRowsHtml += `
+                    <tr class="border-b border-slate-800/60 hover:bg-slate-800/30 transition font-mono text-xs">
+                        <td class="py-3 px-3">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-white text-sm font-sans">${escapeHtml(p.symbol)}</span>
+                                <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${sideBadgeClass}">${p.side} ${p.leverage}x</span>
+                                ${hedgeBadge}
+                                ${marginModeBadge}
+                            </div>
+                        </td>
+                        <td class="py-3 px-3">
+                            <div class="text-slate-200 font-medium">${p.position_amt} ${baseCoin}</div>
+                            <div class="text-[11px] text-slate-400 font-normal">$${Number(p.notional_usdt || 0).toFixed(2)} USDT</div>
+                        </td>
+                        <td class="py-3 px-3">
+                            <div class="text-slate-200 font-medium">$${formatPrice(p.entry_price)}</div>
+                            <div class="text-[11px] text-slate-400 font-normal">Mark: $${formatPrice(p.mark_price)}</div>
+                        </td>
+                        <td class="py-3 px-3">
+                            <div class="text-slate-200">${allocMarginDisplay}</div>
+                            <div class="text-[10px] text-slate-500">${p.margin_mode === 'ISOLATED' ? 'Allocated' : 'Cross Initial'}</div>
+                        </td>
+                        <td class="py-3 px-3">
+                            <div>${tpDisplay}</div>
+                            <div class="mt-0.5">${slDisplay}</div>
+                        </td>
+                        <td class="py-3 px-3">
+                            <div>${liqDisplay}</div>
+                        </td>
+                        <td class="py-3 px-3 text-right">
+                            <div class="font-bold ${upnlClass}">${upnlSign}$${upnl.toFixed(4)} USDT</div>
+                            <div class="text-[11px] ${upnlClass} font-semibold">${upnlSign}${Number(p.roe_pct || 0).toFixed(2)}% <span class="text-[10px] text-slate-400 font-normal">(ROE vs Margin)</span></div>
+                            <div class="text-[10px] text-slate-500 font-normal">${upnlSign}${Number(p.roi_pct || 0).toFixed(2)}% (ROI vs Notional)</div>
+                        </td>
+                    </tr>
+                `;
+
+                // Mobile Card View
+                mobileCardsHtml += `
+                    <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-white text-base font-sans">${escapeHtml(p.symbol)}</span>
+                                <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${sideBadgeClass}">${p.side} ${p.leverage}x</span>
+                                ${hedgeBadge}
+                                ${marginModeBadge}
+                            </div>
+                            <div class="text-right">
+                                <div class="font-bold text-sm ${upnlClass} font-mono">${upnlSign}$${upnl.toFixed(4)}</div>
+                                <div class="text-[11px] ${upnlClass} font-mono font-semibold">${upnlSign}${Number(p.roe_pct || 0).toFixed(2)}% ROE</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-slate-800/80">
+                            <div>
+                                <span class="text-slate-500 block text-[10px] uppercase">Size / Notional</span>
+                                <span class="text-slate-200 font-medium">${p.position_amt} ${baseCoin}</span>
+                                <span class="text-slate-400 block text-[11px]">$${Number(p.notional_usdt || 0).toFixed(2)} USDT</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-500 block text-[10px] uppercase">Entry / Mark</span>
+                                <span class="text-slate-200 font-medium">$${formatPrice(p.entry_price)}</span>
+                                <span class="text-slate-400 block text-[11px]">Mark: $${formatPrice(p.mark_price)}</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-500 block text-[10px] uppercase">Allocated Margin</span>
+                                <span class="text-slate-200">${allocMarginDisplay}</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-500 block text-[10px] uppercase">Liquidation Price</span>
+                                <span>${liqDisplay}</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-500 block text-[10px] uppercase">Take Profit (TP)</span>
+                                <span>${tpDisplay}</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-500 block text-[10px] uppercase">Stop Loss (SL)</span>
+                                <span>${slDisplay}</span>
+                            </div>
+                        </div>
+
+                        <div class="text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-800/60 flex items-center justify-between">
+                            <span>Denominator: ${escapeHtml(p.denominator_label || 'Allocated Margin')}</span>
+                            <span>ROI: ${upnlSign}${Number(p.roi_pct || 0).toFixed(2)}% (on Notional)</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = `
+                <!-- Desktop Table View -->
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider font-semibold">
+                                <th class="py-2 px-3">Symbol & Mode</th>
+                                <th class="py-2 px-3">Size & Notional</th>
+                                <th class="py-2 px-3">Entry / Mark</th>
+                                <th class="py-2 px-3">Allocated Margin</th>
+                                <th class="py-2 px-3">TP / SL Targets</th>
+                                <th class="py-2 px-3">Liquidation</th>
+                                <th class="py-2 px-3 text-right">Unrealized PnL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${desktopRowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Cards View -->
+                <div class="block md:hidden space-y-3">
+                    ${mobileCardsHtml}
+                </div>
+            `;
+        }
+
         // Account Status Polling (Every 15s)
         async function fetchStatus() {
             try {
@@ -588,19 +1183,92 @@
                 const data = await res.json();
                 
                 document.getElementById('modeBadge').innerText = data.mode;
-                document.getElementById('equityDisplay').innerText = `$${data.capital.current_equity_usdt.toFixed(2)} USDT`;
-                const minM = data.risk_limits.target_isolated_margin_usdt !== undefined ? data.risk_limits.target_isolated_margin_usdt.toFixed(2) : '6.00';
-                const maxM = data.risk_limits.target_isolated_margin_max_usdt !== undefined ? data.risk_limits.target_isolated_margin_max_usdt.toFixed(2) : '6.50';
-                const targetMarginEl = document.getElementById('targetMarginDisplay');
-                if (targetMarginEl) targetMarginEl.innerText = `$${minM}–$${maxM}`;
-                const hardRiskEl = document.getElementById('hardRiskDisplay');
-                if (hardRiskEl && data.risk_limits.hard_risk_limit_usdt !== undefined) {
-                    hardRiskEl.innerText = `Hard Risk Limit: $${data.risk_limits.hard_risk_limit_usdt.toFixed(2)}`;
+
+                // Account Equity & AsterDEX Live Balance Card
+                const acc = data.account;
+                const equityEl = document.getElementById('equityDisplay');
+                const badgeEl = document.getElementById('accountConnBadge');
+                const availEl = document.getElementById('availBalDisplay');
+                const usedEl = document.getElementById('usedMarginDisplay');
+                const upnlEl = document.getElementById('unrealizedPnlDisplay');
+                const syncEl = document.getElementById('accountSyncTimeDisplay');
+
+                if (acc && acc.status === 'CONNECTED' && acc.total_equity_usdt !== null && acc.total_equity_usdt !== undefined) {
+                    equityEl.innerText = `$${Number(acc.total_equity_usdt).toFixed(2)} USDT`;
+                    badgeEl.innerText = '● LIVE CONNECTED';
+                    badgeEl.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-700';
+                    if (availEl) availEl.innerText = `$${Number(acc.available_balance_usdt || 0).toFixed(2)}`;
+                    if (usedEl) usedEl.innerText = `$${Number(acc.used_margin_usdt || 0).toFixed(2)}`;
+                    if (upnlEl) {
+                        const upnl = Number(acc.unrealized_pnl_usdt || 0);
+                        upnlEl.innerText = `${upnl >= 0 ? '+' : ''}$${upnl.toFixed(2)}`;
+                        upnlEl.className = upnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+                    }
+                    if (syncEl) {
+                        const ageStr = acc.last_sync_age_seconds !== null && acc.last_sync_age_seconds !== undefined ? `${acc.last_sync_age_seconds}s ago` : 'just now';
+                        syncEl.innerText = `Synced: ${ageStr}`;
+                    }
+                } else if (acc && acc.status === 'STALE_ACCOUNT_DATA') {
+                    if (acc.total_equity_usdt !== null) {
+                        equityEl.innerText = `$${Number(acc.total_equity_usdt).toFixed(2)} USDT`;
+                    }
+                    badgeEl.innerText = '● STALE DATA';
+                    badgeEl.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-700';
+                    if (syncEl) syncEl.innerText = `Stale cache (${acc.last_sync_age_seconds}s ago)`;
+                } else {
+                    equityEl.innerText = 'UNAVAILABLE';
+                    badgeEl.innerText = acc ? `● ${acc.status}` : '● UNAVAILABLE';
+                    badgeEl.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-950 text-rose-400 border border-red-700';
+                    if (availEl) availEl.innerText = '--';
+                    if (usedEl) usedEl.innerText = '--';
+                    if (upnlEl) upnlEl.innerText = '--';
+                    if (syncEl) syncEl.innerText = 'Exchange sync required';
                 }
+
+                // Header Live Equity Display
+                const headerLiveEquityEl = document.getElementById('headerLiveEquityDisplay');
+                if (headerLiveEquityEl) {
+                    if (acc && acc.total_equity_usdt !== null && acc.total_equity_usdt !== undefined) {
+                        headerLiveEquityEl.innerText = `$${Number(acc.total_equity_usdt).toFixed(2)} USDT`;
+                    } else {
+                        headerLiveEquityEl.innerText = '--';
+                    }
+                }
+
+                // Update Live Exchange Position Count in Exposure Card
+                const livePosCardEl = document.getElementById('livePosCardCount');
+                if (livePosCardEl) {
+                    const lCount = (acc && acc.open_positions_count !== undefined)
+                        ? acc.open_positions_count
+                        : (acc && acc.positions_summary ? acc.positions_summary.length : '--');
+                    livePosCardEl.innerText = `Live Exchange Pos: ${lCount} Active`;
+                }
+
+                // Render Live AsterDEX Positions Panel
+                renderLivePositions(acc);
+
+                // Target Isolated Margin & Tier
+                if (data.capital && data.capital.active_tier) {
+                    const at = data.capital.active_tier;
+                    const targetMarginEl = document.getElementById('targetMarginDisplay');
+                    if (targetMarginEl) targetMarginEl.innerText = `$${at.target_margin_min.toFixed(2)}–$${at.target_margin_max.toFixed(2)}`;
+                    const hardRiskEl = document.getElementById('hardRiskDisplay');
+                    if (hardRiskEl) hardRiskEl.innerText = `${at.tier_name} (${data.capital.margin_mode} \u2022 ${data.capital.max_leverage}x)`;
+                } else {
+                    const minM = data.risk_limits.target_isolated_margin_usdt !== undefined ? data.risk_limits.target_isolated_margin_usdt.toFixed(2) : '6.00';
+                    const maxM = data.risk_limits.target_isolated_margin_max_usdt !== undefined ? data.risk_limits.target_isolated_margin_max_usdt.toFixed(2) : '6.50';
+                    const targetMarginEl = document.getElementById('targetMarginDisplay');
+                    if (targetMarginEl) targetMarginEl.innerText = `$${minM}–$${maxM}`;
+                    const hardRiskEl = document.getElementById('hardRiskDisplay');
+                    if (hardRiskEl && data.risk_limits.hard_risk_limit_usdt !== undefined) {
+                        hardRiskEl.innerText = `Hard Risk Limit: $${data.risk_limits.hard_risk_limit_usdt.toFixed(2)}`;
+                    }
+                }
+
                 document.getElementById('dailyLossDisplay').innerText = `$${data.risk_limits.daily_loss_used_usdt.toFixed(2)} / $${data.risk_limits.daily_loss_limit_usdt.toFixed(2)}`;
                 document.getElementById('weeklyLossDisplay').innerText = `$${data.risk_limits.weekly_loss_used_usdt.toFixed(2)} / $${data.risk_limits.weekly_loss_limit_usdt.toFixed(2)}`;
-                document.getElementById('capsDisplay').innerText = `${data.risk_limits.open_positions} / ${data.risk_limits.max_open_positions} Open Pos`;
-                document.getElementById('entriesDisplay').innerText = `Entries This Week: ${data.risk_limits.weekly_entries}`;
+                document.getElementById('capsDisplay').innerText = `${data.risk_limits.open_positions} / ${data.risk_limits.max_open_positions} Paper Pos`;
+                document.getElementById('entriesDisplay').innerText = `Entries This Week: ${data.risk_limits.weekly_entries} (Paper)`;
 
                 // Scanner State & Metadata
                 if (data.scanner) {
@@ -1614,7 +2282,7 @@
         }
 
         function switchTab(tabId) {
-            ['setups', 'backtest', 'watchlist', 'journal'].forEach(t => {
+            ['setups', 'backtest', 'watchlist', 'journal', 'alerts'].forEach(t => {
                 document.getElementById(`tab-${t}`).classList.add('hidden');
                 document.getElementById(`tabBtn-${t}`).className = 'pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200';
             });
@@ -1624,7 +2292,673 @@
             if (tabId === 'watchlist') loadWatchlist();
             if (tabId === 'journal') loadJournal();
             if (tabId === 'backtest') loadBacktest();
+            if (tabId === 'alerts') loadAlerts();
         }
+
+        // =========================================================================
+        // UNIVERSAL ASTERDEX PERPETUAL PRICE ALERTS JAVASCRIPT
+        // =========================================================================
+        let alertsFilter = 'ALL';
+        let cachedAlertSymbols = [];
+        let selectedAlertSymbolItem = null;
+        let soundAlertsEnabled = localStorage.getItem('soundAlertsEnabled') !== 'false';
+        let seenAlertEventIds = new Set();
+        let alertsInitialized = false;
+
+        // Initialize audio checkbox state
+        const soundCb = document.getElementById('soundToggleCheckbox');
+        if (soundCb) soundCb.checked = soundAlertsEnabled;
+
+        function toggleSoundAlerts(enabled) {
+            soundAlertsEnabled = Boolean(enabled);
+            localStorage.setItem('soundAlertsEnabled', String(soundAlertsEnabled));
+            if (soundAlertsEnabled) {
+                playAlertChime();
+            }
+        }
+
+        function playAlertChime() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(587.33, now); // D5
+                osc1.frequency.exponentialRampToValueAtTime(880.00, now + 0.12); // A5
+
+                osc2.type = 'triangle';
+                osc2.frequency.setValueAtTime(880.00, now + 0.12); // A5
+                osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.32); // D6
+
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc1.start(now);
+                osc2.start(now + 0.12);
+                osc1.stop(now + 0.42);
+                osc2.stop(now + 0.42);
+            } catch (e) {
+                console.warn("Web Audio chime failed:", e);
+            }
+        }
+
+        function testAlertAudio() {
+            playAlertChime();
+            showToastNotification({
+                symbol: "TESTUSDT",
+                direction: "PRICE_ABOVE",
+                target_price: 100.0,
+                trigger_price: 100.25,
+                triggered_at: new Date().toISOString(),
+                note: "Audio chime test notification"
+            });
+        }
+
+        async function testAlertDiscord() {
+            try {
+                showNotice('Sending test alert to Discord...', 'info');
+                const res = await fetch('/api/alerts/discord/test', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showNotice(`Discord test notification sent successfully (${data.webhook_masked || 'active'})!`, 'success');
+                } else {
+                    showNotice(`Discord test failed: ${data.detail || data.message || 'Delivery error'}`, 'error');
+                }
+            } catch (err) {
+                showNotice(`Failed to test Discord webhook: ${err.message}`, 'error');
+            }
+        }
+
+        function showToastNotification(ev) {
+            const container = document.getElementById('alertToastContainer');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = 'pointer-events-auto card-bg p-4 rounded-xl border border-indigo-500/60 shadow-2xl flex items-start gap-3 transform transition-all duration-300 translate-y-2 opacity-0';
+            const isAbove = ev.direction === 'PRICE_ABOVE';
+            const dirColor = isAbove ? 'text-emerald-400 bg-emerald-950 border-emerald-800' : 'text-red-400 bg-red-950 border-red-800';
+            const dirIcon = isAbove ? '↑' : '↓';
+
+            toast.innerHTML = `
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm border ${dirColor} shrink-0">
+                    ${dirIcon}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-bold text-white tracking-wide">${escapeHtml(ev.symbol)}</span>
+                        <span class="text-[10px] font-mono text-slate-400">${new Date(ev.triggered_at).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="text-xs text-slate-300 mt-0.5">
+                        Price ${isAbove ? 'rose above' : 'fell below'} <strong class="text-white font-mono">$${formatPrice(ev.target_price)}</strong>
+                    </div>
+                    <div class="text-[11px] font-mono text-indigo-300 mt-0.5">
+                        Triggered at: <strong>$${formatPrice(ev.trigger_price)}</strong>
+                    </div>
+                    ${ev.note ? `<div class="text-[11px] text-slate-400 mt-1 italic">"${escapeHtml(ev.note)}"</div>` : ''}
+                </div>
+                <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white text-base leading-none">&times;</button>
+            `;
+
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            // Auto dismiss after 9 seconds
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 350);
+            }, 9000);
+        }
+
+        async function fetchAlertSymbols() {
+            try {
+                const res = await fetch('/api/alerts/symbols');
+                if (res.ok) {
+                    cachedAlertSymbols = await res.json();
+                    const universeCount = document.getElementById('universeSymbolsCount');
+                    if (universeCount) universeCount.innerText = `${cachedAlertSymbols.length} Contracts`;
+                }
+            } catch (err) {
+                console.warn("Error fetching alert symbols:", err);
+            }
+        }
+
+        function handleSymbolFocus() {
+            const input = document.getElementById('alertSymbolInput');
+            handleSymbolSearch(input.value);
+        }
+
+        function handleSymbolSearch(query) {
+            const dropdown = document.getElementById('symbolDropdownList');
+            if (!dropdown) return;
+
+            const q = (query || '').trim().toUpperCase();
+            let matches = cachedAlertSymbols;
+            if (q) {
+                matches = cachedAlertSymbols.filter(s => s.symbol.includes(q) || s.base_asset.includes(q));
+            }
+            matches = matches.slice(0, 40); // Top 40 results
+
+            if (matches.length === 0) {
+                dropdown.innerHTML = `<div class="p-3 text-slate-500 text-center">No matching perpetual contracts found</div>`;
+                dropdown.classList.remove('hidden');
+                return;
+            }
+
+            dropdown.innerHTML = matches.map(s => `
+                <div onclick="selectAlertSymbol('${s.symbol}')" class="p-2 hover:bg-slate-800 cursor-pointer flex items-center justify-between transition">
+                    <div>
+                        <span class="font-bold text-white">${s.symbol}</span>
+                        <span class="text-slate-500 text-[10px] ml-1">(${s.base_asset}/USDT)</span>
+                    </div>
+                    <div class="text-right font-mono">
+                        <div class="text-emerald-400 font-semibold">$${formatPrice(s.mark_price || s.last_price)}</div>
+                        <div class="text-[10px] text-slate-500">Tick: ${s.tick_size}</div>
+                    </div>
+                </div>
+            `).join('');
+            dropdown.classList.remove('hidden');
+        }
+
+        // Close symbol dropdown on click outside
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('symbolDropdownList');
+            const input = document.getElementById('alertSymbolInput');
+            if (dropdown && !dropdown.contains(e.target) && e.target !== input) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        function selectAlertSymbol(symbol) {
+            const sym = cachedAlertSymbols.find(s => s.symbol === symbol);
+            if (!sym) return;
+
+            selectedAlertSymbolItem = sym;
+            const input = document.getElementById('alertSymbolInput');
+            input.value = sym.symbol;
+
+            const details = document.getElementById('selectedSymbolDetails');
+            const markDisplay = document.getElementById('symMarkDisplay');
+            const lastDisplay = document.getElementById('symLastDisplay');
+            const fillBtn = document.getElementById('fillPriceBtn');
+
+            markDisplay.innerText = `$${formatPrice(sym.mark_price)}`;
+            lastDisplay.innerText = `$${formatPrice(sym.last_price)}`;
+            details.classList.remove('hidden');
+            if (fillBtn) fillBtn.classList.remove('hidden');
+
+            const dropdown = document.getElementById('symbolDropdownList');
+            if (dropdown) dropdown.classList.add('hidden');
+
+            // Default target price to current price if empty
+            const targetInput = document.getElementById('alertTargetPrice');
+            if (!targetInput.value) {
+                targetInput.value = (sym.mark_price || sym.last_price || '');
+            }
+        }
+
+        function fillSelectedPrice() {
+            if (!selectedAlertSymbolItem) return;
+            const src = document.getElementById('alertPriceSource').value;
+            const price = src === 'MARK_PRICE' ? selectedAlertSymbolItem.mark_price : selectedAlertSymbolItem.last_price;
+            if (price) {
+                document.getElementById('alertTargetPrice').value = price;
+            }
+        }
+
+        async function handleAlertFormSubmit(event) {
+            event.preventDefault();
+            const editId = document.getElementById('editingAlertId').value;
+            const symbol = document.getElementById('alertSymbolInput').value.trim().toUpperCase();
+            const targetPrice = parseFloat(document.getElementById('alertTargetPrice').value);
+            const direction = document.getElementById('alertDirection').value;
+            const priceSource = document.getElementById('alertPriceSource').value;
+            const alertType = document.getElementById('alertRecurrence').value;
+            const note = document.getElementById('alertNote').value.trim();
+
+            if (!symbol || isNaN(targetPrice) || targetPrice <= 0) {
+                showNotice('Please enter a valid symbol and a positive target price.', 'warn');
+                return;
+            }
+
+            const submitBtn = document.getElementById('alertSubmitBtn');
+            submitBtn.disabled = true;
+
+            try {
+                if (editId) {
+                    // Update existing alert
+                    const res = await fetch(`/api/alerts/${editId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            target_price: targetPrice,
+                            direction: direction,
+                            price_source: priceSource,
+                            alert_type: alertType,
+                            note: note
+                        })
+                    });
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.detail || 'Failed to update alert');
+                    }
+                    showNotice(`Alert for ${symbol} updated successfully.`);
+                } else {
+                    // Create new alert
+                    const res = await fetch('/api/alerts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            symbol: symbol,
+                            target_price: targetPrice,
+                            direction: direction,
+                            price_source: priceSource,
+                            alert_type: alertType,
+                            note: note
+                        })
+                    });
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.detail || 'Failed to create alert');
+                    }
+                    showNotice(`Price alert for ${symbol} created.`);
+                }
+                resetAlertForm();
+                await loadAlerts();
+            } catch (err) {
+                showNotice(err.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        function resetAlertForm() {
+            document.getElementById('editingAlertId').value = '';
+            const symInput = document.getElementById('alertSymbolInput');
+            symInput.value = '';
+            symInput.disabled = false;
+            document.getElementById('alertTargetPrice').value = '';
+            document.getElementById('alertNote').value = '';
+            document.getElementById('alertFormHeading').innerText = 'Create Price Alert';
+            document.getElementById('alertSubmitBtnText').innerText = 'Create Alert';
+            document.getElementById('alertCancelBtn').classList.add('hidden');
+            document.getElementById('selectedSymbolDetails').classList.add('hidden');
+            document.getElementById('fillPriceBtn').classList.add('hidden');
+            selectedAlertSymbolItem = null;
+        }
+
+        function setAlertsFilter(filter) {
+            alertsFilter = filter;
+            ['ALL', 'ACTIVE', 'TRIGGERED', 'DISABLED'].forEach(f => {
+                const btn = document.getElementById(`alertFilter-${f}`);
+                if (btn) {
+                    if (f === filter) {
+                        btn.className = 'px-2.5 py-1 rounded-md font-semibold bg-indigo-600 text-white';
+                    } else {
+                        btn.className = 'px-2.5 py-1 rounded-md text-slate-400 hover:text-white';
+                    }
+                }
+            });
+            loadAlerts();
+        }
+
+        async function loadAlerts(manual = false) {
+            try {
+                if (cachedAlertSymbols.length === 0) {
+                    await fetchAlertSymbols();
+                }
+
+                // 1. Fetch alerts and status
+                const [alertsRes, statusRes] = await Promise.all([
+                    fetch('/api/alerts'),
+                    fetch('/api/alerts/status')
+                ]);
+
+                if (!alertsRes.ok || !statusRes.ok) return;
+
+                const alerts = await alertsRes.json();
+                const status = await statusRes.json();
+
+                // Update Telemetry Header Cards
+                document.getElementById('alertsTotalCount').innerText = alerts.length;
+                document.getElementById('alertsActivePill').innerText = `${status.active_alerts} Active`;
+                document.getElementById('alertsTriggeredCount').innerText = status.triggered_alerts;
+                document.getElementById('alertsStaleCount').innerText = status.stale_alerts;
+
+                const activeBadge = document.getElementById('alertsActiveBadge');
+                if (activeBadge) {
+                    activeBadge.innerText = status.active_alerts;
+                    if (status.active_alerts > 0) activeBadge.classList.remove('hidden');
+                    else activeBadge.classList.add('hidden');
+                }
+
+                if (status.market_data) {
+                    const md = status.market_data;
+                    const ageEl = document.getElementById('feedAgeDisplay');
+                    if (ageEl) ageEl.innerText = md.last_poll_age_sec !== null ? `Age: ${md.last_poll_age_sec}s` : 'Age: --s';
+
+                    const pollsEl = document.getElementById('feedPollsDisplay');
+                    if (pollsEl) pollsEl.innerText = `Polls: ${md.poll_count}`;
+
+                    const healthEl = document.getElementById('feedHealthBadge');
+                    if (healthEl) {
+                        if (md.is_healthy) {
+                            healthEl.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800';
+                            healthEl.innerText = 'HEALTHY';
+                        } else {
+                            healthEl.className = 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800';
+                            healthEl.innerText = 'STALE FEED';
+                        }
+                    }
+                }
+
+                // Update Discord Telemetry
+                if (status.discord) {
+                    const dBadge = document.getElementById('discordAlertBadge');
+                    const dWebhook = document.getElementById('discordWebhookDisplay');
+                    const dBtn = document.getElementById('testDiscordBtn');
+
+                    if (dBadge) {
+                        if (status.discord.enabled) {
+                            dBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950 text-indigo-400 border border-indigo-800';
+                            dBadge.innerText = 'DISCORD: ON';
+                        } else {
+                            dBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700';
+                            dBadge.innerText = 'DISCORD: OFF';
+                        }
+                    }
+
+                    if (dWebhook) {
+                        if (status.discord.webhook_masked) {
+                            dWebhook.innerText = `Webhook: ${status.discord.webhook_masked}`;
+                            dWebhook.title = `Masked URL: ${status.discord.webhook_masked} (Delivered: ${status.discord.delivered_count || 0}, Failed: ${status.discord.failed_count || 0})`;
+                        } else {
+                            dWebhook.innerText = 'Webhook: [NOT CONFIGURED]';
+                            dWebhook.title = 'Configure DISCORD_PRICE_ALERT_WEBHOOK_URL to enable notifications.';
+                        }
+                    }
+
+                    if (dBtn) {
+                        if (status.discord.enabled) {
+                            dBtn.classList.remove('hidden');
+                        } else {
+                            dBtn.classList.add('hidden');
+                        }
+                    }
+                }
+
+                // Filter alerts
+                let filtered = alerts;
+                if (alertsFilter === 'ACTIVE') {
+                    filtered = alerts.filter(a => a.is_active);
+                } else if (alertsFilter === 'TRIGGERED') {
+                    filtered = alerts.filter(a => a.status === 'TRIGGERED');
+                } else if (alertsFilter === 'DISABLED') {
+                    filtered = alerts.filter(a => !a.is_active || a.status === 'DISABLED');
+                }
+
+                // Render Table
+                const tbody = document.getElementById('alertsTableBody');
+                const emptyState = document.getElementById('alertsEmptyState');
+
+                if (filtered.length === 0) {
+                    tbody.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                } else {
+                    emptyState.classList.add('hidden');
+                    tbody.innerHTML = filtered.map(a => renderAlertRow(a)).join('');
+                }
+
+                // Also refresh history
+                await loadAlertHistory();
+
+            } catch (err) {
+                console.error("Error loading alerts:", err);
+            }
+        }
+
+        function renderAlertRow(a) {
+            const isAbove = a.direction === 'PRICE_ABOVE';
+            const dirIcon = isAbove ? '↑' : '↓';
+            const dirClass = isAbove ? 'text-emerald-400' : 'text-red-400';
+            const dirLabel = isAbove ? 'Crosses Above' : 'Crosses Below';
+
+            // Distance calculation
+            let distHtml = '<span class="text-slate-500">--</span>';
+            if (a.current_price !== null && a.current_price !== undefined) {
+                const isClose = Math.abs(a.distance_pct || 0) < 1.0;
+                const distClass = (a.distance_pct >= 0) ? 'text-emerald-400' : 'text-amber-400';
+                distHtml = `
+                    <div class="font-mono">
+                        <span class="text-white font-semibold">$${formatPrice(a.current_price)}</span>
+                        <span class="ml-1 text-[10px] ${distClass} font-bold">(${a.distance_pct > 0 ? '+' : ''}${a.distance_pct}%)</span>
+                    </div>
+                `;
+            }
+
+            // Status Badge
+            let statusBadge = '';
+            if (a.status === 'ACTIVE') {
+                statusBadge = a.armed 
+                    ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold badge-green">ARMED</span>'
+                    : '<span class="px-2 py-0.5 rounded text-[10px] font-bold badge-yellow">UNARMED (Awaiting Crossback)</span>';
+            } else if (a.status === 'TRIGGERED') {
+                statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold badge-blue">TRIGGERED</span>';
+            } else if (a.status === 'DISABLED') {
+                statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold badge-gray">DISABLED</span>';
+            } else if (a.status === 'STALE') {
+                statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">STALE DATA</span>';
+            } else {
+                statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold badge-red">${a.status}</span>`;
+            }
+
+            const modeLabel = a.alert_type === 'RECURRING'
+                ? '<span class="text-indigo-400 font-mono">RECURRING</span>'
+                : '<span class="text-slate-400 font-mono">ONE-OFF</span>';
+
+            const toggleBtnText = a.is_active ? 'Pause' : 'Resume';
+            const toggleBtnColor = a.is_active ? 'text-amber-400 hover:text-amber-300' : 'text-emerald-400 hover:text-emerald-300';
+
+            return `
+                <tr class="hover:bg-slate-800/50 transition">
+                    <td class="px-4 py-3">
+                        <div class="font-bold text-white font-mono">${escapeHtml(a.symbol)}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">${a.price_source === 'MARK_PRICE' ? 'Mark' : 'Last'} Price</div>
+                    </td>
+                    <td class="px-4 py-3 font-mono">
+                        <div class="text-white font-bold">$${formatPrice(a.target_price)}</div>
+                        <div class="text-[10px] ${dirClass} font-semibold">${dirIcon} ${dirLabel}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        ${distHtml}
+                    </td>
+                    <td class="px-4 py-3 text-[11px]">
+                        <div>${modeLabel}</div>
+                        <div class="text-[10px] text-slate-500">${a.trigger_count} triggers</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        ${statusBadge}
+                    </td>
+                    <td class="px-4 py-3 text-slate-300 text-xs max-w-xs truncate" title="${escapeHtml(a.note)}">
+                        ${a.note ? escapeHtml(a.note) : '<span class="text-slate-600">--</span>'}
+                    </td>
+                    <td class="px-4 py-3 text-[10px] font-mono text-slate-400">
+                        <div>Created: ${new Date(a.created_at).toLocaleDateString()}</div>
+                        ${a.last_triggered_at ? `<div class="text-amber-400">Trig: ${new Date(a.last_triggered_at).toLocaleTimeString()}</div>` : ''}
+                    </td>
+                    <td class="px-4 py-3 text-right space-x-2">
+                        <button onclick="toggleAlertState('${a.alert_id}')" class="text-xs font-semibold ${toggleBtnColor} transition">${toggleBtnText}</button>
+                        <button onclick="editAlert('${a.alert_id}')" class="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition">Edit</button>
+                        <button onclick="deleteAlert('${a.alert_id}')" class="text-xs font-semibold text-red-400 hover:text-red-300 transition">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }
+
+        async function editAlert(alertId) {
+            try {
+                const res = await fetch(`/api/alerts/${alertId}`);
+                if (!res.ok) return;
+                const a = await res.json();
+
+                document.getElementById('editingAlertId').value = a.alert_id;
+                const symInput = document.getElementById('alertSymbolInput');
+                symInput.value = a.symbol;
+                symInput.disabled = true; // Keep symbol locked during edit
+
+                document.getElementById('alertTargetPrice').value = a.target_price;
+                document.getElementById('alertDirection').value = a.direction;
+                document.getElementById('alertPriceSource').value = a.price_source;
+                document.getElementById('alertRecurrence').value = a.alert_type;
+                document.getElementById('alertNote').value = a.note || '';
+
+                document.getElementById('alertFormHeading').innerText = `Edit Alert: ${a.symbol}`;
+                document.getElementById('alertSubmitBtnText').innerText = 'Save Changes';
+                document.getElementById('alertCancelBtn').classList.remove('hidden');
+
+                // Scroll to form smoothly
+                document.getElementById('priceAlertForm').scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                showNotice('Failed to load alert details for editing.', 'error');
+            }
+        }
+
+        async function toggleAlertState(alertId) {
+            try {
+                const res = await fetch(`/api/alerts/${alertId}/toggle`, { method: 'PATCH' });
+                if (res.ok) {
+                    await loadAlerts();
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    showNotice(data.detail || 'Failed to toggle alert.', 'error');
+                }
+            } catch (err) {
+                showNotice(err.message, 'error');
+            }
+        }
+
+        async function deleteAlert(alertId) {
+            if (!confirm('Are you sure you want to delete this price alert?')) return;
+            try {
+                const res = await fetch(`/api/alerts/${alertId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showNotice('Price alert deleted.');
+                    await loadAlerts();
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    showNotice(data.detail || 'Failed to delete alert.', 'error');
+                }
+            } catch (err) {
+                showNotice(err.message, 'error');
+            }
+        }
+
+        async function loadAlertHistory() {
+            try {
+                const res = await fetch('/api/alerts/history?limit=50');
+                if (!res.ok) return;
+                const events = await res.json();
+
+                const unackCount = events.filter(e => !e.acknowledged).length;
+                const unackBadge = document.getElementById('unackBadge');
+                if (unackBadge) {
+                    unackBadge.innerText = `${unackCount} Unack`;
+                    if (unackCount > 0) unackBadge.classList.remove('hidden');
+                    else unackBadge.classList.add('hidden');
+                }
+
+                // Check for new events to trigger toast and chime
+                if (alertsInitialized) {
+                    for (const ev of events) {
+                        if (!seenAlertEventIds.has(ev.event_id) && !ev.acknowledged) {
+                            showToastNotification(ev);
+                            playAlertChime();
+                            seenAlertEventIds.add(ev.event_id);
+                        }
+                    }
+                } else {
+                    events.forEach(e => seenAlertEventIds.add(e.event_id));
+                    alertsInitialized = true;
+                }
+
+                const tbody = document.getElementById('alertHistoryTableBody');
+                const emptyEl = document.getElementById('alertHistoryEmptyState');
+
+                if (events.length === 0) {
+                    tbody.innerHTML = '';
+                    emptyEl.classList.remove('hidden');
+                } else {
+                    emptyEl.classList.add('hidden');
+                    tbody.innerHTML = events.map(e => `
+                        <tr class="hover:bg-slate-800/40 font-mono text-[11px] transition">
+                            <td class="px-4 py-2 text-slate-400">${new Date(e.triggered_at).toLocaleString()}</td>
+                            <td class="px-4 py-2 font-bold text-white">${escapeHtml(e.symbol)}</td>
+                            <td class="px-4 py-2 ${e.direction === 'PRICE_ABOVE' ? 'text-emerald-400' : 'text-red-400'} font-semibold">
+                                ${e.direction === 'PRICE_ABOVE' ? '↑ ABOVE' : '↓ BELOW'}
+                            </td>
+                            <td class="px-4 py-2 text-slate-300">$${formatPrice(e.target_price)}</td>
+                            <td class="px-4 py-2 font-bold text-indigo-300">$${formatPrice(e.trigger_price)}</td>
+                            <td class="px-4 py-2 text-slate-400 text-[10px]">${e.price_source === 'MARK_PRICE' ? 'Mark' : 'Last'}</td>
+                            <td class="px-4 py-2 text-slate-400 italic font-sans max-w-xs truncate">${e.note ? escapeHtml(e.note) : '--'}</td>
+                            <td class="px-4 py-2">
+                                ${e.acknowledged 
+                                    ? '<span class="text-slate-500 font-sans text-[10px]">Seen</span>' 
+                                    : '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-900/60 text-amber-300 border border-amber-700/60 font-sans">NEW</span>'}
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error("Error loading alert history:", err);
+            }
+        }
+
+        async function ackAllAlertEvents() {
+            try {
+                await fetch('/api/alerts/history/ack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                await loadAlertHistory();
+            } catch (err) {
+                console.error("Error acknowledging events:", err);
+            }
+        }
+
+        async function clearAlertHistory() {
+            if (!confirm('Clear all historical alert trigger logs?')) return;
+            try {
+                await fetch('/api/alerts/history', { method: 'DELETE' });
+                seenAlertEventIds.clear();
+                await loadAlertHistory();
+            } catch (err) {
+                console.error("Error clearing history:", err);
+            }
+        }
+
+        // Periodic polling for price alerts and trigger events (every 5 seconds)
+        setInterval(() => {
+            loadAlertHistory();
+            const alertsTab = document.getElementById('tab-alerts');
+            if (alertsTab && !alertsTab.classList.contains('hidden')) {
+                loadAlerts();
+            }
+        }, 5000);
+
+        // Fetch initial alerts telemetry on page load
+        fetchAlertSymbols();
 
         // Automatic Independent Periodic Polling
         // 1. Account status and risk limits refresh every 15 seconds

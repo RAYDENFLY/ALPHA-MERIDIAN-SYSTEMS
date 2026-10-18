@@ -277,6 +277,11 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
         """Call V3 noop endpoint to test signed request connectivity without mutating state."""
         return self._signed_request("POST", "/fapi/v3/noop", include_user=True)
 
+    def get_account_info(self) -> Dict[str, Any]:
+        """Fetch comprehensive perpetual account information via V3 (GET /fapi/v3/account)."""
+        data = self._signed_request("GET", "/fapi/v3/account", include_user=True)
+        return data if isinstance(data, dict) else {}
+
     def get_account_balance(self) -> List[Dict[str, Any]]:
         """Fetch perpetual account asset balances via V3."""
         data = self._signed_request("GET", "/fapi/v3/balance", include_user=True)

@@ -20,6 +20,8 @@ from src.ml.evaluator import SetupEvaluator
 from src.ml.models import ModelRegistry
 from src.risk.manager import RiskManager
 from src.risk.sizing import PositionSizer
+from src.risk.tier import EquityTierConfig
+from src.exchange.account_service import AsterAccountService, AccountConnectionStatus
 from config.settings import AIConfig, AIMode, ExecutionMode, PaperExecutionConfig
 from src.execution.paper_engine import PaperExecutionEngine
 from src.execution.events import PaperEvent, PaperEventDispatcher, PaperEventType
@@ -98,8 +100,8 @@ class ScannerRunner:
         cost_buffer: float = 0.02,
         min_ml_confidence: Optional[float] = None,
         stale_threshold_hours: float = 3.0,
-        target_isolated_margin: float = 6.0,
-        target_isolated_margin_max: float = 6.5,
+        target_isolated_margin: float = 1.00,
+        target_isolated_margin_max: float = 1.50,
         hard_risk_limit_usdt: float = 1.50,
         max_leverage: int = 10,
         ai_config: Optional[AIConfig] = None,
@@ -111,6 +113,9 @@ class ScannerRunner:
         event_dispatcher: Optional[PaperEventDispatcher] = None,
         synchronizer: Optional[Any] = None,
         generator: Optional[Any] = None,
+        account_service: Optional[AsterAccountService] = None,
+        tier_config: Optional[EquityTierConfig] = None,
+        require_live_account_data: bool = False,
     ) -> None:
         self.exchange = exchange
         self.db = db
@@ -127,6 +132,9 @@ class ScannerRunner:
         self.ai_config = ai_config or AIConfig()
         self.qwen_client = qwen_client or (QwenClient(self.ai_config) if self.ai_config.enabled else None)
         self.shadow_records: List[Dict[str, Any]] = []
+        self.account_service = account_service
+        self.tier_config = tier_config
+        self.require_live_account_data = require_live_account_data
 
         self.mode = mode
         self.paper_config = paper_config or PaperExecutionConfig()
@@ -448,19 +456,50 @@ class ScannerRunner:
                             pass
 
                     if specs is not None:
+                        account_snap = self.account_service.get_snapshot() if self.account_service else None
+                        account_connected = (account_snap is not None and account_snap.status == AccountConnectionStatus.CONNECTED)
+
+                        if self.require_live_account_data and not account_connected:
+                            status_label = account_snap.status.value if account_snap else "ACCOUNT_DATA_UNAVAILABLE"
+                            candidate.status = CandidateStatus.INFEASIBLE
+                            candidate.rejection_reasons.append(
+                                f"Live exchange account data required but unavailable ({status_label}). Sizing halted."
+                            )
+                            continue
+
+                        effective_equity = (
+                            account_snap.total_equity_usdt
+                            if (account_connected and account_snap.total_equity_usdt is not None and account_snap.total_equity_usdt > 0)
+                            else self.risk_manager.equity_usdt
+                        )
+
                         raw_eff_risk = getattr(self.risk_manager, "get_effective_trade_risk", lambda _ts: 0.09)(now_ms)
                         eff_risk_val = float(raw_eff_risk) if isinstance(raw_eff_risk, (int, float)) else 0.09
+
+                        # Query recent funding rate if available
+                        funding_val = 0.0
+                        if hasattr(self.exchange, "get_funding_rates"):
+                            try:
+                                f_rates = self.exchange.get_funding_rates(sym, limit=1)
+                                if f_rates and len(f_rates) > 0:
+                                    funding_val = float(f_rates[-1].get("fundingRate") or f_rates[-1].get("funding_rate") or 0.0)
+                            except Exception as f_err:
+                                logger.debug(f"Funding rate query skipped for {sym}: {f_err}")
+
                         assessment = PositionSizer.calculate_sizing(
                             symbol_specs=specs,
                             entry_price=candidate.entry_price,
                             stop_loss=candidate.stop_loss,
                             target_isolated_margin=self.target_isolated_margin,
                             target_isolated_margin_max=self.target_isolated_margin_max,
-                            available_equity_usdt=self.risk_manager.equity_usdt,
+                            available_equity_usdt=effective_equity,
                             max_leverage=self.max_leverage,
                             hard_risk_limit_usdt=self.hard_risk_limit_usdt,
                             risk_budget_usdt=eff_risk_val,
                             direction=candidate.direction,
+                            tier_config=self.tier_config,
+                            funding_rate=funding_val,
+                            enforce_risk_budget=True,
                         )
                         candidate.risk_assessment = assessment
 

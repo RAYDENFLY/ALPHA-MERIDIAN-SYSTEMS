@@ -356,9 +356,9 @@ class TestConcurrencyAndAPIEndpoints:
         assert data["capital"]["initial_equity_usdt"] == 16.0
         assert data["capital"]["margin_mode"] == "ISOLATED"
         assert data["capital"]["max_leverage"] == 10
-        assert data["risk_limits"]["configured_trade_risk_usdt"] == 0.09
-        assert data["risk_limits"]["daily_loss_limit_usdt"] == 0.18
-        assert data["risk_limits"]["weekly_loss_limit_usdt"] == 0.54
+        assert data["risk_limits"]["configured_trade_risk_usdt"] == 0.25
+        assert data["risk_limits"]["daily_loss_limit_usdt"] == 0.50
+        assert data["risk_limits"]["weekly_loss_limit_usdt"] == 1.25
         assert data["risk_limits"]["max_open_positions"] == 1
         assert data["risk_limits"]["max_weekly_entries"] is None
 
@@ -598,7 +598,7 @@ class TestMLInformativeRanking:
         mock_exchange = MagicMock()
         mock_journal = MagicMock()
         mock_risk = MagicMock()
-        mock_risk.get_effective_trade_risk.return_value = 0.09
+        mock_risk.get_effective_trade_risk.return_value = 1.50
         mock_risk.equity_usdt = 16.0
         mock_risk.can_open_new_position.return_value = (True, None)
 

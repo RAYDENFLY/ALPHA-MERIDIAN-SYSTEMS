@@ -46,9 +46,12 @@ risk:
   initial_equity_usdt: 16.0
   margin_mode: "ISOLATED"
   max_leverage: 10
-  risk_per_trade_usdt: 0.09
-  daily_loss_limit_usdt: 0.18
-  weekly_loss_limit_usdt: 0.54
+  target_isolated_margin_usdt: 1.00
+  target_isolated_margin_max_usdt: 1.50
+  hard_risk_limit_usdt: 1.50
+  risk_per_trade_usdt: 0.25
+  daily_loss_limit_usdt: 0.50
+  weekly_loss_limit_usdt: 1.25
   max_open_positions: 1
   max_entries_per_week: null
   min_notional_usdt: 5.0

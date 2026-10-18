@@ -21,12 +21,30 @@ from src.core.logger import logger
 from src.core.types import CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
 from src.data.database import DatabaseManager
 from src.exchange.aster import AsterDexAdapter
+from src.exchange.aster_v3 import AsterDexV3Adapter
+from src.exchange.account_service import AsterAccountService, AccountConnectionStatus
 from src.journal.repository import JournalRepository
 from src.risk.manager import RiskManager
 from src.scheduler.runner import ScannerRunner, rank_candidates
 from src.backtest.engine import BacktestEngine
 from src.ml.models import ModelRegistry
 from src.execution.events import mask_webhook_url, validate_webhook_url
+from src.alerts.models import (
+    AlertAcknowledgeRequest,
+    AlertCreateRequest,
+    AlertDirection,
+    AlertEvent,
+    AlertSource,
+    AlertStatus,
+    AlertType,
+    AlertUpdateRequest,
+    PriceAlert,
+    SymbolCatalogItem,
+)
+from src.alerts.storage import AlertStorage
+from src.alerts.market_data import AlertMarketDataService
+from src.alerts.discord import AlertDiscordNotifier
+from src.alerts.engine import PriceAlertEngine
 
 
 # App state containers
@@ -42,6 +60,35 @@ exchange = AsterDexAdapter(
     retry_delay_sec=cfg.exchange.retry_delay_sec,
     load_env_credentials=False,
 )
+
+# Least-privilege read-only authenticated account service for verified balance tracking
+account_service: Optional[AsterAccountService] = None
+try:
+    _v3_user = os.getenv("ASTER_USER_ADDRESS")
+    _v3_signer = os.getenv("ASTER_SIGNER_ADDRESS")
+    _v3_key = os.getenv("ASTER_SIGNER_PRIVATE_KEY")
+    _v3_chain = int(os.getenv("ASTER_CHAIN_ID", 1666))
+    if _v3_user and _v3_signer and _v3_key:
+        _v3_acc_adapter = AsterDexV3Adapter(
+            base_url=cfg.exchange.base_url,
+            user_address=_v3_user,
+            signer_address=_v3_signer,
+            signer_private_key=_v3_key,
+            chain_id=_v3_chain,
+            is_testnet=False,
+            request_timeout=cfg.exchange.request_timeout,
+            live_trading_locked=True,
+        )
+        account_service = AsterAccountService(
+            adapter=_v3_acc_adapter,
+            cache_ttl_sec=15.0,
+            stale_threshold_sec=120.0,
+        )
+    else:
+        account_service = AsterAccountService(adapter=None)
+except Exception as _acc_err:
+    logger.warning(f"Failed to initialize AsterAccountService: {_acc_err}")
+    account_service = AsterAccountService(adapter=None)
 journal = JournalRepository(db)
 risk_mgr = RiskManager(
     initial_equity_usdt=cfg.risk.initial_equity_usdt,
@@ -52,6 +99,27 @@ risk_mgr = RiskManager(
     max_entries_per_week=cfg.risk.max_entries_per_week,
 )
 risk_mgr.sync_state_from_journal(journal)
+
+# Universal AsterDEX Perpetual Price Alerts
+alert_storage = AlertStorage(db)
+alert_market_data = AlertMarketDataService(
+    base_url=cfg.exchange.base_url,
+    poll_interval_sec=4.0,
+    stale_threshold_sec=60.0,
+    catalog_refresh_interval_sec=1800.0,
+)
+alert_discord = AlertDiscordNotifier(
+    webhook_url=getattr(cfg, "discord_price_alert_webhook_url", None),
+    storage=alert_storage,
+    request_timeout=8.0,
+    max_retries=3,
+)
+alert_engine = PriceAlertEngine(
+    storage=alert_storage,
+    market_data=alert_market_data,
+    discord_notifier=alert_discord,
+    cooldown_sec=60.0,
+)
 
 specs_map: Dict[str, Any] = {}
 runner: Optional[ScannerRunner] = None
@@ -202,6 +270,8 @@ async def lifespan(app: FastAPI):
         ai_config=cfg.ai,
         mode=cfg.mode,
         paper_config=cfg.paper,
+        account_service=account_service,
+        tier_config=cfg.risk.equity_tier,
     )
 
     # Reconcile stale or expired database setups on startup
@@ -226,6 +296,17 @@ async def lifespan(app: FastAPI):
     bg_task = asyncio.create_task(background_scan_worker())
     logger.info("Background scanner task started.")
 
+    # Start universal perpetual price alerts market data service
+    try:
+        await alert_market_data.start()
+        logger.info("Universal price alerts market data service started.")
+        if alert_discord.enabled:
+            logger.info(f"Price Alerts Discord notifications: ENABLED ({alert_discord.mask_url()})")
+        else:
+            logger.info("Price Alerts Discord notifications: DISABLED (no webhook configured)")
+    except Exception as e:
+        logger.warning(f"Failed to start price alerts market data service: {e}")
+
     yield
 
     logger.info("Shutting down scanner API server...")
@@ -237,6 +318,12 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     logger.info("Background scanner worker shutdown cleanly.")
+
+    # Stop price alerts market data service
+    try:
+        await alert_market_data.stop()
+    except Exception as e:
+        logger.warning(f"Error stopping price alerts market data service: {e}")
 
 
 app = FastAPI(
@@ -309,16 +396,55 @@ def get_system_status() -> Dict[str, Any]:
     else:
         computed_state = runner.scanner_state if (runner and runner.scanner_state in ("IDLE", "RUNNING", "ERROR")) else "IDLE"
 
+    # Fetch live account snapshot from read-only account service
+    account_snapshot = account_service.get_snapshot() if account_service else None
+    account_data = account_snapshot.to_dict() if account_snapshot else {
+        "status": AccountConnectionStatus.ACCOUNT_DATA_UNAVAILABLE.value,
+        "is_connected": False,
+        "is_stale": True,
+        "total_equity_usdt": None,
+        "wallet_balance_usdt": None,
+        "available_balance_usdt": None,
+        "used_margin_usdt": None,
+        "unrealized_pnl_usdt": None,
+        "open_positions_count": 0,
+        "last_sync_utc": None,
+        "last_sync_age_seconds": None,
+        "source": "ASTERDEX_V3_REST",
+        "error_message": "Account service not initialized.",
+        "account_alias": None,
+        "positions_summary": [],
+    }
+
+    # Resolve active equity tier
+    active_equity_for_tier = (
+        account_snapshot.total_equity_usdt
+        if (account_snapshot and account_snapshot.status == AccountConnectionStatus.CONNECTED and account_snapshot.total_equity_usdt is not None and account_snapshot.total_equity_usdt > 0)
+        else risk_mgr.equity_usdt
+    )
+    from src.risk.tier import resolve_equity_tier
+    tier_res = resolve_equity_tier(active_equity_for_tier, cfg.risk.equity_tier)
+
     return {
         "app_name": cfg.app_name,
         "version": cfg.version,
         "mode": cfg.mode.value,
         "live_trading_locked": cfg.live_trading_locked,
+        "account": account_data,
         "capital": {
             "initial_equity_usdt": cfg.risk.initial_equity_usdt,
             "current_equity_usdt": round(risk_mgr.equity_usdt, 4),
+            "verified_live_equity_usdt": account_snapshot.total_equity_usdt if (account_snapshot and account_snapshot.status == AccountConnectionStatus.CONNECTED) else None,
             "margin_mode": cfg.risk.margin_mode,
             "max_leverage": cfg.risk.max_leverage,
+            "active_tier": {
+                "tier_id": tier_res.tier_id,
+                "tier_name": tier_res.tier_name,
+                "target_margin_min": tier_res.target_margin_min,
+                "target_margin_max": tier_res.target_margin_max,
+                "is_trading_allowed": tier_res.is_trading_allowed,
+                "rejection_reason": tier_res.rejection_reason,
+            },
         },
         "risk_limits": {
             "configured_trade_risk_usdt": cfg.risk.risk_per_trade_usdt,
@@ -374,6 +500,57 @@ def get_system_status() -> Dict[str, Any]:
         },
         "last_scan_utc": runner.last_scan_utc if runner else None,
     }
+
+
+@app.get("/api/account")
+def get_account_status() -> Dict[str, Any]:
+    """Return verified live Aster DEX account snapshot with status and metrics."""
+    if not account_service:
+        return {
+            "status": AccountConnectionStatus.ACCOUNT_DATA_UNAVAILABLE.value,
+            "is_connected": False,
+            "error_message": "Account service not initialized.",
+        }
+    return account_service.get_snapshot().to_dict()
+
+
+@app.get("/api/account/positions")
+def get_account_positions() -> Dict[str, Any]:
+    """Return verified live Aster DEX open positions with detailed risk metrics and order brackets."""
+    if not account_service:
+        return {
+            "status": AccountConnectionStatus.ACCOUNT_DATA_UNAVAILABLE.value,
+            "is_connected": False,
+            "open_positions_count": 0,
+            "positions": [],
+            "error_message": "Account service not initialized.",
+            "last_sync_utc": None,
+        }
+    snapshot_dict = account_service.get_snapshot().to_dict()
+    return {
+        "status": snapshot_dict.get("status"),
+        "is_connected": snapshot_dict.get("is_connected", False),
+        "is_stale": snapshot_dict.get("is_stale", False),
+        "open_positions_count": snapshot_dict.get("open_positions_count", 0),
+        "positions": snapshot_dict.get("positions_summary", []),
+        "last_sync_utc": snapshot_dict.get("last_sync_utc"),
+        "last_sync_age_seconds": snapshot_dict.get("last_sync_age_seconds"),
+        "source": snapshot_dict.get("source"),
+        "error_message": snapshot_dict.get("error_message"),
+    }
+
+
+@app.post("/api/account/sync")
+def sync_account_status() -> Dict[str, Any]:
+    """Force refresh of live Aster DEX account snapshot."""
+    if not account_service:
+        return {
+            "status": AccountConnectionStatus.ACCOUNT_DATA_UNAVAILABLE.value,
+            "is_connected": False,
+            "error_message": "Account service not initialized.",
+        }
+    return account_service.sync().to_dict()
+
 
 
 @app.post("/api/discord/test", dependencies=[Depends(require_mutating_api_access)])
@@ -958,8 +1135,166 @@ def run_backtest_report(symbols: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
+# =========================================================================
+# Universal AsterDEX Perpetual Price Alerts REST Endpoints
+# =========================================================================
+
+@app.get("/api/alerts/symbols")
+def get_alert_symbols(q: Optional[str] = Query(default=None, description="Symbol or asset search filter")):
+    """
+    Return all discovered eligible USDT perpetual symbols (~578 contracts).
+    Provides symbol, base asset, precisions, tick size, current mark/last prices, and freshness.
+    """
+    symbols = alert_market_data.get_all_symbols()
+    if q:
+        query = q.strip().upper()
+        symbols = [s for s in symbols if query in s.symbol or query in s.base_asset.upper()]
+    return [s.model_dump() for s in symbols]
+
+
+@app.get("/api/alerts")
+def list_alerts(
+    symbol: Optional[str] = Query(default=None, description="Filter by symbol"),
+    is_active: Optional[bool] = Query(default=None, description="Filter by active state"),
+):
+    """List all configured price alerts with live enriched pricing and distances."""
+    alerts = alert_engine.list_alerts(symbol=symbol, is_active=is_active)
+    return [a.model_dump() for a in alerts]
+
+
+@app.post("/api/alerts", dependencies=[Depends(require_mutating_api_access)])
+def create_alert(req: AlertCreateRequest):
+    """
+    Create a new persistent price alert.
+    Validates symbol against AsterDEX universe and target price positivity.
+    """
+    symbol_clean = req.symbol.upper().strip()
+    catalog_item = alert_market_data.get_symbol_catalog_item(symbol_clean)
+    if not catalog_item and len(alert_market_data._catalog) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Symbol '{symbol_clean}' is not an active AsterDEX USDT perpetual contract.",
+        )
+    if req.target_price <= 0:
+        raise HTTPException(status_code=400, detail="Target price must be greater than zero.")
+
+    alert = alert_engine.create_alert(req)
+    return alert.model_dump()
+
+
+@app.get("/api/alerts/status")
+def get_alert_status():
+    """Return health telemetry for market data service and alert engine."""
+    all_alerts = alert_engine.list_alerts()
+    active_count = sum(1 for a in all_alerts if a.is_active)
+    triggered_count = sum(1 for a in all_alerts if a.status == AlertStatus.TRIGGERED)
+    stale_count = sum(1 for a in all_alerts if a.status == AlertStatus.STALE)
+    events = alert_engine.get_recent_events(limit=100)
+    unack_count = sum(1 for e in events if not e.acknowledged)
+
+    return {
+        "market_data": alert_market_data.get_status(),
+        "discord": alert_discord.get_status(),
+        "total_alerts": len(all_alerts),
+        "active_alerts": active_count,
+        "triggered_alerts": triggered_count,
+        "stale_alerts": stale_count,
+        "unacknowledged_events": unack_count,
+    }
+
+
+@app.post("/api/alerts/discord/test", dependencies=[Depends(require_mutating_api_access)])
+def test_price_alert_discord():
+    """Test Discord price alert webhook delivery with mock payload without leaking credentials."""
+    if not alert_discord.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Discord price alert webhook is disabled or not configured.",
+        )
+    test_event = AlertEvent(
+        alert_id="test_alert_id",
+        symbol="BTCUSDT",
+        target_price=68500.0,
+        trigger_price=68520.0,
+        direction=AlertDirection.PRICE_ABOVE,
+        price_source=AlertSource.MARK_PRICE,
+        triggered_at=datetime.now(timezone.utc).isoformat(),
+        note="Manual test notification from dashboard",
+        acknowledged=False,
+    )
+    success = alert_discord.send_notification(test_event)
+    return {
+        "success": success,
+        "webhook_masked": alert_discord.mask_url(),
+        "delivered_at": datetime.now(timezone.utc).isoformat() if success else None,
+    }
+
+
+@app.get("/api/alerts/history")
+def get_alert_history(
+    limit: int = Query(default=50, ge=1, le=500),
+    unack_only: bool = Query(default=False),
+):
+    """Retrieve historical triggered alert events."""
+    events = alert_storage.list_events(limit=limit, unack_only=unack_only)
+    return [e.model_dump() for e in events]
+
+
+@app.post("/api/alerts/history/ack", dependencies=[Depends(require_mutating_api_access)])
+def acknowledge_alert_events(req: AlertAcknowledgeRequest):
+    """Mark alert events as acknowledged."""
+    count = alert_engine.acknowledge_events(req.event_ids)
+    return {"acknowledged_count": count}
+
+
+@app.delete("/api/alerts/history", dependencies=[Depends(require_mutating_api_access)])
+def clear_alert_history():
+    """Clear all historical triggered alert events."""
+    count = alert_engine.clear_events()
+    return {"cleared_count": count}
+
+
+@app.get("/api/alerts/{alert_id}")
+def get_alert(alert_id: str):
+    """Retrieve a single price alert by ID."""
+    alert = alert_engine.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
+    return alert.model_dump()
+
+
+@app.put("/api/alerts/{alert_id}", dependencies=[Depends(require_mutating_api_access)])
+def update_alert(alert_id: str, req: AlertUpdateRequest):
+    """Update an existing price alert's parameters."""
+    if req.target_price is not None and req.target_price <= 0:
+        raise HTTPException(status_code=400, detail="Target price must be greater than zero.")
+    alert = alert_engine.update_alert(alert_id, req)
+    if not alert:
+        raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
+    return alert.model_dump()
+
+
+@app.patch("/api/alerts/{alert_id}/toggle", dependencies=[Depends(require_mutating_api_access)])
+def toggle_alert(alert_id: str):
+    """Toggle an alert between active and disabled."""
+    alert = alert_engine.toggle_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
+    return alert.model_dump()
+
+
+@app.delete("/api/alerts/{alert_id}", dependencies=[Depends(require_mutating_api_access)])
+def delete_alert(alert_id: str):
+    """Delete a price alert and its associated events."""
+    deleted = alert_engine.delete_alert(alert_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found.")
+    return {"deleted": True, "alert_id": alert_id}
+
+
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("src.api.app:app", host=cfg.host, port=cfg.port, reload=False)
+
 

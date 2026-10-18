@@ -9,6 +9,7 @@ from typing import List, Optional
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
+from src.risk.tier import EquityTierConfig
 
 # Automatically load environment variables from .env file if present
 load_dotenv()
@@ -37,16 +38,17 @@ class RiskConfig(BaseModel):
     initial_equity_usdt: float = Field(default=16.0, gt=0)
     margin_mode: str = Field(default="ISOLATED", description="Must be ISOLATED")
     max_leverage: int = Field(default=10, ge=1, le=10)
-    target_isolated_margin_usdt: float = Field(default=6.0, ge=1.0, le=10.0, description="Target isolated margin per trade ($6.0-$6.5)")
-    target_isolated_margin_max_usdt: float = Field(default=6.5, ge=1.0, le=10.0, description="Max target isolated margin")
-    hard_risk_limit_usdt: float = Field(default=1.50, gt=0, description="Hard risk limit per trade in USDT")
-    risk_per_trade_usdt: float = Field(default=0.09, gt=0)
-    daily_loss_limit_usdt: float = Field(default=0.18, gt=0)
-    weekly_loss_limit_usdt: float = Field(default=0.54, gt=0)
+    target_isolated_margin_usdt: float = Field(default=1.00, ge=0.5, le=10.0, description="Target isolated margin per trade ($1.00-$1.50)")
+    target_isolated_margin_max_usdt: float = Field(default=1.50, ge=0.5, le=10.0, description="Max target isolated margin ($1.50)")
+    hard_risk_limit_usdt: float = Field(default=1.50, gt=0, description="Hard risk limit per trade ceiling in USDT")
+    risk_per_trade_usdt: float = Field(default=0.25, gt=0, description="Nominal risk per trade in USDT")
+    daily_loss_limit_usdt: float = Field(default=0.50, gt=0, description="Tier 1 daily loss cap ($0.50)")
+    weekly_loss_limit_usdt: float = Field(default=1.25, gt=0, description="Approved Tier 1 weekly loss cap ($1.25)")
     max_open_positions: int = Field(default=1, ge=1, le=1)
     max_entries_per_week: Optional[int] = Field(default=None, description="Deprecated weekly entry hard cap; entry frequency governed by risk controls")
     min_notional_usdt: float = Field(default=5.0, gt=0)
     buffer_pct_for_fees: float = Field(default=0.02, ge=0)
+    equity_tier: EquityTierConfig = Field(default_factory=EquityTierConfig)
 
     @field_validator("margin_mode")
     @classmethod
@@ -155,6 +157,10 @@ class AppConfig(BaseModel):
     ml: MLConfig = Field(default_factory=MLConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     paper: PaperExecutionConfig = Field(default_factory=PaperExecutionConfig)
+    discord_price_alert_webhook_url: Optional[str] = Field(
+        default=None,
+        description="Optional Discord webhook URL for universal perpetual price alerts notifications",
+    )
 
     @field_validator("mode")
     @classmethod
@@ -203,6 +209,9 @@ def _apply_env_overrides(cfg: AppConfig) -> AppConfig:
     env_discord = os.getenv("DISCORD_WEBHOOK_URL")
     if env_discord:
         cfg.paper.discord_webhook_url = env_discord.strip()
+    env_alert_discord = os.getenv("DISCORD_PRICE_ALERT_WEBHOOK_URL")
+    if env_alert_discord:
+        cfg.discord_price_alert_webhook_url = env_alert_discord.strip()
     env_paper_slip = os.getenv("PAPER_SLIPPAGE_RATE")
     if env_paper_slip:
         try:
@@ -230,6 +239,11 @@ def _apply_env_overrides(cfg: AppConfig) -> AppConfig:
 
 def get_default_config() -> AppConfig:
     """Return default validated configuration."""
-    cfg = AppConfig()
+    yaml_path = Path(__file__).parent / "default_config.yaml"
+    if yaml_path.exists():
+        cfg = AppConfig.load_from_yaml(yaml_path)
+    else:
+        cfg = AppConfig()
+        cfg = _apply_env_overrides(cfg)
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
-    return _apply_env_overrides(cfg)
+    return cfg
