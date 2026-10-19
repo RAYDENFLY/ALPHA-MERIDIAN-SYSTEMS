@@ -355,3 +355,84 @@ class AsterAdapter:
             logger.warning(f"AsterAdapter: Failed to fetch funding rates for {symbol}: {err}")
             return []
 
+    def get_bulk_market_snapshot(self) -> Dict[str, Dict[str, Any]]:
+        """Fetch bulk ticker and bookTicker in a single pass to build Stage 1 market snapshots for all AsterDEX symbols."""
+        snapshots: Dict[str, Dict[str, Any]] = {}
+        now_ms = int(time.time() * 1000)
+
+        # 1. Fetch bookTicker for instant live spread and bid/ask
+        bt_map: Dict[str, Dict[str, Any]] = {}
+        try:
+            resp = self.session.get(f"{self.base_url}/fapi/v1/ticker/bookTicker", timeout=self.timeout_sec)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and "symbol" in item:
+                            bt_map[str(item["symbol"]).strip().upper()] = item
+        except Exception as e:
+            logger.debug(f"AsterAdapter: Failed to fetch bulk bookTicker: {e}")
+
+        # 2. Fetch 24hr ticker for volume and price change
+        t24_map: Dict[str, Dict[str, Any]] = {}
+        try:
+            resp = self.session.get(f"{self.base_url}/fapi/v1/ticker/24hr", timeout=self.timeout_sec)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and "symbol" in item:
+                            t24_map[str(item["symbol"]).strip().upper()] = item
+        except Exception as e:
+            logger.debug(f"AsterAdapter: Failed to fetch bulk 24hr ticker: {e}")
+
+        # 3. Combine into normalized Stage 1 snapshots
+        all_symbols = set(bt_map.keys()) | set(t24_map.keys())
+        for sym in all_symbols:
+            bt = bt_map.get(sym, {})
+            t24 = t24_map.get(sym, {})
+
+            try:
+                bid_px = float(bt.get("bidPrice", 0.0) or 0.0)
+            except (ValueError, TypeError):
+                bid_px = 0.0
+
+            try:
+                ask_px = float(bt.get("askPrice", 0.0) or 0.0)
+            except (ValueError, TypeError):
+                ask_px = 0.0
+
+            mid_px = (bid_px + ask_px) / 2.0 if (bid_px > 0 and ask_px > 0) else (bid_px or ask_px)
+            spread_bps = ((ask_px - bid_px) / mid_px * 10000.0) if (mid_px > 0 and ask_px >= bid_px) else 0.0
+
+            raw_vol = t24.get("quoteVolume")
+            try:
+                vol_24h = float(raw_vol) if raw_vol is not None and math.isfinite(float(raw_vol)) else 0.0
+            except (ValueError, TypeError):
+                vol_24h = 0.0
+
+            raw_change = t24.get("priceChangePercent")
+            try:
+                change_pct = float(raw_change) if raw_change is not None and math.isfinite(float(raw_change)) else 0.0
+            except (ValueError, TypeError):
+                change_pct = 0.0
+
+            try:
+                last_px = float(t24.get("lastPrice", mid_px) or mid_px)
+            except (ValueError, TypeError):
+                last_px = mid_px
+
+            snapshots[sym] = {
+                "symbol": sym,
+                "bid_price": bid_px,
+                "ask_price": ask_px,
+                "mid_price": mid_px,
+                "last_price": last_px,
+                "spread_bps": round(spread_bps, 2),
+                "volume_24h_usdt": round(vol_24h, 2),
+                "price_change_pct": round(change_pct, 2),
+                "timestamp_ms": int(bt.get("time", now_ms) or now_ms),
+            }
+
+        return snapshots
+

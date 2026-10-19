@@ -159,6 +159,12 @@ class ModelBConfig(BaseModel):
     min_absorption_score: float = Field(default=0.25, description="Minimum volume absorption score")
     pending_order_ttl_hours: float = Field(default=6.0, gt=0.0, description="Simulated limit order TTL in hours")
     min_24h_volume_usdt: float = Field(default=1000000.0, ge=0.0, description="Minimum 24h volume filter")
+    stage1_min_24h_volume_usdt: float = Field(default=50000.0, ge=0.0, description="Stage 1 bulk screen minimum 24h volume filter")
+    stage1_max_spread_bps: float = Field(default=35.0, ge=1.0, description="Stage 1 bulk screen maximum spread in bps")
+    max_deep_eval_symbols: int = Field(default=35, ge=5, le=100, description="Max symbols deep evaluated per cycle")
+    scanner_max_workers: int = Field(default=8, ge=1, le=20, description="ThreadPoolExecutor concurrency for candle/depth fetches")
+    rotation_slice_size: int = Field(default=25, ge=1, le=50, description="Number of rotating mid-cap symbols per cycle")
+    anchor_symbol_count: int = Field(default=10, ge=1, le=20, description="Number of top-volume anchor symbols evaluated every cycle")
     scan_interval_sec: int = Field(default=60, ge=5, le=3600, description="Evaluation loop cadence")
     enabled_venues: List[str] = Field(
         default_factory=lambda: ["asterdex", "binance", "hyperliquid"],

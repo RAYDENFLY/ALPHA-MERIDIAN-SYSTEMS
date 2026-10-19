@@ -959,6 +959,66 @@
                 </div>
             </div>
 
+            <!-- Universal AsterDEX Scanner Engine Telemetry Card -->
+            <div class="card-bg p-5 rounded-xl border border-indigo-900/40 bg-slate-900/60 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                        <span class="text-sm font-bold text-white tracking-wide">Universal AsterDEX Scanner Engine Telemetry</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800" id="scannerCoverageBadge">100% BULK COVERAGE</span>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs font-mono text-slate-400" id="scannerCycleMetadata">
+                        <span id="scannerCycleId">Cycle: --</span>
+                        <span id="scannerDuration">Scan: -- ms</span>
+                        <span id="scannerCacheHit">Cache: --%</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-3 pt-1">
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                        <div class="text-[11px] text-slate-400">AsterDEX Universe</div>
+                        <div class="text-base font-bold text-white mt-0.5" id="scannerDiscoveredTotal">578 Pairs</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="scannerBulkScreened">Screened: 628</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                        <div class="text-[11px] text-slate-400">Stage 1 Liquid Pool</div>
+                        <div class="text-base font-bold text-emerald-400 mt-0.5" id="scannerQualifiedPool">136 Liquid</div>
+                        <div class="text-[10px] text-slate-500 font-mono">Spread &le; 35bps | &ge; $50k</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                        <div class="text-[11px] text-slate-400">Stage 2 Evaluated</div>
+                        <div class="text-base font-bold text-amber-300 mt-0.5" id="scannerDeepEvaluated">35 / Cycle</div>
+                        <div class="text-[10px] text-slate-500 font-mono">10 Anchors + 25 Slice</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                        <div class="text-[11px] text-slate-400">Universe Rotation</div>
+                        <div class="text-base font-bold text-indigo-300 mt-0.5" id="scannerRotationProgress">20.0%</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="scannerRotationOffset">Offset: 25 / 125</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                        <div class="text-[11px] text-slate-400">Kline Fetch Latency</div>
+                        <div class="text-base font-bold text-sky-400 mt-0.5" id="scannerP95Latency">p95: -- ms</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="scannerMedianLatency">med: -- ms</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                        <div class="text-[11px] text-slate-400">Engine Candidate Yield</div>
+                        <div class="text-base font-bold text-white mt-0.5" id="scannerCandidateYield">0 Formulated</div>
+                        <div class="text-[10px] text-emerald-400 font-mono" id="scannerReadyYield">0 READY</div>
+                    </div>
+                </div>
+
+                <!-- Universe Rotation Progress Bar -->
+                <div class="space-y-1 pt-1">
+                    <div class="flex justify-between text-[11px] font-mono text-slate-400">
+                        <span>Universe Fair Rotation Progress</span>
+                        <span id="scannerProgressBarText">25 / 125 Liquid Contracts Rotated</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div id="scannerProgressBar" class="bg-gradient-to-r from-amber-500 to-indigo-500 h-1.5 rounded-full transition-all duration-500" style="width: 20%;"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Model B Risk & Portfolio Cards -->
             <div class="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4">
                 <div class="card-bg p-4 rounded-xl border border-slate-800">
@@ -1202,6 +1262,404 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- Model B LONG vs SHORT Live-Market Shadow Experiment Engine Panel -->
+            <div class="card-bg p-5 rounded-xl border border-indigo-700/60 space-y-6" id="modelBResearchPanel">
+                <!-- Research Header & Control Bar -->
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                    <div class="space-y-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-indigo-400 animate-pulse"></span>
+                            <h3 class="text-base font-bold text-white tracking-wide">Model B Live-Market Shadow Research Engine: LONG vs SHORT</h3>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700">INDEPENDENT SHADOW EVALUATION</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">CIRCUIT-BREAKER BYPASS ACTIVE</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800">100% SIMULATED &bull; NO LIVE MUTATION</span>
+                        </div>
+                        <p class="text-xs text-slate-400 max-w-3xl">
+                            Evaluates candidate signals continuously across 6 deterministic variants using identical live-market snapshots. Continues observing, simulating limit penetrations, and recording counterfactual PnL even when active execution circuit breakers are tripped.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <button onclick="triggerModelBResearchReplay()" id="researchReplayBtn" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition flex items-center gap-2 shadow-sm" title="Replay historical candidates chronologically">
+                            <svg id="researchReplaySpin" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span>Replay Candidates</span>
+                        </button>
+                        <button onclick="fetchModelBResearchMetrics(); fetchModelBResearchSignals();" id="researchRefreshBtn" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition flex items-center gap-2 shadow-sm">
+                            <svg id="researchRefreshSpin" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span>Refresh Research</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Portfolio vs Shadow Engine Status Bar -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-900/80 p-3.5 rounded-lg border border-slate-800 text-xs font-mono">
+                    <div class="flex flex-col justify-center">
+                        <span class="text-slate-400 text-[11px]">Active Paper Portfolio Status:</span>
+                        <div class="flex items-center gap-2 mt-0.5" id="researchActivePortfolioStatus">
+                            <span class="text-rose-400 font-bold">HALTED (Daily Cap $4.45 &ge; $3.00)</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col justify-center">
+                        <span class="text-slate-400 text-[11px]">Shadow Research Engine State:</span>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span class="text-emerald-300 font-bold">ACTIVE &bull; CONTINUOUS EVALUATION</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col justify-center">
+                        <span class="text-slate-400 text-[11px]">Market-Data Snapshot Freshness:</span>
+                        <div class="text-slate-200 mt-0.5" id="researchDataFreshness">Sync: Active (100% Universe)</div>
+                    </div>
+                    <div class="flex flex-col justify-center">
+                        <span class="text-slate-400 text-[11px]">Cost &amp; Execution Assumptions:</span>
+                        <div class="text-slate-400 text-[10px] mt-0.5">0.02% Maker | 0.05% Taker | 0.05% Slip | Buffer 0.025%</div>
+                    </div>
+                </div>
+
+                <!-- Synthetic Portfolio Strategy Comparison -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <span>Synthetic Portfolio Strategy Performance Comparison</span>
+                            <span class="text-slate-500 font-normal font-mono">(Long Control + Respective SHORT Variant)</span>
+                        </h4>
+                        <span class="text-xs text-indigo-400 font-mono" id="researchPortfolioDeltaBadge">Optimized Win Rate: +22.8% | Net PnL: +$37.70</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Baseline Strategy Card -->
+                        <div class="p-4 rounded-xl bg-slate-950/70 border border-rose-900/40 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                                    <span class="font-bold text-sm text-white">Baseline Strategy</span>
+                                    <span class="text-[10px] font-mono px-2 py-0.5 bg-rose-950 text-rose-300 border border-rose-800 rounded">VAR A (LONG) + VAR B (SHORT)</span>
+                                </div>
+                                <span class="text-xs font-mono text-rose-400 font-bold" id="baselinePortPnl">-$15.28 USDT</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 text-center text-xs font-mono pt-1">
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Closed Trades</div>
+                                    <div class="text-sm font-bold text-white mt-0.5" id="baselinePortClosed">85</div>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Win Rate</div>
+                                    <div class="text-sm font-bold text-rose-400 mt-0.5" id="baselinePortWinRate">42.4%</div>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Profit Factor</div>
+                                    <div class="text-sm font-bold text-white mt-0.5" id="baselinePortPf">1.00</div>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Max Drawdown</div>
+                                    <div class="text-sm font-bold text-rose-400 mt-0.5" id="baselinePortDd">$36.76</div>
+                                </div>
+                            </div>
+                            <div class="text-[11px] text-slate-400 flex justify-between font-mono">
+                                <span>Trades: <strong class="text-emerald-400" id="baselinePortLongs">42 LONG</strong> / <strong class="text-rose-400" id="baselinePortShorts">43 SHORT</strong></span>
+                                <span>Unfiltered short execution suffers high stop-out frequency</span>
+                            </div>
+                        </div>
+
+                        <!-- Combined Optimized Strategy Card -->
+                        <div class="p-4 rounded-xl bg-slate-950/70 border border-emerald-900/40 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                                    <span class="font-bold text-sm text-white">Combined Optimized Strategy</span>
+                                    <span class="text-[10px] font-mono px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded">VAR A (LONG) + VAR F (COMBINED SHORT)</span>
+                                </div>
+                                <span class="text-xs font-mono text-emerald-400 font-bold" id="optimizedPortPnl">+$22.42 USDT</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 text-center text-xs font-mono pt-1">
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Closed Trades</div>
+                                    <div class="text-sm font-bold text-white mt-0.5" id="optimizedPortClosed">43</div>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Win Rate</div>
+                                    <div class="text-sm font-bold text-emerald-400 mt-0.5" id="optimizedPortWinRate">65.1%</div>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Profit Factor</div>
+                                    <div class="text-sm font-bold text-emerald-300 mt-0.5" id="optimizedPortPf">2.62</div>
+                                </div>
+                                <div class="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                    <div class="text-slate-400 text-[10px]">Max Drawdown</div>
+                                    <div class="text-sm font-bold text-emerald-400 mt-0.5" id="optimizedPortDd">$16.32</div>
+                                </div>
+                            </div>
+                            <div class="text-[11px] text-slate-400 flex justify-between font-mono">
+                                <span>Trades: <strong class="text-emerald-400" id="optimizedPortLongs">42 LONG</strong> / <strong class="text-emerald-300" id="optimizedPortShorts">1 SHORT</strong></span>
+                                <span>Drawdown slashed by 55.6% while preserving entire LONG edge</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6-Variant Independent Metrics Cards Grid -->
+                <div class="space-y-3">
+                    <div class="border-b border-slate-800 pb-2">
+                        <h4 class="text-xs font-bold text-white uppercase tracking-wider">
+                            Independent Strategy Variant Evaluations (A through F)
+                        </h4>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5" id="researchVariantCardsContainer">
+                        <div class="p-4 text-center text-xs text-slate-500">Loading variant performance metrics...</div>
+                    </div>
+                </div>
+
+                <!-- Research Signals & Paired Decision Inspector Table -->
+                <div class="space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2">
+                        <div class="flex items-center gap-2">
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider">
+                                Observed Research Signals &amp; Paired Variant Decisions
+                            </h4>
+                            <span id="researchSignalsCountBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-800">0 Signals</span>
+                        </div>
+
+                        <!-- Filter Controls -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 text-xs font-mono">
+                                <button onclick="setResearchFilterDirection('ALL')" id="resDir-ALL" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-bold transition">ALL</button>
+                                <button onclick="setResearchFilterDirection('LONG')" id="resDir-LONG" class="px-2.5 py-1 rounded text-slate-400 hover:text-white transition">LONG</button>
+                                <button onclick="setResearchFilterDirection('SHORT')" id="resDir-SHORT" class="px-2.5 py-1 rounded text-slate-400 hover:text-white transition">SHORT</button>
+                            </div>
+                            <input type="text" id="researchFilterSymbol" placeholder="SYMBOL..." oninput="handleResearchFilterSymbol(event)" class="px-2.5 py-1 bg-slate-900 text-xs font-mono text-white rounded border border-slate-700 w-24 uppercase focus:outline-none" />
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs font-mono text-slate-300">
+                            <thead class="bg-slate-900/80 text-slate-400 uppercase text-[11px] border-b border-slate-800">
+                                <tr>
+                                    <th class="px-3.5 py-2.5">Time (UTC) &amp; Signal ID</th>
+                                    <th class="px-3.5 py-2.5">Symbol &amp; Side</th>
+                                    <th class="px-3.5 py-2.5">Entry / SL / TP</th>
+                                    <th class="px-3.5 py-2.5">Active Eligibility</th>
+                                    <th class="px-3.5 py-2.5 text-center">Variant Decisions (A &bull; B &bull; C &bull; D &bull; E &bull; F)</th>
+                                    <th class="px-3.5 py-2.5 text-right">Counterfactual Net PnL</th>
+                                    <th class="px-3.5 py-2.5 text-center">Evidence</th>
+                                </tr>
+                            </thead>
+                            <tbody id="researchSignalsTableBody" class="divide-y divide-slate-800">
+                                <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">Loading shadow signals and paired evaluations...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evidence Drill-Down Modal -->
+            <div id="researchEvidenceModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black/80 flex items-center justify-center p-4">
+                <div class="card-bg max-w-4xl w-full rounded-2xl border border-indigo-700 p-6 space-y-5 shadow-2xl">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-indigo-400 animate-pulse"></span>
+                            <h3 class="text-base font-bold text-white tracking-wide" id="modalSignalTitle">Signal Evidence &amp; Snapshot Inspector</h3>
+                        </div>
+                        <button onclick="closeResearchEvidenceModal()" class="text-slate-400 hover:text-white text-lg font-bold p-1">
+                            &times;
+                        </button>
+                    </div>
+
+                    <!-- Snapshot Context Grid -->
+                    <div class="space-y-2">
+                        <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Exact Market-Data Snapshot at Detection</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-xs font-mono" id="modalSnapshotGrid">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Paired Variant Comparative Breakdown Table -->
+                    <div class="space-y-2">
+                        <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Comparative Decisions &amp; Counterfactual Execution Across 6 Variants</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs font-mono text-slate-300">
+                                <thead class="bg-slate-900/80 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                                    <tr>
+                                        <th class="px-3 py-2">Variant</th>
+                                        <th class="px-3 py-2">Decision</th>
+                                        <th class="px-3 py-2">Rejection Reason / Filter Triggered</th>
+                                        <th class="px-3 py-2">Order Status</th>
+                                        <th class="px-3 py-2">Exit Reason</th>
+                                        <th class="px-3 py-2 text-right">Net PnL</th>
+                                        <th class="px-3 py-2 text-right">MAE / MFE</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modalVariantsTableBody" class="divide-y divide-slate-800">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end pt-2 border-t border-slate-800">
+                        <button onclick="closeResearchEvidenceModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700">
+                            Close Inspector
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model B Whale Flow Intelligence & Cross-Market Watchlist -->
+            <div class="card-bg p-5 rounded-xl border border-indigo-900/60 space-y-5">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                            <h3 class="text-base font-bold text-white tracking-wide">Cross-Market Whale Flow Intelligence &amp; Ranked Watchlist</h3>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-700">MULTI-EXCHANGE FLOW</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">ASTERDEX &bull; BINANCE &bull; HYPERLIQUID</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1 max-w-3xl">
+                            Real-time institutional flow detection distinguishing resting limit order book depth from executed aggressive taker prints. Includes persistent walls, replenishment tracking, neutral pre-touch cancellation flags, and CVD skew.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="px-2.5 py-1 rounded text-[10px] font-mono font-semibold bg-rose-950/80 text-rose-300 border border-rose-800/80">
+                            Research Only &bull; Never Auto-Traded
+                        </span>
+                        <button onclick="fetchModelBWhaleWatchlist(true)" id="modelBWhaleScanBtn" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-lg shadow transition flex items-center gap-2">
+                            <svg id="modelBWhaleSpin" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span>Scan Whale Flow</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2-Column Ranked Watchlist: Top Buy vs Top Sell -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Top Buy Activity -->
+                    <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                <h4 class="text-xs font-bold text-white uppercase tracking-wider">Top Unusual Buying Activity</h4>
+                            </div>
+                            <span class="text-[10px] text-slate-400 font-mono">Resting Bids + CVD + Aggressive Taker</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs font-mono text-slate-300">
+                                <thead>
+                                    <tr class="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-800/60">
+                                        <th class="py-2 pr-2">Symbol</th>
+                                        <th class="py-2 px-2 text-right">Buy Score</th>
+                                        <th class="py-2 px-2 text-right">Resting Bids</th>
+                                        <th class="py-2 px-2 text-right">Persist</th>
+                                        <th class="py-2 px-2">Interpretation</th>
+                                        <th class="py-2 pl-2 text-center">Chart</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modelBWhaleTopBuyBody" class="divide-y divide-slate-800/40">
+                                    <tr><td colspan="6" class="py-4 text-center text-slate-500">Scanning top buying flow...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Top Sell Activity -->
+                    <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                                <h4 class="text-xs font-bold text-white uppercase tracking-wider">Top Unusual Selling Pressure</h4>
+                            </div>
+                            <span class="text-[10px] text-slate-400 font-mono">Resting Asks + CVD + Aggressive Taker</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs font-mono text-slate-300">
+                                <thead>
+                                    <tr class="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-800/60">
+                                        <th class="py-2 pr-2">Symbol</th>
+                                        <th class="py-2 px-2 text-right">Sell Score</th>
+                                        <th class="py-2 px-2 text-right">Resting Asks</th>
+                                        <th class="py-2 px-2 text-right">Persist</th>
+                                        <th class="py-2 px-2">Interpretation</th>
+                                        <th class="py-2 pl-2 text-center">Chart</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modelBWhaleTopSellBody" class="divide-y divide-slate-800/40">
+                                    <tr><td colspan="6" class="py-4 text-center text-slate-500">Scanning top selling pressure...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Resting Depth Walls Table -->
+                <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider">Active Institutional Resting Depth Walls</h4>
+                            <span id="modelBActiveWallsBadge" class="px-2 py-0.2 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">0 Active</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono">AsterDEX, Binance USDⓈ-M, and Hyperliquid L2 Depth</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs font-mono text-slate-300">
+                            <thead>
+                                <tr class="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-800/60">
+                                    <th class="py-2 px-3">Symbol</th>
+                                    <th class="py-2 px-3">Venue</th>
+                                    <th class="py-2 px-3">Side</th>
+                                    <th class="py-2 px-3 text-right">Price</th>
+                                    <th class="py-2 px-3 text-right">Notional</th>
+                                    <th class="py-2 px-3 text-right">Distance</th>
+                                    <th class="py-2 px-3 text-right">Persistence</th>
+                                    <th class="py-2 px-3">Classification</th>
+                                    <th class="py-2 px-3 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modelBWhaleWallsBody" class="divide-y divide-slate-800/40">
+                                <tr><td colspan="9" class="py-4 text-center text-slate-500">No active resting depth walls detected yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Historical Whale Flow Events Stream & Filters -->
+                <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider">Historical Whale Flow Events Stream (SQLite Persisted)</h4>
+                        </div>
+                        <!-- Filters -->
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] text-slate-400">Filter:</span>
+                            <button onclick="setWhaleStreamFilter('ALL')" id="streamFilt-ALL" class="px-2 py-0.5 text-[10px] rounded font-bold bg-indigo-900 text-indigo-200 border border-indigo-700">ALL</button>
+                            <button onclick="setWhaleStreamFilter('RESTING')" id="streamFilt-RESTING" class="px-2 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400 border border-slate-700">RESTING</button>
+                            <button onclick="setWhaleStreamFilter('EXECUTED')" id="streamFilt-EXECUTED" class="px-2 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400 border border-slate-700">EXECUTED</button>
+                            <button onclick="setWhaleStreamFilter('SPOOFS')" id="streamFilt-SPOOFS" class="px-2 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400 border border-slate-700">PRE-TOUCH</button>
+                            <button onclick="setWhaleStreamFilter('ABSORPTION')" id="streamFilt-ABSORPTION" class="px-2 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400 border border-slate-700">ABSORPTION</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs font-mono text-slate-300">
+                            <thead>
+                                <tr class="text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-800/60">
+                                    <th class="py-2 px-3">Time UTC</th>
+                                    <th class="py-2 px-3">Symbol</th>
+                                    <th class="py-2 px-3">Venue</th>
+                                    <th class="py-2 px-3">Event Type</th>
+                                    <th class="py-2 px-3">Side</th>
+                                    <th class="py-2 px-3 text-right">Price</th>
+                                    <th class="py-2 px-3 text-right">Notional</th>
+                                    <th class="py-2 px-3">Details</th>
+                                    <th class="py-2 px-3">Outcome (+15m)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modelBWhaleEventsBody" class="divide-y divide-slate-800/40">
+                                <tr><td colspan="9" class="py-4 text-center text-slate-500">No recorded whale events found.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
 
         </div>

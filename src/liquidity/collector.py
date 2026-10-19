@@ -32,6 +32,16 @@ class LiquidityCollector:
         self.db = db
         self.exchange_service = exchange_service or MultiExchangeService()
         self._latest_snapshots: Dict[str, LiquiditySnapshot] = {}
+        self._latest_books: Dict[str, Optional[NormalizedOrderBook]] = {}
+        self._latest_trades: Dict[str, List[NormalizedTrade]] = {}
+
+    def get_latest_book(self, symbol: str) -> Optional[NormalizedOrderBook]:
+        """Retrieve most recently fetched order book for symbol without network request."""
+        return self._latest_books.get(symbol)
+
+    def get_latest_trades(self, symbol: str) -> List[NormalizedTrade]:
+        """Retrieve most recently fetched trades for symbol without network request."""
+        return self._latest_trades.get(symbol, [])
 
     def collect_for_symbol(
         self,
@@ -56,9 +66,12 @@ class LiquidityCollector:
                     selected_venue = v
                     break
 
+        self._latest_books[symbol] = book
+
         # 2. Fetch trades
         trades_dict = self.exchange_service.get_recent_trades(symbol, limit=100)
         trades = trades_dict.get(selected_venue) or trades_dict.get("asterdex") or []
+        self._latest_trades[symbol] = trades
 
         # 3. Liquidity sweep detection if structural context is provided
         sweep_detected = False

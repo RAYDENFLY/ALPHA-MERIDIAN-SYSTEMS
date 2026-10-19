@@ -76,8 +76,8 @@ class LiquidityWallHunter:
             now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
         sym = book.symbol.upper()
-        mid = book.mid_price
-        if mid <= 0:
+        mid = getattr(book, "mid_price", 0.0)
+        if not isinstance(mid, (int, float)) or mid <= 0:
             return []
 
         baseline = self._baseline_depth.get(sym, 10000.0)  # Default $10k baseline

@@ -127,18 +127,25 @@ class HyperliquidAdapter:
         """
         # Symbol could be 'BTCUSDT' -> strip USDT to get Hyperliquid coin 'BTC'
         coin = symbol.removesuffix("USDT")
+        # Optimization: If catalog is populated and coin is not listed on Hyperliquid, skip immediately
+        if self._catalog_cache and (symbol not in self._catalog_cache and coin not in self._catalog_cache):
+            return None
+
         payload = {"type": "l2Book", "coin": coin}
         now_ms = int(time.time() * 1000)
 
         try:
             resp = self.session.post(self.info_url, json=payload, timeout=self.timeout_sec)
             if resp.status_code != 200:
-                logger.warning(f"Hyperliquid: l2Book for {symbol} returned status {resp.status_code}")
+                safe_sym = symbol.encode("ascii", "replace").decode("ascii")
+                logger.debug(f"Hyperliquid: l2Book for {safe_sym} returned status {resp.status_code}")
                 return None
 
             data = resp.json()
+            if not isinstance(data, dict):
+                return None
             levels = data.get("levels", [])
-            if len(levels) < 2:
+            if not isinstance(levels, list) or len(levels) < 2:
                 return None
 
             raw_bids = levels[0]  # list of {px, sz, n}
@@ -172,7 +179,8 @@ class HyperliquidAdapter:
                 asks=asks,
             )
         except Exception as err:
-            logger.warning(f"Hyperliquid: Failed to fetch order book for {symbol}: {err}")
+            safe_sym = symbol.encode("ascii", "replace").decode("ascii")
+            logger.debug(f"Hyperliquid: Failed to fetch order book for {safe_sym}: {err}")
             return None
 
     def get_recent_trades(self, symbol: str, limit: int = 100) -> List[NormalizedTrade]:
@@ -183,12 +191,17 @@ class HyperliquidAdapter:
             limit: Maximum trades to return.
         """
         coin = symbol.removesuffix("USDT")
+        # Optimization: If catalog is populated and coin is not listed on Hyperliquid, skip immediately
+        if self._catalog_cache and (symbol not in self._catalog_cache and coin not in self._catalog_cache):
+            return []
+
         payload = {"type": "recentTrades", "coin": coin}
 
         try:
             resp = self.session.post(self.info_url, json=payload, timeout=self.timeout_sec)
             if resp.status_code != 200:
-                logger.warning(f"Hyperliquid: recentTrades for {symbol} returned status {resp.status_code}")
+                safe_sym = symbol.encode("ascii", "replace").decode("ascii")
+                logger.debug(f"Hyperliquid: recentTrades for {safe_sym} returned status {resp.status_code}")
                 return []
 
             data = resp.json()

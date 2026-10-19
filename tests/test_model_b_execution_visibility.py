@@ -223,7 +223,8 @@ class TestModelBExecutionVisibility:
     def test_4_risk_rejection_is_visible_with_reason(self, model_b_paper_engine: PaperExecutionEngine, model_b_risk: ModelBRiskManager, journal_repo: JournalRepository):
         """4. Risk rejection is visible with its explicit reason."""
         cand = create_sample_candidate()
-        # Force circuit breaker active
+        # Force circuit breaker active for candidate's timestamp
+        model_b_risk._sync_calendar_buckets(cand.timestamp_ms + 1000)
         model_b_risk.daily_loss_usdt = 3.50
         can_open, reason = model_b_risk.can_open_new_position(cand.timestamp_ms + 1000)
         assert can_open is False

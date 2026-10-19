@@ -181,8 +181,12 @@ class ModelBStrategyGenerator:
         if snapshot.spread_bps > self.config.max_spread_bps:
             return None
 
-        # 2. Get order book for wall hunter and new market scanner
+        # 2. Get order book for wall hunter and new market scanner (reuse book from collector to avoid duplicate fetch)
         book = order_book
+        if book is None and self.liquidity_collector and hasattr(self.liquidity_collector, "get_latest_book"):
+            cand_book = self.liquidity_collector.get_latest_book(symbol)
+            if isinstance(cand_book, NormalizedOrderBook):
+                book = cand_book
         if book is None and self.exchange_service:
             books_map = self.exchange_service.get_aggregated_order_books(symbol)
             book = books_map.get(instrument.exchange_name) or books_map.get("asterdex")

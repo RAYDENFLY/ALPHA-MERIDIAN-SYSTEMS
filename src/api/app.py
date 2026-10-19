@@ -66,6 +66,15 @@ from src.intelligence.market_context import (
     UnifiedMarketContext,
 )
 from src.intelligence.liquidity_chart_service import LiquidityChartService
+from src.intelligence.whale_ranking import WhaleRankingEngine
+from src.research import (
+    ModelBShadowEvaluator,
+    ResearchStorage,
+    ResearchVariant,
+    VARIANT_METADATA,
+    VariantRuleEngine,
+)
+import sqlite3
 
 
 
@@ -158,6 +167,11 @@ model_b_runner = ModelBRunner(
 # AsterDEX Position Intelligence & Market Liquidity Context Service
 market_context_service = MarketContextService()
 liquidity_chart_service = LiquidityChartService(adapter=market_context_service.adapter)
+whale_ranking_engine = WhaleRankingEngine(
+    exchange_service=model_b_runner.exchange_service,
+    whale_detector=market_context_service.whale_detector,
+    db=db,
+)
 
 specs_map: Dict[str, Any] = {}
 runner: Optional[ScannerRunner] = None
@@ -1574,6 +1588,17 @@ def get_model_b_status():
     return model_b_runner.get_status()
 
 
+@app.get("/api/model_b/scanner_telemetry")
+def get_model_b_scanner_telemetry(limit: int = Query(10, ge=1, le=50)):
+    """Retrieve real-world performance telemetry, coverage stats, and request latencies for Model B."""
+    if not model_b_runner or not hasattr(model_b_runner, "telemetry_tracker"):
+        return {"latest": None, "history": []}
+    return {
+        "latest": model_b_runner.telemetry_tracker.get_latest(),
+        "history": model_b_runner.telemetry_tracker.get_history(limit=limit),
+    }
+
+
 @app.post("/api/model_b/scan")
 async def trigger_model_b_scan():
     """Trigger an immediate 1H scan cycle across universal perpetual markets for Model B."""
@@ -1813,6 +1838,329 @@ def get_model_b_orderbook(symbol: str):
         else:
             result[ex] = None
     return {"symbol": symbol, "books": result}
+
+
+@app.get("/api/model_b/whale_watchlist")
+async def get_model_b_whale_watchlist(
+    max_symbols: int = Query(20, ge=1, le=50),
+    force_refresh: bool = Query(False),
+):
+    """Retrieve ranked perpetuals by unusual whale buying and selling flow across venues."""
+    try:
+        watchlist = await asyncio.to_thread(
+            whale_ranking_engine.scan_and_rank_universe,
+            max_symbols=max_symbols,
+            force_refresh=force_refresh,
+        )
+        return watchlist
+    except Exception as err:
+        logger.error(f"Error scanning whale watchlist: {err}")
+        return {
+            "scanned_count": 0,
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "top_buy_activity": [],
+            "top_sell_activity": [],
+            "active_resting_walls": [],
+            "error": str(err),
+            "guardrail_notice": "Whale flow alerts and ranking scores are research and decision-support telemetry only. They NEVER automatically submit or modify live or paper orders.",
+        }
+
+
+@app.get("/api/model_b/whale_events")
+def get_model_b_whale_events(
+    symbol: Optional[str] = Query(None, description="Optional perpetual symbol filter"),
+    event_type: Optional[str] = Query(None, description="Optional WhaleEventType filter"),
+    venue: Optional[str] = Query(None, description="Optional exchange venue filter"),
+    lifecycle_state: Optional[str] = Query(None, description="Optional lifecycle state filter"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Retrieve persisted institutional tape and resting depth events from SQLite."""
+    events = db.get_whale_events(
+        symbol=symbol,
+        event_type=event_type,
+        venue=venue,
+        lifecycle_state=lifecycle_state,
+        limit=limit,
+    )
+    return {
+        "count": len(events),
+        "events": events,
+        "guardrail_notice": "Whale flow alerts are research and decision-support telemetry only.",
+    }
+
+
+@app.get("/api/model_b/whale_active_walls")
+def get_model_b_whale_active_walls():
+    """Retrieve currently active resting order book depth walls across monitored symbols."""
+    active_walls = []
+    for sym, walls_dict in whale_ranking_engine.whale_detector._tracked_walls.items():
+        for w in walls_dict.values():
+            if w.is_active:
+                active_walls.append({
+                    "symbol": w.symbol,
+                    "venue": w.venue,
+                    "side": w.side,
+                    "price": round(w.price, 4),
+                    "notional_usdt": round(w.notional_usdt, 2),
+                    "distance_bps": round(w.min_distance_bps, 1),
+                    "persistence_seconds": round(w.persistence_seconds, 1),
+                    "is_spoof_candidate": w.is_spoof_candidate,
+                    "first_seen_utc": datetime.fromtimestamp(w.first_seen_ms / 1000, tz=timezone.utc).isoformat(),
+                })
+    active_walls.sort(key=lambda x: x["notional_usdt"], reverse=True)
+    return {
+        "count": len(active_walls),
+        "walls": active_walls[:50],
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/model_b/whale_correlate")
+async def post_model_b_whale_correlate():
+    """Retrospective evaluation: update forward horizon prices (+15m, +1h, +4h) for historical alerts."""
+    unresolved_15m = db.get_unresolved_whale_events(horizon="15m")
+    unresolved_1h = db.get_unresolved_whale_events(horizon="1h")
+    unresolved_4h = db.get_unresolved_whale_events(horizon="4h")
+
+    updated_count = 0
+    # Group by symbol to fetch price once
+    symbols_to_check = {ev["symbol"] for ev in (unresolved_15m + unresolved_1h + unresolved_4h)}
+    current_prices: Dict[str, float] = {}
+
+    for sym in symbols_to_check:
+        try:
+            prem = market_context_service.adapter.get_premium_index(sym)
+            if prem and prem.get("mark_price"):
+                current_prices[sym] = float(prem["mark_price"])
+        except Exception:
+            pass
+
+    for ev in unresolved_15m:
+        px = current_prices.get(ev["symbol"])
+        if px and px > 0:
+            ret = ((px - ev["mark_price_at_event"]) / ev["mark_price_at_event"]) * 100.0 if ev["mark_price_at_event"] > 0 else 0.0
+            is_buy = ev["side"] in ("BUY", "BID")
+            if is_buy:
+                outcome = "CONTINUATION" if ret >= 0.5 else ("REVERSAL" if ret <= -0.5 else "CHOP")
+            else:
+                outcome = "CONTINUATION" if ret <= -0.5 else ("REVERSAL" if ret >= 0.5 else "CHOP")
+            if db.update_whale_event_forward_price(ev["event_id"], horizon="15m", price=px, outcome=outcome):
+                updated_count += 1
+
+    for ev in unresolved_1h:
+        px = current_prices.get(ev["symbol"])
+        if px and px > 0:
+            ret = ((px - ev["mark_price_at_event"]) / ev["mark_price_at_event"]) * 100.0 if ev["mark_price_at_event"] > 0 else 0.0
+            is_buy = ev["side"] in ("BUY", "BID")
+            outcome = "CONTINUATION" if ((is_buy and ret >= 1.0) or (not is_buy and ret <= -1.0)) else ("REVERSAL" if ((is_buy and ret <= -1.0) or (not is_buy and ret >= 1.0)) else "CHOP")
+            if db.update_whale_event_forward_price(ev["event_id"], horizon="1h", price=px, outcome=outcome):
+                updated_count += 1
+
+    for ev in unresolved_4h:
+        px = current_prices.get(ev["symbol"])
+        if px and px > 0:
+            ret = ((px - ev["mark_price_at_event"]) / ev["mark_price_at_event"]) * 100.0 if ev["mark_price_at_event"] > 0 else 0.0
+            is_buy = ev["side"] in ("BUY", "BID")
+            outcome = "CONTINUATION" if ((is_buy and ret >= 2.0) or (not is_buy and ret <= -2.0)) else ("REVERSAL" if ((is_buy and ret <= -2.0) or (not is_buy and ret >= 2.0)) else "CHOP")
+            if db.update_whale_event_forward_price(ev["event_id"], horizon="4h", price=px, outcome=outcome):
+                updated_count += 1
+
+    return {
+        "status": "SUCCESS",
+        "updated_events_count": updated_count,
+        "checked_symbols": list(symbols_to_check),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# =====================================================================
+# Model B — Independent Live-Market Shadow Research API Endpoints
+# =====================================================================
+
+@app.get("/api/model_b/research/metrics")
+def get_model_b_research_metrics():
+    """Retrieve statistical performance metrics for all 6 strategy variants and synthetic portfolios."""
+    storage = model_b_runner.shadow_evaluator.storage if (model_b_runner and hasattr(model_b_runner, "shadow_evaluator")) else ResearchStorage(db)
+
+    # 1. Variant metrics
+    variants_data = {}
+    for var in ResearchVariant:
+        m = storage.compute_metrics(var.value)
+        variants_data[var.value] = m.to_dict()
+
+    # 2. Synthetic portfolios
+    portfolios = {
+        "baseline": storage.compute_portfolio_metrics(
+            long_variant=ResearchVariant.VARIANT_A_LONG_BASELINE.value,
+            short_variant=ResearchVariant.VARIANT_B_SHORT_BASELINE.value,
+        ),
+        "trend_4h": storage.compute_portfolio_metrics(
+            long_variant=ResearchVariant.VARIANT_A_LONG_BASELINE.value,
+            short_variant=ResearchVariant.VARIANT_C_SHORT_4H_TREND.value,
+        ),
+        "confirmed_close": storage.compute_portfolio_metrics(
+            long_variant=ResearchVariant.VARIANT_A_LONG_BASELINE.value,
+            short_variant=ResearchVariant.VARIANT_D_SHORT_CONFIRMED_CLOSE.value,
+        ),
+        "order_flow": storage.compute_portfolio_metrics(
+            long_variant=ResearchVariant.VARIANT_A_LONG_BASELINE.value,
+            short_variant=ResearchVariant.VARIANT_E_SHORT_ORDER_FLOW.value,
+        ),
+        "combined_optimized": storage.compute_portfolio_metrics(
+            long_variant=ResearchVariant.VARIANT_A_LONG_BASELINE.value,
+            short_variant=ResearchVariant.VARIANT_F_SHORT_COMBINED.value,
+        ),
+    }
+
+    # 3. Active paper portfolio status (isolated presentation)
+    active_status = model_b_runner.get_status() if model_b_runner else {}
+
+    # 4. Market-data freshness
+    latest_telemetry = None
+    if model_b_runner and hasattr(model_b_runner, "telemetry_tracker"):
+        latest_telemetry = model_b_runner.telemetry_tracker.get_latest()
+
+    return {
+        "variants": variants_data,
+        "portfolios": portfolios,
+        "metadata": VARIANT_METADATA,
+        "active_portfolio": {
+            "capital": active_status.get("capital", {}),
+            "risk_limits": active_status.get("risk_limits", {}),
+            "execution_metrics": active_status.get("execution_metrics", {}),
+            "circuit_breaker_active": active_status.get("risk_limits", {}).get("daily_circuit_breaker_active", False)
+            or active_status.get("risk_limits", {}).get("weekly_circuit_breaker_active", False),
+        },
+        "market_data_freshness": {
+            "last_scan_utc": active_status.get("last_scan_utc"),
+            "discovered_markets_count": active_status.get("discovered_markets_count", 0),
+            "latest_cycle_duration_ms": latest_telemetry.get("total_duration_ms") if latest_telemetry else None,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        },
+        "cost_assumptions": {
+            "maker_fee_rate": 0.0002,
+            "taker_fee_rate": 0.0005,
+            "slippage_rate": 0.0005,
+            "penetration_buffer_pct": 0.00025,
+            "ttl_expiry_bars": 12,
+        },
+    }
+
+
+@app.get("/api/model_b/research/signals")
+def get_model_b_research_signals(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    symbol: Optional[str] = Query(None),
+    direction: Optional[str] = Query(None),
+):
+    """Retrieve canonical research signals and their paired variant evaluations."""
+    storage = model_b_runner.shadow_evaluator.storage if (model_b_runner and hasattr(model_b_runner, "shadow_evaluator")) else ResearchStorage(db)
+    signals = storage.get_paired_signals_summary(limit=limit, offset=offset, symbol=symbol, direction=direction)
+    return {
+        "signals": signals,
+        "count": len(signals),
+        "limit": limit,
+        "offset": offset,
+        "symbol": symbol,
+        "direction": direction,
+    }
+
+
+@app.get("/api/model_b/research/evaluations")
+def get_model_b_research_evaluations(
+    variant: str = Query(ResearchVariant.VARIANT_F_SHORT_COMBINED.value),
+    direction: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Retrieve individual variant evaluations with optional status/direction filters."""
+    storage = model_b_runner.shadow_evaluator.storage if (model_b_runner and hasattr(model_b_runner, "shadow_evaluator")) else ResearchStorage(db)
+    evals = storage.get_evaluations_for_variant(variant=variant, direction=direction, status=status, limit=limit)
+    return {
+        "variant": variant,
+        "direction": direction,
+        "status": status,
+        "count": len(evals),
+        "evaluations": evals,
+    }
+
+
+@app.get("/api/model_b/research/status")
+def get_model_b_research_status():
+    """Retrieve runtime status comparing active paper execution and independent shadow evaluation."""
+    storage = model_b_runner.shadow_evaluator.storage if (model_b_runner and hasattr(model_b_runner, "shadow_evaluator")) else ResearchStorage(db)
+    open_orders = storage.get_open_shadow_orders()
+    active_status = model_b_runner.get_status() if model_b_runner else {}
+
+    return {
+        "shadow_evaluator_active": True,
+        "mode": "RESEARCH_SHADOW_SIMULATION",
+        "open_shadow_orders_count": len(open_orders),
+        "active_portfolio_halted": active_status.get("risk_limits", {}).get("daily_circuit_breaker_active", False)
+        or active_status.get("risk_limits", {}).get("weekly_circuit_breaker_active", False),
+        "active_portfolio_open_positions": active_status.get("risk_limits", {}).get("open_positions_count", 0),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/model_b/research/replay")
+async def trigger_model_b_research_replay():
+    """Trigger an on-demand historical candidate replay through the shadow evaluator."""
+    storage = model_b_runner.shadow_evaluator.storage if (model_b_runner and hasattr(model_b_runner, "shadow_evaluator")) else ResearchStorage(db)
+    evaluator = model_b_runner.shadow_evaluator if (model_b_runner and hasattr(model_b_runner, "shadow_evaluator")) else ModelBShadowEvaluator(db=db, storage=storage)
+
+    with db.get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM setup_candidates WHERE model_id = 'MODEL_B' ORDER BY timestamp_ms ASC")
+        rows = cur.fetchall()
+
+    candidates = []
+    for r in rows:
+        d = dict(r)
+        cand = SetupCandidate(
+            candidate_id=d["candidate_id"],
+            symbol=d["symbol"],
+            timestamp_ms=d["timestamp_ms"],
+            direction=Direction(d["direction"]),
+            bias_4h=MarketBias(d["bias_4h"]),
+            structure_1h=StructureState(d["structure_1h"]),
+            entry_price=d["entry_price"],
+            stop_loss=d["stop_loss"],
+            take_profit_1=d["take_profit_1"],
+            take_profit_2=d["take_profit_2"],
+            gross_reward_to_risk=d["gross_rr"],
+            net_reward_to_risk=d["net_rr"],
+            invalidation_price=d["invalidation_price"],
+            status=CandidateStatus(d["status"]),
+            entry_category=EntryCategory(d.get("entry_category", "Reversal")),
+            model_id="MODEL_B",
+        )
+        cand.details_json = d["details_json"]
+        candidates.append(cand)
+
+    symbols = list(set(c.symbol for c in candidates))
+    adapter = AsterDexAdapter()
+    candles_by_symbol = {}
+    for sym in symbols:
+        try:
+            klines = adapter.get_klines(sym, "1h", limit=100)
+            if klines:
+                candles_by_symbol[sym] = klines
+        except Exception:
+            pass
+
+    summary = await asyncio.to_thread(evaluator.replay_historical_candidates, candidates, candles_by_symbol)
+    return {
+        "status": "SUCCESS",
+        "candidates_replayed": len(candidates),
+        "symbols_count": len(symbols),
+        "summary": {k: v.to_dict() for k, v in summary.items()},
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 
 
 if __name__ == "__main__":

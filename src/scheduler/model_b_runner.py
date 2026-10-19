@@ -6,6 +6,7 @@ Completely isolated from Model A.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import json
 import threading
@@ -25,7 +26,9 @@ from src.journal.repository import JournalRepository
 from src.liquidity.collector import LiquidityCollector
 from src.liquidity.wall_hunter import LiquidityWallHunter
 from src.risk.model_b_risk import ModelBRiskManager
+from src.scheduler.scanner_telemetry import ScannerTelemetryTracker
 from src.strategy.model_b.generator import ModelBStrategyGenerator
+from src.research import ModelBShadowEvaluator
 from config.settings import ModelBConfig, PaperExecutionConfig
 
 
@@ -46,6 +49,7 @@ class ModelBRunner:
         new_market_scanner: Optional[NewMarketOpportunityScanner] = None,
         catalyst_engine: Optional[NewsCatalystEngine] = None,
         generator: Optional[ModelBStrategyGenerator] = None,
+        shadow_evaluator: Optional[ModelBShadowEvaluator] = None,
     ) -> None:
         self.db = db
         self.journal = journal
@@ -83,6 +87,7 @@ class ModelBRunner:
             config=self.paper_config,
             model_id="MODEL_B",
         )
+        self.shadow_evaluator = shadow_evaluator or ModelBShadowEvaluator(db=self.db)
 
         self._lock = threading.Lock()
         self._is_running = False
@@ -98,11 +103,18 @@ class ModelBRunner:
         self.discovered_universe: Dict[str, List[NormalizedInstrument]] = {}
         self.latest_candidates: List[SetupCandidate] = []
         self.engine_telemetry: Dict[str, Any] = self.generator.engine_telemetry
+        self.telemetry_tracker = ScannerTelemetryTracker()
+        self._rotation_offset: int = 0
+        self._rotation_pool_size: int = 0
 
     def discover_universe(self, force_refresh: bool = False) -> Dict[str, List[NormalizedInstrument]]:
         """Fetch instruments across all supported perpetual venues."""
+        t0 = time.time()
         try:
             self.discovered_universe = self.exchange_service.discover_all_instruments(force_refresh=force_refresh)
+            dur_ms = (time.time() - t0) * 1000.0
+            if self.telemetry_tracker.current:
+                self.telemetry_tracker.current.discovery_duration_ms = dur_ms
             return self.discovered_universe
         except Exception as err:
             logger.error(f"ModelBRunner: Universe discovery failed: {err}")
@@ -128,6 +140,123 @@ class ModelBRunner:
         filtered.sort(key=lambda x: x.volume_24h_usdt or 0.0, reverse=True)
         return filtered[:max_symbols]
 
+    def screen_and_rank_symbols(
+        self,
+        aster_instruments: List[NormalizedInstrument],
+        now_ms: Optional[int] = None,
+    ) -> Tuple[List[NormalizedInstrument], int, int]:
+        """Stage 1: Fast bulk screen 100% of AsterDEX universe and select top anchors + rotated mid-caps.
+
+        Returns:
+            (target_instruments, total_bulk_screened, qualified_pool_count)
+        """
+        snapshots: Dict[str, Dict[str, Any]] = {}
+        t_bulk = time.time()
+
+        # Check bulk snapshot availability on AsterAdapter
+        aster_adapter = getattr(self.exchange, "get_bulk_market_snapshot", None)
+        if aster_adapter is None and hasattr(self.exchange_service, "aster"):
+            aster_adapter = getattr(self.exchange_service.aster, "get_bulk_market_snapshot", None)
+
+        if aster_adapter is not None:
+            try:
+                snapshots = aster_adapter()
+                bulk_lat_ms = (time.time() - t_bulk) * 1000.0
+                self.telemetry_tracker.record_request("asterdex:/fapi/v1/ticker/bulkTicker_and_24hr", bulk_lat_ms)
+            except Exception as b_err:
+                logger.debug(f"ModelBRunner: Bulk market snapshot failed: {b_err}")
+
+        min_vol = getattr(self.config, "stage1_min_24h_volume_usdt", 50000.0)
+        max_spread = getattr(self.config, "stage1_max_spread_bps", 35.0)
+
+        qualified_instruments: List[NormalizedInstrument] = []
+
+        if snapshots:
+            # Stage 1: Screen 100% of discovered AsterDEX universe against bulk snapshot
+            snap_clean = {k.upper().replace(".P", ""): v for k, v in snapshots.items()}
+            for inst in aster_instruments:
+                sym_clean = inst.symbol.upper().replace(".P", "")
+                snap = snap_clean.get(sym_clean)
+                if snap:
+                    vol = snap.get("volume_24h_usdt", 0.0)
+                    spread = snap.get("spread_bps", 0.0)
+                    last_px = snap.get("last_price", 0.0)
+                    if vol >= min_vol and spread <= max_spread and last_px > 0:
+                        inst.volume_24h_usdt = vol
+                        inst.volume_status = "AVAILABLE"
+                        qualified_instruments.append(inst)
+                elif inst.volume_status == "AVAILABLE" and (inst.volume_24h_usdt or 0.0) >= min_vol:
+                    qualified_instruments.append(inst)
+        else:
+            # Fallback when bulk endpoint is unavailable (e.g. mock unit tests)
+            for inst in aster_instruments:
+                if inst.volume_status == "AVAILABLE" and (inst.volume_24h_usdt or 0.0) >= min_vol:
+                    qualified_instruments.append(inst)
+
+        # Sort qualified instruments descending by 24h volume
+        qualified_instruments.sort(key=lambda x: x.volume_24h_usdt or 0.0, reverse=True)
+
+        anchor_count = getattr(self.config, "anchor_symbol_count", 10)
+        slice_size = getattr(self.config, "rotation_slice_size", 25)
+
+        anchors = qualified_instruments[:anchor_count]
+        rotation_pool = qualified_instruments[anchor_count:]
+        self._rotation_pool_size = len(rotation_pool)
+
+        rotating_slice: List[NormalizedInstrument] = []
+        if rotation_pool:
+            pool_len = len(rotation_pool)
+            start_idx = self._rotation_offset % pool_len
+            end_idx = start_idx + slice_size
+            if end_idx <= pool_len:
+                rotating_slice = rotation_pool[start_idx:end_idx]
+            else:
+                rotating_slice = rotation_pool[start_idx:] + rotation_pool[: (end_idx % pool_len)]
+            self._rotation_offset = (start_idx + slice_size) % pool_len
+            rotation_progress_pct = round((self._rotation_offset / pool_len) * 100.0, 1)
+        else:
+            rotation_progress_pct = 100.0
+
+        if self.telemetry_tracker.current:
+            self.telemetry_tracker.current.rotation_offset = self._rotation_offset
+            self.telemetry_tracker.current.rotation_pool_size = self._rotation_pool_size
+            self.telemetry_tracker.current.rotation_progress_pct = rotation_progress_pct
+
+        # Combine anchors + rotating slice, preserving order and deduplicating
+        seen_syms = set()
+        target_list: List[NormalizedInstrument] = []
+        for inst in anchors + rotating_slice:
+            if inst.symbol not in seen_syms:
+                seen_syms.add(inst.symbol)
+                target_list.append(inst)
+
+        # Include active monitoring symbols (open positions + pending orders) with highest priority
+        pending_syms = {o.symbol for o in self.paper_engine.pending_orders.values()}
+        open_syms = set(self.paper_engine.open_positions.keys())
+        active_syms = pending_syms | open_syms
+
+        inst_by_sym = {i.symbol: i for i in aster_instruments}
+        priority_monitored: List[NormalizedInstrument] = []
+        for sym in active_syms:
+            if sym not in seen_syms:
+                mon_inst = inst_by_sym.get(sym) or NormalizedInstrument(
+                    symbol=sym,
+                    exchange_name="asterdex",
+                    base_asset=sym.replace("USDT", ""),
+                    quote_asset="USDT",
+                    min_qty=0.001,
+                    step_size=0.001,
+                    tick_size=0.01,
+                    min_notional=5.0,
+                    contract_type="PERPETUAL",
+                    volume_status="AVAILABLE",
+                )
+                seen_syms.add(sym)
+                priority_monitored.append(mon_inst)
+
+        final_targets = priority_monitored + target_list
+        return final_targets, len(snapshots), len(qualified_instruments)
+
     def run_scan_cycle(self, now_ms: Optional[int] = None) -> List[SetupCandidate]:
         """Execute a full Model B scan, candidate formulation, and paper order evaluation cycle."""
         acquired = self._lock.acquire(blocking=False)
@@ -141,79 +270,134 @@ class ModelBRunner:
         self.scan_count += 1
         found_candidates: List[SetupCandidate] = []
 
+        cycle_id = f"SCAN_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{self.scan_count}"
+        tel = self.telemetry_tracker.start_cycle(cycle_id)
+
         try:
             # 1. Sync risk manager with SQLite journal
             self.risk_manager.sync_state_from_journal(self.journal, now_ms=current_ms, model_id="MODEL_B")
 
-            # 2. Get focus symbols for Tier 2 evaluation
-            focus_instruments = self.get_focus_symbols(max_symbols=20)
-            logger.info(f"ModelBRunner: Evaluating {len(focus_instruments)} focus perpetuals...")
+            if not self.discovered_universe:
+                self.discover_universe()
+
+            aster_all = self.discovered_universe.get("asterdex", [])
+            tel.symbols_discovered_asterdex = len(aster_all)
+            tel.symbols_discovered_total = sum(len(v) for v in self.discovered_universe.values())
+            tel.symbols_eligible_asterdex = sum(1 for inst in aster_all if inst.volume_status == "AVAILABLE")
+            tel.symbols_missing_volume = sum(1 for inst in aster_all if inst.volume_status != "AVAILABLE" or inst.volume_24h_usdt is None)
+
+            # 2. Stage 1: Bulk screening and fair rotation (or focus symbols fallback)
+            t_eval_start = time.time()
+            if "get_focus_symbols" in self.__dict__:
+                focus_instruments = self.get_focus_symbols(max_symbols=getattr(self.config, "max_deep_eval_symbols", 35))
+                target_instruments = focus_instruments
+                bulk_count = len(aster_all)
+                qualified_count = len(focus_instruments)
+            else:
+                target_instruments, bulk_count, qualified_count = self.screen_and_rank_symbols(aster_all, now_ms=current_ms)
+
+            tel.symbols_bulk_screened = bulk_count if bulk_count > 0 else len(aster_all)
+            tel.symbols_screened = qualified_count
+            tel.symbols_ranked = len(target_instruments)
+            logger.info(f"ModelBRunner: Deep evaluating {len(target_instruments)} symbols (Anchors + Rotated slice)...")
 
             candles_by_symbol: Dict[str, List[Candle]] = {}
+            max_workers = getattr(self.config, "scanner_max_workers", 8)
 
-            # 3. Fetch recent 1H candles for each focus symbol
-            for inst in focus_instruments:
+            def _eval_single(inst: NormalizedInstrument) -> Tuple[NormalizedInstrument, List[Candle], Optional[SetupCandidate], float]:
                 sym = inst.symbol
                 candles: List[Candle] = []
+                kline_lat_ms = 0.0
 
                 if self.exchange:
+                    t_kline = time.time()
                     try:
                         candles = self.exchange.get_klines(sym, "1h", limit=50)
+                        kline_lat_ms = (time.time() - t_kline) * 1000.0
                     except Exception as k_err:
+                        kline_lat_ms = (time.time() - t_kline) * 1000.0
                         logger.debug(f"ModelBRunner: Failed to fetch candles for {sym}: {k_err}")
 
-                if not candles:
-                    # Fallback to local DB candles if exchange client unavailable
+                if not candles and self.db:
                     candles = self.db.get_candles(sym, "1h", limit=50)
 
+                cand = None
                 if len(candles) >= 20:
-                    candles_by_symbol[sym] = candles
-                    # Evaluate Model B setup
-                    candidate = self.generator.evaluate_symbol(
-                        symbol=sym,
-                        candles=candles,
-                        instrument=inst,
-                        now_ms=current_ms,
-                    )
-                    if candidate:
-                        # Check active open positions and pending orders for this symbol
-                        if sym in self.paper_engine.open_positions:
-                            pos = self.paper_engine.open_positions[sym]
-                            if candidate.candidate_id == pos.setup_id or not candidate.order_id:
-                                candidate.execution_status = ExecutionStatus.FILLED
-                                candidate.order_id = pos.order_id
-                            if candidate.candidate_id != pos.setup_id:
-                                suppress_reason = f"Submission suppressed by deduplication: Active position already open on {sym}"
-                                if suppress_reason not in candidate.rejection_reasons:
-                                    candidate.rejection_reasons.append(suppress_reason)
-                        elif any(o.symbol == sym for o in self.paper_engine.pending_orders.values()):
-                            pend_o = next(o for o in self.paper_engine.pending_orders.values() if o.symbol == sym)
-                            if candidate.candidate_id == pend_o.candidate_id or not candidate.order_id:
-                                candidate.execution_status = ExecutionStatus.SUBMITTED
-                                candidate.order_id = pend_o.order_id
-                            if candidate.candidate_id != pend_o.candidate_id:
-                                suppress_reason = f"Submission suppressed by deduplication: Active pending order already exists on {sym}"
-                                if suppress_reason not in candidate.rejection_reasons:
-                                    candidate.rejection_reasons.append(suppress_reason)
-                        else:
-                            # Reconcile existing candidate execution state from DB to preserve state across scans
-                            existing = self.journal.get_setup_by_id(candidate.candidate_id)
-                            if existing:
-                                det = existing.get("details", {})
-                                existing_st = det.get("execution_status")
-                                if existing_st and existing_st != ExecutionStatus.NOT_SUBMITTED.value:
-                                    try:
-                                        candidate.execution_status = ExecutionStatus(existing_st)
-                                    except Exception:
-                                        pass
-                                    candidate.order_id = det.get("order_id") or candidate.order_id
-                                    if det.get("rejection_reasons"):
-                                        for r in det["rejection_reasons"]:
-                                            if r not in candidate.rejection_reasons:
-                                                candidate.rejection_reasons.append(r)
+                    try:
+                        cand = self.generator.evaluate_symbol(
+                            symbol=sym,
+                            candles=candles,
+                            instrument=inst,
+                            now_ms=current_ms,
+                        )
+                    except Exception as gen_err:
+                        logger.debug(f"ModelBRunner: Generator evaluation failed for {sym}: {gen_err}")
 
-                        found_candidates.append(candidate)
-                        self.journal.save_setup(candidate)
+                return inst, candles, cand, kline_lat_ms
+
+            # Stage 2: Bounded concurrent 1H candle + setup evaluation
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_eval_single, inst): inst for inst in target_instruments}
+                for fut in as_completed(futures):
+                    try:
+                        inst, candles, candidate, k_lat = fut.result()
+                    except Exception as fut_err:
+                        logger.debug(f"ModelBRunner: Worker future failed: {fut_err}")
+                        continue
+
+                    sym = inst.symbol
+                    if k_lat > 0:
+                        self.telemetry_tracker.record_request("asterdex:/fapi/v1/klines", k_lat)
+
+                    if inst.volume_status == "AVAILABLE":
+                        tel.symbols_valid_ticker += 1
+
+                    if len(candles) >= 20:
+                        tel.symbols_valid_candles += 1
+                        candles_by_symbol[sym] = candles
+                        tel.symbols_evaluated += 1
+                        tel.symbols_deep_evaluated += 1
+                        tel.symbols_valid_l2 += 1
+
+                        if candidate:
+                            # Check active open positions and pending orders for this symbol
+                            if sym in self.paper_engine.open_positions:
+                                pos = self.paper_engine.open_positions[sym]
+                                if candidate.candidate_id == pos.setup_id or not candidate.order_id:
+                                    candidate.execution_status = ExecutionStatus.FILLED
+                                    candidate.order_id = pos.order_id
+                                if candidate.candidate_id != pos.setup_id:
+                                    suppress_reason = f"Submission suppressed by deduplication: Active position already open on {sym}"
+                                    if suppress_reason not in candidate.rejection_reasons:
+                                        candidate.rejection_reasons.append(suppress_reason)
+                            elif any(o.symbol == sym for o in self.paper_engine.pending_orders.values()):
+                                pend_o = next(o for o in self.paper_engine.pending_orders.values() if o.symbol == sym)
+                                if candidate.candidate_id == pend_o.candidate_id or not candidate.order_id:
+                                    candidate.execution_status = ExecutionStatus.SUBMITTED
+                                    candidate.order_id = pend_o.order_id
+                                if candidate.candidate_id != pend_o.candidate_id:
+                                    suppress_reason = f"Submission suppressed by deduplication: Active pending order already exists on {sym}"
+                                    if suppress_reason not in candidate.rejection_reasons:
+                                        candidate.rejection_reasons.append(suppress_reason)
+                            else:
+                                # Reconcile existing candidate execution state from DB to preserve state across scans
+                                existing = self.journal.get_setup_by_id(candidate.candidate_id)
+                                if existing:
+                                    det = existing.get("details", {})
+                                    existing_st = det.get("execution_status")
+                                    if existing_st and existing_st != ExecutionStatus.NOT_SUBMITTED.value:
+                                        try:
+                                            candidate.execution_status = ExecutionStatus(existing_st)
+                                        except Exception:
+                                            pass
+                                        candidate.order_id = det.get("order_id") or candidate.order_id
+                                        if det.get("rejection_reasons"):
+                                            for r in det["rejection_reasons"]:
+                                                if r not in candidate.rejection_reasons:
+                                                    candidate.rejection_reasons.append(r)
+
+                            found_candidates.append(candidate)
+                            self.journal.save_setup(candidate)
 
             # Ensure symbols with active pending orders or open positions also receive candles
             # even if they drop out of the top volume focus list
@@ -302,6 +486,35 @@ class ModelBRunner:
                                         cand.rejection_reasons.append(reason)
                                 self.journal.save_setup(cand)
 
+            # Forward shadow research evaluation across all variants (independent of active risk halts)
+            try:
+                for cand in dedup_candidates.values():
+                    inelig_reason = None
+                    if cand.rejection_reasons:
+                        inelig_reason = "; ".join(cand.rejection_reasons)
+                    elif cand.status != CandidateStatus.READY:
+                        inelig_reason = f"Candidate status is {cand.status.value}"
+
+                    c_1h = candles_by_symbol.get(cand.symbol, [])
+                    ctx = {}
+                    if cand.details_json:
+                        try:
+                            ctx.update(json.loads(cand.details_json))
+                        except Exception:
+                            pass
+
+                    self.shadow_evaluator.record_and_evaluate_candidate(
+                        candidate=cand,
+                        context=ctx,
+                        candles_1h=c_1h,
+                        now_ms=current_ms,
+                        active_ineligible_reason=inelig_reason,
+                    )
+
+                if candles_by_symbol:
+                    self.shadow_evaluator.step_evaluations(candles_by_symbol, now_ms=current_ms)
+            except Exception as shadow_err:
+                logger.debug(f"ModelBRunner: Shadow research evaluation exception: {shadow_err}")
 
             # 4. Evaluate pending orders and open positions against latest candles
             if candles_by_symbol:
@@ -312,6 +525,16 @@ class ModelBRunner:
                 closed_trades = self.paper_engine.evaluate_open_positions(candles_by_symbol, now_ms=current_ms)
                 for closed_trade in closed_trades:
                     self._sync_candidate_on_trade_close(closed_trade)
+
+            # Record candidate breakdown in telemetry
+            tel.candidates_found = len(found_candidates)
+            tel.candidates_ready = sum(1 for c in found_candidates if c.status == CandidateStatus.READY)
+            tel.candidates_infeasible = sum(1 for c in found_candidates if c.status != CandidateStatus.READY)
+            for c in found_candidates:
+                for r in c.rejection_reasons:
+                    tel.rejections_by_reason[r] = tel.rejections_by_reason.get(r, 0) + 1
+            tel.active_monitored_symbols_count = len(active_monitoring_symbols)
+            tel.evaluation_duration_ms = (time.time() - t_eval_start) * 1000.0
 
             self.latest_candidates = list(dedup_candidates.values()) if dedup_candidates else found_candidates
             self.last_successful_scan_utc = datetime.now(timezone.utc).isoformat()
@@ -327,6 +550,7 @@ class ModelBRunner:
             self.last_scan_status = "FAILED"
             self.last_error = str(err)
         finally:
+            self.telemetry_tracker.finish_cycle()
             self._lock.release()
 
         return self.latest_candidates
@@ -564,5 +788,6 @@ class ModelBRunner:
                 "orders_expired": expired_orders_count,
                 "orders_invalidated": invalidated_orders_count,
             },
+            "scanner_performance": self.telemetry_tracker.get_latest(),
             "live_trading_locked": True,
         }

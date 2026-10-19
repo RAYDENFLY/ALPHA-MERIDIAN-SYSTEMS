@@ -3,6 +3,7 @@
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import sqlite3
 from typing import Any, Dict, Generator, List, Optional
@@ -181,7 +182,40 @@ CREATE TABLE IF NOT EXISTS order_book_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_book_snapshots_sym_time 
 ON order_book_snapshots (venue, symbol, timestamp_ms);
+
+CREATE TABLE IF NOT EXISTS whale_events (
+    event_id TEXT PRIMARY KEY,
+    timestamp_ms INTEGER NOT NULL,
+    created_at_utc TEXT NOT NULL,
+    venue TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    original_symbol TEXT NOT NULL DEFAULT '',
+    event_type TEXT NOT NULL,
+    side TEXT NOT NULL,
+    price REAL NOT NULL,
+    size REAL NOT NULL,
+    notional_usdt REAL NOT NULL,
+    distance_bps REAL NOT NULL,
+    baseline_multiple REAL NOT NULL,
+    persistence_seconds REAL DEFAULT 0.0,
+    lifecycle_state TEXT NOT NULL DEFAULT 'ACTIVE',
+    is_spoof_candidate INTEGER DEFAULT 0,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    mark_price_at_event REAL NOT NULL DEFAULT 0.0,
+    price_15m_later REAL,
+    price_1h_later REAL,
+    price_4h_later REAL,
+    sweep_reclaimed_later INTEGER DEFAULT 0,
+    correlation_outcome TEXT DEFAULT 'PENDING'
+);
+
+CREATE INDEX IF NOT EXISTS idx_whale_sym_time 
+ON whale_events (symbol, timestamp_ms);
+
+CREATE INDEX IF NOT EXISTS idx_whale_type_state 
+ON whale_events (event_type, lifecycle_state);
 """
+
 
 
 class DatabaseManager:
@@ -511,3 +545,192 @@ class DatabaseManager:
             cur.execute(query, params)
             rows = cur.fetchall()
             return [dict(r) for r in rows]
+
+    def save_whale_event(self, event: Dict[str, Any]) -> bool:
+        """Persist a single whale activity event with deduplication/update."""
+        now_utc = datetime.now(timezone.utc).isoformat()
+        query = """
+        INSERT INTO whale_events (
+            event_id, timestamp_ms, created_at_utc, venue, symbol, original_symbol,
+            event_type, side, price, size, notional_usdt, distance_bps,
+            baseline_multiple, persistence_seconds, lifecycle_state, is_spoof_candidate,
+            details_json, mark_price_at_event, price_15m_later, price_1h_later,
+            price_4h_later, sweep_reclaimed_later, correlation_outcome
+        ) VALUES (
+            :event_id, :timestamp_ms, :created_at_utc, :venue, :symbol, :original_symbol,
+            :event_type, :side, :price, :size, :notional_usdt, :distance_bps,
+            :baseline_multiple, :persistence_seconds, :lifecycle_state, :is_spoof_candidate,
+            :details_json, :mark_price_at_event, :price_15m_later, :price_1h_later,
+            :price_4h_later, :sweep_reclaimed_later, :correlation_outcome
+        )
+        ON CONFLICT(event_id) DO UPDATE SET
+            persistence_seconds = excluded.persistence_seconds,
+            lifecycle_state = excluded.lifecycle_state,
+            is_spoof_candidate = excluded.is_spoof_candidate,
+            details_json = excluded.details_json,
+            price_15m_later = coalesce(excluded.price_15m_later, whale_events.price_15m_later),
+            price_1h_later = coalesce(excluded.price_1h_later, whale_events.price_1h_later),
+            price_4h_later = coalesce(excluded.price_4h_later, whale_events.price_4h_later),
+            sweep_reclaimed_later = coalesce(excluded.sweep_reclaimed_later, whale_events.sweep_reclaimed_later),
+            correlation_outcome = coalesce(excluded.correlation_outcome, whale_events.correlation_outcome);
+        """
+        params = {
+            "event_id": event["event_id"],
+            "timestamp_ms": int(event.get("timestamp_ms", 0)),
+            "created_at_utc": event.get("created_at_utc", now_utc),
+            "venue": event.get("venue", "asterdex"),
+            "symbol": event["symbol"],
+            "original_symbol": event.get("original_symbol", event["symbol"]),
+            "event_type": event.get("event_type", ""),
+            "side": event.get("side", "NEUTRAL"),
+            "price": float(event.get("price", 0.0)),
+            "size": float(event.get("size", 0.0)),
+            "notional_usdt": float(event.get("notional_usdt", 0.0)),
+            "distance_bps": float(event.get("distance_bps", 0.0)),
+            "baseline_multiple": float(event.get("baseline_multiple", 1.0)),
+            "persistence_seconds": float(event.get("persistence_seconds", 0.0)),
+            "lifecycle_state": event.get("lifecycle_state", "ACTIVE"),
+            "is_spoof_candidate": 1 if event.get("is_spoof_candidate") else 0,
+            "details_json": json.dumps(event.get("details", {})) if isinstance(event.get("details"), (dict, list)) else str(event.get("details", "{}")),
+            "mark_price_at_event": float(event.get("mark_price_at_event", event.get("price", 0.0))),
+            "price_15m_later": event.get("price_15m_later"),
+            "price_1h_later": event.get("price_1h_later"),
+            "price_4h_later": event.get("price_4h_later"),
+            "sweep_reclaimed_later": 1 if event.get("sweep_reclaimed_later") else 0,
+            "correlation_outcome": event.get("correlation_outcome", "PENDING"),
+        }
+
+        try:
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, params)
+                conn.commit()
+                return True
+        except Exception as err:
+            logger.error(f"DatabaseManager: Failed to save whale event {event.get('event_id')}: {err}")
+            return False
+
+    def save_whale_events(self, events: List[Dict[str, Any]]) -> int:
+        """Batch save whale events."""
+        saved = 0
+        for ev in events:
+            if self.save_whale_event(ev):
+                saved += 1
+        return saved
+
+    def get_whale_events(
+        self,
+        symbol: Optional[str] = None,
+        event_type: Optional[str] = None,
+        venue: Optional[str] = None,
+        lifecycle_state: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve historical whale events filtered by symbol, type, or venue."""
+        conditions = []
+        params: List[Any] = []
+
+        if symbol:
+            conditions.append("symbol = ?")
+            params.append(symbol.strip().upper())
+        if event_type:
+            conditions.append("event_type = ?")
+            params.append(event_type.strip())
+        if venue:
+            conditions.append("venue = ?")
+            params.append(venue.strip().lower())
+        if lifecycle_state:
+            conditions.append("lifecycle_state = ?")
+            params.append(lifecycle_state.strip())
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"""
+        SELECT 
+            event_id, timestamp_ms, created_at_utc, venue, symbol, original_symbol,
+            event_type, side, price, size, notional_usdt, distance_bps,
+            baseline_multiple, persistence_seconds, lifecycle_state, is_spoof_candidate,
+            details_json, mark_price_at_event, price_15m_later, price_1h_later,
+            price_4h_later, sweep_reclaimed_later, correlation_outcome
+        FROM whale_events
+        {where_clause}
+        ORDER BY timestamp_ms DESC
+        LIMIT ?;
+        """
+        params.append(limit)
+
+        try:
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                results = []
+                for r in rows:
+                    row_dict = dict(r)
+                    try:
+                        row_dict["details"] = json.loads(row_dict.get("details_json", "{}"))
+                    except Exception:
+                        row_dict["details"] = row_dict.get("details_json", "")
+                    results.append(row_dict)
+                return results
+        except Exception as err:
+            logger.error(f"DatabaseManager: Failed to query whale events: {err}")
+            return []
+
+    def update_whale_event_forward_price(
+        self,
+        event_id: str,
+        horizon: str,
+        price: float,
+        outcome: Optional[str] = None,
+    ) -> bool:
+        """Update forward horizon price (+15m, +1h, +4h) for retrospective evaluation."""
+        col = f"price_{horizon}_later"
+        if col not in ("price_15m_later", "price_1h_later", "price_4h_later"):
+            return False
+
+        set_clauses = [f"{col} = ?"]
+        params: List[Any] = [price]
+        if outcome:
+            set_clauses.append("correlation_outcome = ?")
+            params.append(outcome)
+        params.append(event_id)
+
+        query = f"UPDATE whale_events SET {', '.join(set_clauses)} WHERE event_id = ?;"
+        try:
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, params)
+                conn.commit()
+                return cur.rowcount > 0
+        except Exception as err:
+            logger.error(f"DatabaseManager: Failed to update forward price for {event_id}: {err}")
+            return False
+
+    def get_unresolved_whale_events(self, horizon: str = "15m", max_age_ms: int = 86400000) -> List[Dict[str, Any]]:
+        """Retrieve events that have passed the horizon duration but have not had forward price recorded."""
+        col = f"price_{horizon}_later"
+        if col not in ("price_15m_later", "price_1h_later", "price_4h_later"):
+            return []
+
+        horizon_ms = 900000 if horizon == "15m" else (3600000 if horizon == "1h" else 14400000)
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        target_cutoff = now_ms - horizon_ms
+        oldest_cutoff = now_ms - max_age_ms
+
+        query = f"""
+        SELECT event_id, timestamp_ms, symbol, venue, event_type, side, price, mark_price_at_event
+        FROM whale_events
+        WHERE {col} IS NULL
+          AND timestamp_ms <= ?
+          AND timestamp_ms >= ?
+        LIMIT 100;
+        """
+        try:
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, (target_cutoff, oldest_cutoff))
+                return [dict(r) for r in cur.fetchall()]
+        except Exception as err:
+            logger.error(f"DatabaseManager: Failed to get unresolved whale events: {err}")
+            return []
+

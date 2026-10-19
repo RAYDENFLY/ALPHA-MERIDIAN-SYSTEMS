@@ -38,6 +38,11 @@ class MultiExchangeService:
         self._instruments_cache: Dict[str, Dict[str, NormalizedInstrument]] = {}
         self._last_discovery_time: float = 0.0
 
+        # Cycle-level short TTL snapshot caches for eliminating redundant requests
+        self._books_cache: Dict[str, Tuple[float, Dict[str, Optional[NormalizedOrderBook]]]] = {}
+        self._trades_cache: Dict[str, Tuple[float, Dict[str, List[NormalizedTrade]]]] = {}
+        self.cache_ttl_sec: float = 5.0
+
     def discover_all_instruments(self, force_refresh: bool = False) -> Dict[str, List[NormalizedInstrument]]:
         """Discover active perpetual contracts across all enabled venues."""
         now = time.time()
@@ -79,50 +84,89 @@ class MultiExchangeService:
         )
         return results
 
-    def get_aggregated_order_books(self, symbol: str) -> Dict[str, Optional[NormalizedOrderBook]]:
-        """Fetch concurrent L2 order books for a symbol across all venues that list it."""
+    def get_aggregated_order_books(self, symbol: str, force_refresh: bool = False) -> Dict[str, Optional[NormalizedOrderBook]]:
+        """Fetch concurrent L2 order books for a symbol across verified venues that list it.
+        
+        Reuses recent snapshot if within cache_ttl_sec to eliminate duplicate in-flight requests.
+        """
+        now = time.time()
+        sym_clean = symbol.upper()
+
+        if not force_refresh and sym_clean in self._books_cache:
+            ts, cached_books = self._books_cache[sym_clean]
+            if (now - ts) < self.cache_ttl_sec:
+                return cached_books
+
         books: Dict[str, Optional[NormalizedOrderBook]] = {
             "asterdex": None,
             "binance": None,
             "hyperliquid": None,
         }
 
+        # Smart venue routing: Only query venues that actually list this contract
+        tasks: Dict[Any, str] = {}
         with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {
-                executor.submit(self.aster.get_order_book, symbol): "asterdex",
-                executor.submit(self.binance.get_order_book, symbol): "binance",
-                executor.submit(self.hyperliquid.get_order_book, symbol): "hyperliquid",
-            }
-            for fut in as_completed(futures):
-                ex = futures[fut]
+            # AsterDEX query
+            if not self._instruments_cache or sym_clean in self._instruments_cache.get("asterdex", {}):
+                tasks[executor.submit(self.aster.get_order_book, symbol)] = "asterdex"
+
+            # Binance query
+            if not self._instruments_cache or sym_clean in self._instruments_cache.get("binance", {}):
+                tasks[executor.submit(self.binance.get_order_book, symbol)] = "binance"
+
+            # Hyperliquid query
+            hl_cache = self._instruments_cache.get("hyperliquid", {})
+            coin = sym_clean.removesuffix("USDT")
+            if not self._instruments_cache or sym_clean in hl_cache or coin in hl_cache:
+                tasks[executor.submit(self.hyperliquid.get_order_book, symbol)] = "hyperliquid"
+
+            for fut in as_completed(tasks):
+                ex = tasks[fut]
                 try:
                     books[ex] = fut.result()
                 except Exception as err:
                     logger.debug(f"MultiExchangeService: Order book fetch failed for {symbol} on {ex}: {err}")
                     books[ex] = None
 
+        self._books_cache[sym_clean] = (now, books)
         return books
 
-    def get_recent_trades(self, symbol: str, limit: int = 100) -> Dict[str, List[NormalizedTrade]]:
-        """Fetch recent public trades across supported venues."""
+    def get_recent_trades(self, symbol: str, limit: int = 100, force_refresh: bool = False) -> Dict[str, List[NormalizedTrade]]:
+        """Fetch recent public trades across verified venues that list the symbol."""
+        now = time.time()
+        sym_clean = symbol.upper()
+
+        if not force_refresh and sym_clean in self._trades_cache:
+            ts, cached_trades = self._trades_cache[sym_clean]
+            if (now - ts) < self.cache_ttl_sec:
+                return cached_trades
+
         trades: Dict[str, List[NormalizedTrade]] = {
             "asterdex": [],
             "binance": [],
             "hyperliquid": [],
         }
 
+        tasks: Dict[Any, str] = {}
         with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {
-                executor.submit(self.aster.get_recent_trades, symbol, limit): "asterdex",
-                executor.submit(self.binance.get_recent_trades, symbol, limit): "binance",
-                executor.submit(self.hyperliquid.get_recent_trades, symbol, limit): "hyperliquid",
-            }
-            for fut in as_completed(futures):
-                ex = futures[fut]
+            if not self._instruments_cache or sym_clean in self._instruments_cache.get("asterdex", {}):
+                tasks[executor.submit(self.aster.get_recent_trades, symbol, limit)] = "asterdex"
+
+            if not self._instruments_cache or sym_clean in self._instruments_cache.get("binance", {}):
+                tasks[executor.submit(self.binance.get_recent_trades, symbol, limit)] = "binance"
+
+            hl_cache = self._instruments_cache.get("hyperliquid", {})
+            coin = sym_clean.removesuffix("USDT")
+            if not self._instruments_cache or sym_clean in hl_cache or coin in hl_cache:
+                tasks[executor.submit(self.hyperliquid.get_recent_trades, symbol, limit)] = "hyperliquid"
+
+            for fut in as_completed(tasks):
+                ex = tasks[fut]
                 try:
                     trades[ex] = fut.result()
                 except Exception as err:
                     logger.debug(f"MultiExchangeService: Trades fetch failed for {symbol} on {ex}: {err}")
                     trades[ex] = []
 
+        self._trades_cache[sym_clean] = (now, trades)
         return trades
