@@ -65,6 +65,7 @@ class LiquidityLevel:
     broken_index: Optional[int] = None
     broken_timestamp_ms: Optional[int] = None
     last_event_description: Optional[str] = None
+    is_htf: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -89,6 +90,7 @@ class LiquidityLevel:
             "broken_index": self.broken_index,
             "broken_timestamp_ms": self.broken_timestamp_ms,
             "last_event_description": self.last_event_description,
+            "is_htf": self.is_htf,
         }
 
 
@@ -351,6 +353,7 @@ class SweepReclaimTracker:
                 source_label=l.source_label,
                 status=LiquidityLevelStatus.ACTIVE,
                 test_count=0,
+                is_htf=l.is_htf,
             )
             for l in levels
         ]
@@ -361,6 +364,7 @@ class SweepReclaimTracker:
         # Iterate sequentially through candle bars up to eval_limit
         for k in range(eval_limit):
             current_candle = candles[k]
+            is_bar_closed = getattr(current_candle, "is_closed", True)
 
             for level in active_levels:
                 # Level is not yet confirmed/known at candle k
@@ -388,8 +392,8 @@ class SweepReclaimTracker:
                         pending_evt = event_by_level_sweep.get(level.level_id)
                         if pending_evt and pending_evt.sweep_index < k:
                             bars_since_sweep = k - pending_evt.sweep_index
-                            # Check for reclaim close inside
-                            if current_candle.close < level.price:
+                            # Check for reclaim close inside (strictly requires confirmed bar close)
+                            if is_bar_closed and current_candle.close < level.price:
                                 level.status = LiquidityLevelStatus.RECLAIMED
                                 level.reclaimed_index = k
                                 level.reclaimed_timestamp_ms = current_candle.timestamp_ms
@@ -406,7 +410,7 @@ class SweepReclaimTracker:
                                     f"Level: {level.price:.4f}, Reclaim Close: {current_candle.close:.4f}"
                                 )
                                 self._populate_event_targets(pending_evt, level, candles, k)
-                            elif (
+                            elif is_bar_closed and (
                                 current_candle.close > level.price * (1.0 + self.invalidation_threshold_pct / 100.0)
                                 or bars_since_sweep >= self.max_reclaim_bars
                             ):
@@ -417,6 +421,8 @@ class SweepReclaimTracker:
                                 pending_evt.event_type = SweepEventType.SWEEP_INVALIDATED
                                 pending_evt.evidence_text = f"Breakout invalidation: price sustained above {level.price:.4f}"
                             continue
+                        elif pending_evt:
+                            continue
 
                     # Fresh breach check on current candle
                     # Must occur strictly after the pivot confirmation candle
@@ -426,8 +432,8 @@ class SweepReclaimTracker:
                         depth_pct = (depth_usdt / level.price) * 100.0
                         depth_bps = (depth_usdt / level.price) * 10000.0
 
-                        # Case 1: Immediate Reclaim on same candle (wick pierced, closed below)
-                        if current_candle.close < level.price:
+                        # Case 1: Immediate Reclaim on same candle (wick pierced, closed below, confirmed bar close)
+                        if is_bar_closed and current_candle.close < level.price:
                             level.status = LiquidityLevelStatus.RECLAIMED
                             level.swept_index = k
                             level.swept_timestamp_ms = current_candle.timestamp_ms
@@ -470,15 +476,23 @@ class SweepReclaimTracker:
                             events.append(evt)
                             event_by_level_sweep[level.level_id] = evt
 
-                        # Case 2: Candle closed above level (Pending Sweep or Breakout)
+                        # Case 2: Candle closed above level OR bar still unclosed (Pending Sweep or Breakout)
                         else:
                             level.status = LiquidityLevelStatus.SWEPT_PENDING
                             level.swept_index = k
                             level.swept_timestamp_ms = current_candle.timestamp_ms
-                            level.last_event_description = (
-                                f"Sweep Pending: Candle closed above {level.price:.4f} at {current_candle.close:.4f}. "
-                                "Awaiting reclaim close inside."
-                            )
+                            if not is_bar_closed:
+                                level.last_event_description = (
+                                    f"Intraday Wick Sweep: High reached {current_candle.high:.4f} across {level.price:.4f}. "
+                                    "Awaiting confirmed candle close."
+                                )
+                                evt_desc = f"Unconfirmed Sweep in progress (unclosed bar): breached {level.source_label}"
+                            else:
+                                level.last_event_description = (
+                                    f"Sweep Pending: Candle closed above {level.price:.4f} at {current_candle.close:.4f}. "
+                                    "Awaiting reclaim close inside."
+                                )
+                                evt_desc = f"Unconfirmed Sweep: candle closed above {level.source_label}"
 
                             evt = SweepReclaimEvent(
                                 event_id=f"EVT_{level.level_id}_SWP_{k}",
@@ -499,7 +513,7 @@ class SweepReclaimTracker:
                                 reclaim_timestamp_ms=None,
                                 reclaim_price=None,
                                 invalidation_price=current_candle.high * (1.0 + 0.001),
-                                evidence_text=f"Unconfirmed Sweep: candle closed above {level.source_label}",
+                                evidence_text=evt_desc,
                                 provenance={
                                     "pivot_created_idx": level.created_index,
                                     "pivot_confirmed_idx": level.confirmed_index,
@@ -519,8 +533,8 @@ class SweepReclaimTracker:
                         pending_evt = event_by_level_sweep.get(level.level_id)
                         if pending_evt and pending_evt.sweep_index < k:
                             bars_since_sweep = k - pending_evt.sweep_index
-                            # Check for reclaim close inside
-                            if current_candle.close > level.price:
+                            # Check for reclaim close inside (strictly requires confirmed bar close)
+                            if is_bar_closed and current_candle.close > level.price:
                                 level.status = LiquidityLevelStatus.RECLAIMED
                                 level.reclaimed_index = k
                                 level.reclaimed_timestamp_ms = current_candle.timestamp_ms
@@ -537,7 +551,7 @@ class SweepReclaimTracker:
                                     f"Level: {level.price:.4f}, Reclaim Close: {current_candle.close:.4f}"
                                 )
                                 self._populate_event_targets(pending_evt, level, candles, k)
-                            elif (
+                            elif is_bar_closed and (
                                 current_candle.close < level.price * (1.0 - self.invalidation_threshold_pct / 100.0)
                                 or bars_since_sweep >= self.max_reclaim_bars
                             ):
@@ -548,6 +562,8 @@ class SweepReclaimTracker:
                                 pending_evt.event_type = SweepEventType.SWEEP_INVALIDATED
                                 pending_evt.evidence_text = f"Breakdown invalidation: price sustained below {level.price:.4f}"
                             continue
+                        elif pending_evt:
+                            continue
 
                     # Fresh breach check on current candle
                     if current_candle.low < level.price and k > level.confirmed_index:
@@ -556,8 +572,8 @@ class SweepReclaimTracker:
                         depth_pct = (depth_usdt / level.price) * 100.0
                         depth_bps = (depth_usdt / level.price) * 10000.0
 
-                        # Case 1: Immediate Reclaim on same candle (wick pierced, closed above)
-                        if current_candle.close > level.price:
+                        # Case 1: Immediate Reclaim on same candle (wick pierced, closed above, confirmed bar close)
+                        if is_bar_closed and current_candle.close > level.price:
                             level.status = LiquidityLevelStatus.RECLAIMED
                             level.swept_index = k
                             level.swept_timestamp_ms = current_candle.timestamp_ms
@@ -600,15 +616,23 @@ class SweepReclaimTracker:
                             events.append(evt)
                             event_by_level_sweep[level.level_id] = evt
 
-                        # Case 2: Candle closed below level (Pending Sweep or Breakdown)
+                        # Case 2: Candle closed below level OR bar still unclosed (Pending Sweep or Breakdown)
                         else:
                             level.status = LiquidityLevelStatus.SWEPT_PENDING
                             level.swept_index = k
                             level.swept_timestamp_ms = current_candle.timestamp_ms
-                            level.last_event_description = (
-                                f"Sweep Pending: Candle closed below {level.price:.4f} at {current_candle.close:.4f}. "
-                                "Awaiting reclaim close inside."
-                            )
+                            if not is_bar_closed:
+                                level.last_event_description = (
+                                    f"Intraday Wick Sweep: Low reached {current_candle.low:.4f} below {level.price:.4f}. "
+                                    "Awaiting confirmed candle close."
+                                )
+                                evt_desc = f"Unconfirmed Sweep in progress (unclosed bar): breached {level.source_label}"
+                            else:
+                                level.last_event_description = (
+                                    f"Sweep Pending: Candle closed below {level.price:.4f} at {current_candle.close:.4f}. "
+                                    "Awaiting reclaim close inside."
+                                )
+                                evt_desc = f"Unconfirmed Sweep: candle closed below {level.source_label}"
 
                             evt = SweepReclaimEvent(
                                 event_id=f"EVT_{level.level_id}_SWP_{k}",
@@ -629,7 +653,7 @@ class SweepReclaimTracker:
                                 reclaim_timestamp_ms=None,
                                 reclaim_price=None,
                                 invalidation_price=current_candle.low * (1.0 - 0.001),
-                                evidence_text=f"Unconfirmed Sweep: candle closed below {level.source_label}",
+                                evidence_text=evt_desc,
                                 provenance={
                                     "pivot_created_idx": level.created_index,
                                     "pivot_confirmed_idx": level.confirmed_index,
@@ -645,8 +669,8 @@ class SweepReclaimTracker:
             # ==============================================================
             for evt in events:
                 if evt.event_type == SweepEventType.SWEEP_RECLAIMED and evt.reclaim_index is not None:
-                    if k == evt.reclaim_index + 1:
-                        # Bar immediately following reclaim
+                    if k == evt.reclaim_index + 1 and is_bar_closed:
+                        # Bar immediately following reclaim (must be closed)
                         if evt.direction == "LONG":
                             # Hold above sweep low, positive continuation
                             if current_candle.low >= evt.sweep_price and current_candle.close > evt.level_price:

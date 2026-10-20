@@ -1,15 +1,124 @@
-/* Base layout and core typography */
-body {
-    background-color: #0b0f17;
-    color: #e2e8f0;
-    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+/* =========================================================================
+   SignalGenerator — Coinglass-Inspired Terminal Design System
+   Base Layout, Color Variables, Surfaces, and Tabular Typography
+   ========================================================================= */
+
+:root {
+    /* Surface Elevations */
+    --surface-base: #080b11;        /* Deep terminal canvas */
+    --surface-panel: #0e131f;       /* Primary panel & card surface */
+    --surface-panel-alt: #131929;   /* Sub-panel, drawer & modal surface */
+    --surface-hover: #182033;       /* Table row & interactive hover */
+    --surface-input: #090d16;       /* Input, select & search field surface */
+    
+    /* Hairline Structural Borders */
+    --border-subtle: #1c2436;       /* Standard panel border */
+    --border-medium: #28354d;       /* Active card & focused border */
+    --border-accent: #3b82f6;       /* Terminal interactive blue */
+
+    /* Typography Scale */
+    --text-primary: #f8fafc;        /* High-contrast crisp values */
+    --text-secondary: #94a3b8;      /* Neutral labels & secondary titles */
+    --text-tertiary: #64748b;       /* Metadata, captions & timestamps */
+
+    /* Financial Color Semantics */
+    --color-profit: #10b981;        /* Emerald 500 (Long / Up / Profit) */
+    --color-profit-bg: rgba(6, 78, 59, 0.4);
+    --color-loss: #f43f5e;          /* Rose 500 (Short / Down / Loss) */
+    --color-loss-bg: rgba(76, 5, 25, 0.4);
+    --color-warning: #f59e0b;       /* Amber 500 (Breakers / Neutral) */
+    --color-warning-bg: rgba(113, 63, 18, 0.35);
+    --color-accent: #3b82f6;        /* Terminal Blue */
 }
 
-.card-bg {
-    background-color: #131b2a;
-    border: 1px solid #1e293b;
+/* Global Reset and High-Density Typography */
+body {
+    background-color: var(--surface-base);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+}
+
+/* Tabular Numerals for Jitter-Free Financial Displays */
+.tnum, .tabular-nums, .font-mono {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Viewport-Filling Responsive Application Shell */
+.terminal-shell {
+    width: 100%;
+    max-width: 1920px;
+    margin: 0 auto;
+    padding: 0.5rem 0.75rem 2rem 0.75rem;
+}
+
+@media (min-width: 768px) {
+    .terminal-shell {
+        padding: 0.75rem 1.25rem 2.5rem 1.25rem;
+    }
+}
+
+/* Terminal Surfaces & Cards */
+.card-bg, .terminal-panel {
+    background-color: var(--surface-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0.5rem;
+}
+
+.terminal-panel-alt {
+    background-color: var(--surface-panel-alt);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0.5rem;
 }
 
 .card-inner {
-    background-color: #0f172a;
+    background-color: var(--surface-input);
+    border: 1px solid var(--border-subtle);
+}
+
+/* High-Density Terminal Table Standards */
+.terminal-table {
+    width: 100%;
+    font-size: 0.75rem;
+    line-height: 1.15rem;
+    border-collapse: collapse;
+}
+
+.terminal-table thead th {
+    background-color: #0b0f18;
+    color: var(--text-secondary);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.5rem 0.625rem;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+.terminal-table tbody td {
+    padding: 0.45rem 0.625rem;
+    border-bottom: 1px solid #141a27;
+}
+
+.terminal-table tbody tr:hover {
+    background-color: var(--surface-hover);
+}
+
+/* Input Fields & Dropdowns */
+.terminal-input {
+    background-color: var(--surface-input);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    padding: 0.35rem 0.625rem;
+    transition: border-color 0.15s ease;
+}
+
+.terminal-input:focus {
+    outline: none;
+    border-color: var(--border-accent);
 }

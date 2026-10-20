@@ -30,9 +30,9 @@ setInterval(() => {
     }
 }, 10000);
 
-// 5. Initialize tab from URL parameter/hash if provided
+// 5. Initialize tab from URL parameter/hash if provided, strictly defaulting to 'setups'
 const urlParams = new URLSearchParams(window.location.search);
-const initialTab = urlParams.get('tab') || window.location.hash.replace('#', '');
-if (initialTab && ['setups', 'backtest', 'watchlist', 'journal', 'alerts', 'model_b', 'liquidity_intel', 'sweep_chart'].includes(initialTab)) {
+const initialTab = urlParams.get('tab') || window.location.hash.replace('#', '') || 'setups';
+if (typeof switchTab === 'function') {
     switchTab(initialTab);
 }

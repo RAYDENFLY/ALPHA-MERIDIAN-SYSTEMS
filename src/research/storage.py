@@ -25,6 +25,7 @@ from src.research.types import (
     ShadowVariantEvaluation,
     VARIANT_METADATA,
     VariantPerformanceMetrics,
+    compute_wilson_ci,
 )
 
 
@@ -438,6 +439,20 @@ class ResearchStorage:
         dd = float(np.max(running_max[1:] - cum)) if len(cum) > 0 else 0.0
         metrics.max_drawdown_usdt = round(dd, 4)
 
+        # Statistical uncertainty and sample-size indicators
+        n_closed = len(closed)
+        k_wins = len(winners)
+        if n_closed > 0:
+            lower, upper = compute_wilson_ci(k_wins, n_closed)
+            metrics.win_rate_ci_lower_pct = lower
+            metrics.win_rate_ci_upper_pct = upper
+            metrics.sample_size_adequate = (n_closed >= 30)
+            if n_closed < 30:
+                metrics.sample_size_warning = (
+                    f"LOW_SAMPLE_SIZE: N={n_closed} closed trades (< 30). "
+                    f"Win rate 95% CI is wide [{lower}% - {upper}%]. Statistical superiority cannot be established."
+                )
+
         return metrics
 
     def compute_portfolio_metrics(
@@ -472,11 +487,24 @@ class ResearchStorage:
         running_max = np.maximum.accumulate(np.insert(cum, 0, 0))
         dd = float(np.max(running_max[1:] - cum)) if len(cum) > 0 else 0.0
 
+        n_comb = len(combined)
+        k_comb = len(winners)
+        lower_comb, upper_comb = compute_wilson_ci(k_comb, n_comb) if n_comb > 0 else (0.0, 0.0)
+        short_count = len(short_evals)
+        sample_warning = None
+        if short_count < 30:
+            sample_warning = (
+                f"LOW_SAMPLE_SIZE: Short variant has only {short_count} closed trades (< 30). "
+                f"Performance differential reflects candidate suppression, not proven statistical edge."
+            )
+
         return {
             "name": f"{long_variant} + {short_variant}",
             "closed_trades": len(combined),
             "winning_trades": len(winners),
             "win_rate_pct": round(len(winners) / len(combined) * 100.0, 2),
+            "win_rate_ci_lower_pct": lower_comb,
+            "win_rate_ci_upper_pct": upper_comb,
             "gross_pnl_usdt": round(sum(gross_pnls), 4),
             "net_pnl_usdt": round(sum(pnls), 4),
             "profit_factor": round(gross_wins / gross_losses, 2) if gross_losses > 0 else (999.0 if gross_wins > 0 else 0.0),
@@ -484,6 +512,8 @@ class ResearchStorage:
             "max_drawdown_usdt": round(dd, 4),
             "long_trades": len(long_evals),
             "short_trades": len(short_evals),
+            "short_trades_adequate": (short_count >= 30),
+            "sample_warning": sample_warning,
         }
 
     def get_paired_signals_summary(

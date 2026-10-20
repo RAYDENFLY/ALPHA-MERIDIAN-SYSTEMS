@@ -296,6 +296,7 @@
 
         function setAlertsFilter(filter) {
             alertsFilter = filter;
+            if (typeof resetPaginationPage === "function") resetPaginationPage("alerts");
             ['ALL', 'ACTIVE', 'TRIGGERED', 'DISABLED'].forEach(f => {
                 const btn = document.getElementById(`alertFilter-${f}`);
                 if (btn) {
@@ -404,16 +405,26 @@
                     filtered = alerts.filter(a => !a.is_active || a.status === 'DISABLED');
                 }
 
-                // Render Table
+                // Render Table with Universal Pagination
                 const tbody = document.getElementById('alertsTableBody');
                 const emptyState = document.getElementById('alertsEmptyState');
+                const pEl = document.getElementById('alertsPaginationContainer');
 
                 if (filtered.length === 0) {
                     tbody.innerHTML = '';
                     emptyState.classList.remove('hidden');
+                    if (pEl) pEl.innerHTML = '';
                 } else {
                     emptyState.classList.add('hidden');
-                    tbody.innerHTML = filtered.map(a => renderAlertRow(a)).join('');
+                    const paged = (typeof paginateList === 'function')
+                        ? paginateList('alerts', filtered)
+                        : filtered;
+                    tbody.innerHTML = paged.map(a => renderAlertRow(a)).join('');
+                    if (typeof renderPaginationControls === 'function') {
+                        renderPaginationControls('alerts', 'alertsPaginationContainer', () => {
+                            loadAlerts();
+                        });
+                    }
                 }
 
                 // Also refresh history
@@ -590,13 +601,18 @@
 
                 const tbody = document.getElementById('alertHistoryTableBody');
                 const emptyEl = document.getElementById('alertHistoryEmptyState');
+                const pElHist = document.getElementById('alertHistoryPaginationContainer');
 
                 if (events.length === 0) {
                     tbody.innerHTML = '';
                     emptyEl.classList.remove('hidden');
+                    if (pElHist) pElHist.innerHTML = '';
                 } else {
                     emptyEl.classList.add('hidden');
-                    tbody.innerHTML = events.map(e => `
+                    const pagedHist = (typeof paginateList === 'function')
+                        ? paginateList('alert_history', events)
+                        : events;
+                    tbody.innerHTML = pagedHist.map(e => `
                         <tr class="hover:bg-slate-800/40 font-mono text-[11px] transition">
                             <td class="px-4 py-2 text-slate-400">${new Date(e.triggered_at).toLocaleString()}</td>
                             <td class="px-4 py-2 font-bold text-white">${escapeHtml(e.symbol)}</td>
@@ -614,6 +630,12 @@
                             </td>
                         </tr>
                     `).join('');
+
+                    if (typeof renderPaginationControls === 'function') {
+                        renderPaginationControls('alert_history', 'alertHistoryPaginationContainer', () => {
+                            loadAlertHistory();
+                        });
+                    }
                 }
             } catch (err) {
                 console.error("Error loading alert history:", err);

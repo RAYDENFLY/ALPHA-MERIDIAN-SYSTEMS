@@ -58,6 +58,7 @@
 
         function setStatusFilter(status) {
             currentFilter = status;
+            if (typeof resetPaginationPage === 'function') resetPaginationPage('setups');
             ['ALL', 'READY', 'WATCHLIST', 'INFEASIBLE', 'INVALIDATED', 'STALE', 'ERROR'].forEach(st => {
                 const btn = document.getElementById(`filter-${st}`);
                 if (btn) {
@@ -70,6 +71,7 @@
 
         function setCategoryFilter(category) {
             currentCategoryFilter = category;
+            if (typeof resetPaginationPage === 'function') resetPaginationPage('setups');
             const catButtons = {
                 'ALL': 'catFilter-ALL',
                 'Breakout': 'catFilter-Breakout',
@@ -90,11 +92,13 @@
 
         function handleSortChange(sortOption) {
             currentSort = sortOption;
+            if (typeof resetPaginationPage === 'function') resetPaginationPage('setups');
             fetchSetups();
         }
 
         function handleSearchInput(query) {
             searchQuery = query.trim();
+            if (typeof resetPaginationPage === 'function') resetPaginationPage('setups');
             const clearBtn = document.getElementById('clearSearchBtn');
             if (searchQuery.length > 0) {
                 clearBtn.classList.remove('hidden');
@@ -116,7 +120,9 @@
 
         function renderSetups(data) {
             const container = document.getElementById('setupsContainer');
+            const pEl = document.getElementById('setupsPaginationContainer');
             if (!data.setups || data.setups.length === 0) {
+                if (pEl) pEl.innerHTML = '';
                 const filterDesc = currentFilter !== 'ALL' ? `matching status "${currentFilter}"` : '';
                 const searchDesc = searchQuery ? `matching symbol "${searchQuery}"` : '';
                 const activeQueryText = [filterDesc, searchDesc].filter(Boolean).join(' and ');
@@ -167,7 +173,8 @@
                 </div>
             ` : '';
 
-            container.innerHTML = archiveBannerHtml + data.setups.map(s => {
+            const pagedSetups = (typeof paginateList === 'function') ? paginateList('setups', data.setups) : data.setups;
+            container.innerHTML = archiveBannerHtml + pagedSetups.map(s => {
                 const isLong = s.direction === 'LONG';
                 const sideBadge = isLong ? 'badge-green' : 'badge-red';
                 
@@ -523,6 +530,12 @@
                 </div>
             `;
             }).join('');
+
+            if (typeof renderPaginationControls === 'function') {
+                renderPaginationControls('setups', 'setupsPaginationContainer', () => {
+                    renderSetups(lastRawSetupsData);
+                });
+            }
         }
 
         // Research Evidence Accordion Toggle

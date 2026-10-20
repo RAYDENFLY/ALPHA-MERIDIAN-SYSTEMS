@@ -182,6 +182,10 @@ class WhaleDetector:
         self._baseline_depths: Dict[str, float] = {}
         self._last_imbalances: Dict[str, float] = {}
         self._last_oi_snapshots: Dict[str, Tuple[float, float, int]] = {} # (oi_contracts, mark_price, ts_ms)
+        self._seen_event_ids: Dict[str, Set[str]] = {}
+        self._seen_trade_ids: Dict[str, Set[str]] = {}
+        self._last_cvd_event_ms: Dict[str, int] = {}
+        self._last_absorption_event_ms: Dict[str, int] = {}
 
     def resolve_baseline_depth(
         self,
@@ -692,6 +696,7 @@ class WhaleDetector:
         if trades and mid_price > 0:
             trade_venue = trades[0].exchange_name if trades else venue
             price_volume_clusters: Dict[int, float] = {}
+            seen_trades = self._seen_trade_ids.setdefault(sym, set())
 
             for t in trades[-100:]:
                 if t.side == "BUY":
@@ -701,6 +706,14 @@ class WhaleDetector:
 
                 multiple = t.notional_usdt / baseline
                 if multiple >= self.trade_multiple:
+                    trade_fingerprint = f"{t.timestamp_ms}_{t.trade_id or t.price}_{t.size}"
+                    if trade_fingerprint in seen_trades:
+                        continue
+                    seen_trades.add(trade_fingerprint)
+                    if len(seen_trades) > 500:
+                        seen_trades.clear()
+                        seen_trades.add(trade_fingerprint)
+
                     if t.side == "BUY":
                         large_taker_buy_notional += t.notional_usdt
                         ev_type = WhaleEventType.LARGE_AGGRESSIVE_BUY
@@ -733,10 +746,12 @@ class WhaleDetector:
                 bucket = int(t.price * 1000)
                 price_volume_clusters[bucket] = price_volume_clusters.get(bucket, 0.0) + t.notional_usdt
 
-            # Rolling CVD Momentum Check across recent trades
+            # Rolling CVD Momentum Check across recent trades (cooldown-bounded to prevent duplicate flood)
             tot_flow = buy_trades_notional + sell_trades_notional
-            if tot_flow >= baseline * 2.0:
+            last_cvd_ms = self._last_cvd_event_ms.get(sym, 0)
+            if tot_flow >= baseline * 2.0 and (now_ts - last_cvd_ms) >= 10000:
                 if buy_trades_notional >= sell_trades_notional * 2.5:
+                    self._last_cvd_event_ms[sym] = now_ts
                     new_events.append(
                         WhaleActivityEvent(
                             event_id=f"EV_CVD_BUY_{sym}_{now_ts}",
@@ -757,6 +772,7 @@ class WhaleDetector:
                         )
                     )
                 elif sell_trades_notional >= buy_trades_notional * 2.5:
+                    self._last_cvd_event_ms[sym] = now_ts
                     new_events.append(
                         WhaleActivityEvent(
                             event_id=f"EV_CVD_SELL_{sym}_{now_ts}",
@@ -777,59 +793,62 @@ class WhaleDetector:
                         )
                     )
 
-            # Absorption detection: high volume cluster without price displacement
-            for bucket, vol in price_volume_clusters.items():
-                if vol >= baseline * 3.5:
-                    cluster_price = bucket / 1000.0
-                    absorption_found = True
-                    is_buy_absorb = cluster_price <= mid_price
-                    specific_absorb = (
-                        WhaleEventType.BUY_ABSORPTION_CANDIDATE
-                        if is_buy_absorb
-                        else WhaleEventType.SELL_ABSORPTION_CANDIDATE
-                    )
-                    absorb_side = "BUY" if is_buy_absorb else "SELL"
-                    # Legacy absorption event
-                    new_events.append(
-                        WhaleActivityEvent(
-                            event_id=f"EV_ABS_{sym}_{now_ts}_{bucket}",
-                            timestamp_ms=now_ts,
-                            symbol=sym,
-                            event_type=WhaleEventType.ABSORPTION_CANDIDATE,
-                            side=absorb_side,
-                            price=cluster_price,
-                            size=vol / cluster_price,
-                            notional_usdt=vol,
-                            distance_bps=abs(cluster_price - mid_price) / mid_price * 10000.0,
-                            baseline_multiple=vol / baseline,
-                            classification_tags=["PASSIVE_ABSORPTION", "HIGH_VOLUME_NODE", specific_absorb.value],
-                            details=f"Passive liquidity absorption detected: ${vol:,.2f} traded tightly at ~${cluster_price:,.4f} with minimal displacement.",
-                            venue=trade_venue,
-                            event_class="EXECUTED",
-                            mark_price_at_event=mid_price,
+            # Absorption detection: high volume cluster without price displacement (cooldown-bounded)
+            last_abs_ms = self._last_absorption_event_ms.get(sym, 0)
+            if (now_ts - last_abs_ms) >= 10000:
+                for bucket, vol in price_volume_clusters.items():
+                    if vol >= baseline * 3.5:
+                        self._last_absorption_event_ms[sym] = now_ts
+                        cluster_price = bucket / 1000.0
+                        absorption_found = True
+                        is_buy_absorb = cluster_price <= mid_price
+                        specific_absorb = (
+                            WhaleEventType.BUY_ABSORPTION_CANDIDATE
+                            if is_buy_absorb
+                            else WhaleEventType.SELL_ABSORPTION_CANDIDATE
                         )
-                    )
-                    # Phase 2 directional absorption event
-                    new_events.append(
-                        WhaleActivityEvent(
-                            event_id=f"EV_ABS_DIR_{sym}_{now_ts}_{bucket}",
-                            timestamp_ms=now_ts,
-                            symbol=sym,
-                            event_type=specific_absorb,
-                            side=absorb_side,
-                            price=cluster_price,
-                            size=vol / cluster_price,
-                            notional_usdt=vol,
-                            distance_bps=abs(cluster_price - mid_price) / mid_price * 10000.0,
-                            baseline_multiple=vol / baseline,
-                            classification_tags=["PASSIVE_ABSORPTION", specific_absorb.value],
-                            details=f"Passive {absorb_side} absorption: ${vol:,.2f} absorbed at ~${cluster_price:,.4f}.",
-                            venue=trade_venue,
-                            event_class="EXECUTED",
-                            mark_price_at_event=mid_price,
+                        absorb_side = "BUY" if is_buy_absorb else "SELL"
+                        # Legacy absorption event
+                        new_events.append(
+                            WhaleActivityEvent(
+                                event_id=f"EV_ABS_{sym}_{now_ts}_{bucket}",
+                                timestamp_ms=now_ts,
+                                symbol=sym,
+                                event_type=WhaleEventType.ABSORPTION_CANDIDATE,
+                                side=absorb_side,
+                                price=cluster_price,
+                                size=vol / cluster_price,
+                                notional_usdt=vol,
+                                distance_bps=abs(cluster_price - mid_price) / mid_price * 10000.0,
+                                baseline_multiple=vol / baseline,
+                                classification_tags=["PASSIVE_ABSORPTION", "HIGH_VOLUME_NODE", specific_absorb.value],
+                                details=f"Passive liquidity absorption detected: ${vol:,.2f} traded tightly at ~${cluster_price:,.4f} with minimal displacement.",
+                                venue=trade_venue,
+                                event_class="EXECUTED",
+                                mark_price_at_event=mid_price,
+                            )
                         )
-                    )
-                    break
+                        # Phase 2 directional absorption event
+                        new_events.append(
+                            WhaleActivityEvent(
+                                event_id=f"EV_ABS_DIR_{sym}_{now_ts}_{bucket}",
+                                timestamp_ms=now_ts,
+                                symbol=sym,
+                                event_type=specific_absorb,
+                                side=absorb_side,
+                                price=cluster_price,
+                                size=vol / cluster_price,
+                                notional_usdt=vol,
+                                distance_bps=abs(cluster_price - mid_price) / mid_price * 10000.0,
+                                baseline_multiple=vol / baseline,
+                                classification_tags=["PASSIVE_ABSORPTION", specific_absorb.value],
+                                details=f"Passive {absorb_side} absorption: ${vol:,.2f} absorbed at ~${cluster_price:,.4f}.",
+                                venue=trade_venue,
+                                event_class="EXECUTED",
+                                mark_price_at_event=mid_price,
+                            )
+                        )
+                        break
 
         # ---------------------------------------------------------------------
         # 3. Inspect Open Interest & Price Divergences
@@ -887,8 +906,15 @@ class WhaleDetector:
 
             self._last_oi_snapshots[sym] = (current_oi_contracts, mid_price, now_ts)
 
-        # Append new events and keep last 60 events
-        events_list.extend(new_events)
+        # Append new events with deterministic deduplication and keep last 60 events
+        seen_ev_ids = self._seen_event_ids.setdefault(sym, set())
+        for ev in new_events:
+            if ev.event_id not in seen_ev_ids:
+                seen_ev_ids.add(ev.event_id)
+                events_list.append(ev)
+        if len(seen_ev_ids) > 1000:
+            seen_ev_ids.clear()
+            seen_ev_ids.update(e.event_id for e in events_list)
         if len(events_list) > 60:
             self._events_history[sym] = events_list[-60:]
 

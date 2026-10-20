@@ -438,7 +438,7 @@
         // -------------------------------------------------------------------------
         function handleIntelSymbolKeydown(event) {
             if (event && event.key === 'Enter') {
-                loadLiquidityIntel();
+                triggerManualIntelRefresh();
             }
         }
 
@@ -450,7 +450,7 @@
                 const hasOption = Array.from(sel.options).some(o => o.value === sym);
                 if (hasOption) sel.value = sym;
             }
-            loadLiquidityIntel();
+            triggerManualIntelRefresh();
         }
 
         function handleIntelSymbolSelect(event) {
@@ -458,7 +458,7 @@
             if (!sym) return;
             const inp = document.getElementById('intelSymbolInput');
             if (inp) inp.value = sym;
-            loadLiquidityIntel();
+            triggerManualIntelRefresh();
         }
 
         function quickSelectIntelSymbol(sym) {
@@ -466,10 +466,159 @@
             if (inp) inp.value = sym;
             const sel = document.getElementById('intelSymbolSelect');
             if (sel) sel.value = sym;
-            loadLiquidityIntel();
+            triggerManualIntelRefresh();
         }
 
-        async function loadLiquidityIntel() {
+        // -------------------------------------------------------------------------
+        // Market Liquidity Intelligence Tab Engine & Auto-Refresh Infrastructure
+        // -------------------------------------------------------------------------
+        let intelAutoRefreshEnabled = true;
+        let intelCountdownTimer = null;
+        let intelCountdownSeconds = 5;
+        let isIntelFetchInFlight = false;
+        let consecutiveIntelErrors = 0;
+        let lastIntelRefreshTimestamp = null;
+        let lastHeatmapRefreshMs = 0;
+        let lastWhaleRefreshMs = 0;
+
+        function renderVenueHealth(venueSummaries) {
+            if (!venueSummaries) return;
+            const venues = ['asterdex', 'binance', 'bybit'];
+            venues.forEach(v => {
+                const snap = venueSummaries[v];
+                const el = document.getElementById(`intelExBadge-${v}`);
+                if (!el) return;
+                const statusSpan = el.querySelector('.badge-status');
+                const dot = el.querySelector('.badge-dot');
+
+                let status = 'UNAVAIL';
+                let cls = 'bg-slate-900 text-slate-500 border-slate-800';
+                let dotCls = 'bg-slate-500';
+
+                if (snap) {
+                    const rawStatus = (snap.freshness_status || snap.status || '').toUpperCase();
+                    if (rawStatus === 'LIVE' || rawStatus === 'AVAILABLE') {
+                        status = 'LIVE';
+                        cls = 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80';
+                        dotCls = 'bg-emerald-400';
+                    } else if (rawStatus === 'STALE') {
+                        status = 'STALE';
+                        cls = 'bg-amber-950/80 text-amber-300 border-amber-800/80';
+                        dotCls = 'bg-amber-400';
+                    } else if (rawStatus === 'ERROR') {
+                        status = 'ERROR';
+                        cls = 'bg-rose-950/80 text-rose-300 border-rose-800/80';
+                        dotCls = 'bg-rose-400';
+                    }
+                }
+
+                el.className = `px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 border ${cls}`;
+                if (statusSpan) statusSpan.innerText = status;
+                if (dot) dot.className = `badge-dot w-1.5 h-1.5 rounded-full ${dotCls}`;
+            });
+        }
+
+        async function executeStaggeredIntelRefresh(forceFull = false) {
+            if (isIntelFetchInFlight) return;
+            isIntelFetchInFlight = true;
+
+            const inp = document.getElementById('intelSymbolInput');
+            const sym = (inp && inp.value ? inp.value : 'BTCUSDT').trim().toUpperCase();
+            const statusBadge = document.getElementById('intelRequestStatusBadge');
+
+            if (statusBadge) {
+                statusBadge.innerText = 'REFRESHING';
+                statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800';
+            }
+
+            const now = Date.now();
+            const shouldRefreshWhale = forceFull || (now - lastWhaleRefreshMs >= 10000);
+            const shouldRefreshHeatmap = forceFull || (now - lastHeatmapRefreshMs >= 30000);
+
+            const promises = [
+                fetch(`/api/intelligence/market_context?symbol=${sym}`),
+                fetch(`/api/chart/cross_book?symbol=${sym}&bucket_bps=5.0&venue_source=combined`),
+            ];
+            if (shouldRefreshWhale) {
+                promises.push(fetch(`/api/intelligence/whale_activity?symbol=${sym}`));
+            }
+            if (shouldRefreshHeatmap) {
+                promises.push(fetch(`/api/intelligence/liquidation_heatmap?symbol=${sym}`));
+            }
+
+            try {
+                const results = await Promise.all(promises);
+                const [ctxRes, crossRes] = results;
+
+                if (ctxRes && ctxRes.ok) {
+                    const ctxData = await ctxRes.json();
+                    renderMarketPosture(ctxData);
+
+                    // Update AsterDEX freshness indicator if specific telemetry present
+                    if (ctxData.data_freshness && ctxData.data_freshness.source_exchange === 'AsterDEX') {
+                        const asterBadge = document.getElementById('intelExBadge-asterdex');
+                        if (asterBadge) {
+                            const statusSpan = asterBadge.querySelector('.badge-status');
+                            const dot = asterBadge.querySelector('.badge-dot');
+                            const st = (ctxData.data_freshness.status || 'LIVE').toUpperCase();
+                            if (statusSpan) statusSpan.innerText = st;
+                            if (st === 'LIVE') {
+                                asterBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 border bg-emerald-950/80 text-emerald-300 border-emerald-800/80';
+                                if (dot) dot.className = 'badge-dot w-1.5 h-1.5 rounded-full bg-emerald-400';
+                            } else if (st === 'STALE') {
+                                asterBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 border bg-amber-950/80 text-amber-300 border-amber-800/80';
+                                if (dot) dot.className = 'badge-dot w-1.5 h-1.5 rounded-full bg-amber-400';
+                            }
+                        }
+                    }
+                }
+
+                if (crossRes && crossRes.ok) {
+                    const crossData = await crossRes.json();
+                    renderVenueHealth(crossData.venue_summaries);
+                }
+
+                let resIdx = 2;
+                if (shouldRefreshWhale && results[resIdx]) {
+                    const whaleRes = results[resIdx++];
+                    if (whaleRes && whaleRes.ok) {
+                        const whaleData = await whaleRes.json();
+                        cachedWhaleEvents = whaleData.recent_events || [];
+                        renderWhaleActivity(whaleData);
+                        lastWhaleRefreshMs = now;
+                    }
+                }
+
+                if (shouldRefreshHeatmap && results[resIdx]) {
+                    const hmRes = results[resIdx++];
+                    if (hmRes && hmRes.ok) {
+                        const hmData = await hmRes.json();
+                        renderLiquidityHeatmap(hmData);
+                        lastHeatmapRefreshMs = now;
+                    }
+                }
+
+                consecutiveIntelErrors = 0;
+                lastIntelRefreshTimestamp = Date.now();
+                if (statusBadge) {
+                    statusBadge.innerText = 'IDLE';
+                    statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-slate-900 text-slate-300 border border-slate-700';
+                }
+            } catch (err) {
+                console.error("Auto-refresh error:", err);
+                consecutiveIntelErrors++;
+                const backoffSec = Math.min(60, Math.round(5 * Math.pow(1.5, consecutiveIntelErrors)) + Math.floor(Math.random() * 2));
+                intelCountdownSeconds = backoffSec;
+                if (statusBadge) {
+                    statusBadge.innerText = `BACKOFF (${backoffSec}s)`;
+                    statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950 text-rose-300 border border-rose-800';
+                }
+            } finally {
+                isIntelFetchInFlight = false;
+            }
+        }
+
+        async function triggerManualIntelRefresh() {
             const inp = document.getElementById('intelSymbolInput');
             const sym = (inp && inp.value ? inp.value : 'BTCUSDT').trim().toUpperCase();
             const sel = document.getElementById('intelSymbolSelect');
@@ -483,32 +632,93 @@
             if (spin) spin.classList.add('animate-spin');
 
             try {
-                const [ctxRes, hmRes, whaleRes] = await Promise.all([
-                    fetch(`/api/intelligence/market_context?symbol=${sym}`),
-                    fetch(`/api/intelligence/liquidation_heatmap?symbol=${sym}`),
-                    fetch(`/api/intelligence/whale_activity?symbol=${sym}`),
-                ]);
-
-                if (ctxRes.ok) {
-                    const ctxData = await ctxRes.json();
-                    renderMarketPosture(ctxData);
-                }
-                if (hmRes.ok) {
-                    const hmData = await hmRes.json();
-                    renderLiquidityHeatmap(hmData);
-                }
-                if (whaleRes.ok) {
-                    const whaleData = await whaleRes.json();
-                    cachedWhaleEvents = whaleData.recent_events || [];
-                    renderWhaleActivity(whaleData);
-                }
-            } catch (err) {
-                console.error("Failed to load liquidity intel:", err);
-                showNotice('Failed to load market liquidity intelligence: ' + err.message, 'error');
+                await executeStaggeredIntelRefresh(true);
+                intelCountdownSeconds = 5;
             } finally {
                 if (btn) btn.disabled = false;
                 if (spin) spin.classList.remove('animate-spin');
             }
+        }
+
+        function loadLiquidityIntel() {
+            triggerManualIntelRefresh();
+        }
+
+        function startLiquidityIntelAutoRefresh() {
+            stopLiquidityIntelAutoRefresh();
+            if (!intelAutoRefreshEnabled) return;
+
+            intelCountdownSeconds = 5;
+            if (!lastIntelRefreshTimestamp || (Date.now() - lastIntelRefreshTimestamp > 5000)) {
+                executeStaggeredIntelRefresh(true);
+            }
+
+            intelCountdownTimer = setInterval(() => {
+                if (!intelAutoRefreshEnabled) return;
+                if (document.hidden) return;
+
+                intelCountdownSeconds--;
+                const secEl = document.getElementById('intelCountdownSec');
+                if (secEl) secEl.innerText = `${Math.max(0, intelCountdownSeconds)}s`;
+
+                const lastUpEl = document.getElementById('intelLastUpdatedDisplay');
+                if (lastUpEl && lastIntelRefreshTimestamp) {
+                    const elapsed = Math.round((Date.now() - lastIntelRefreshTimestamp) / 1000);
+                    lastUpEl.innerText = elapsed < 3 ? 'Last sync: Just now' : `Last sync: ${elapsed}s ago`;
+                }
+
+                if (intelCountdownSeconds <= 0) {
+                    intelCountdownSeconds = 5;
+                    executeStaggeredIntelRefresh(false);
+                }
+            }, 1000);
+        }
+
+        function stopLiquidityIntelAutoRefresh() {
+            if (intelCountdownTimer) {
+                clearInterval(intelCountdownTimer);
+                intelCountdownTimer = null;
+            }
+            const statusBadge = document.getElementById('intelRequestStatusBadge');
+            if (statusBadge && intelAutoRefreshEnabled) {
+                statusBadge.innerText = 'IDLE';
+                statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-slate-900 text-slate-300 border border-slate-700';
+            }
+        }
+
+        function toggleIntelAutoRefresh() {
+            intelAutoRefreshEnabled = !intelAutoRefreshEnabled;
+            const btn = document.getElementById('intelAutoRefreshToggleBtn');
+            const label = document.getElementById('intelAutoRefreshLabel');
+            const ind = document.getElementById('intelAutoRefreshIndicator');
+            const statusBadge = document.getElementById('intelRequestStatusBadge');
+
+            if (intelAutoRefreshEnabled) {
+                if (btn) btn.className = 'px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 hover:bg-emerald-900 cursor-pointer';
+                if (label) label.innerText = 'Auto-Refresh: ON';
+                if (ind) ind.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+                startLiquidityIntelAutoRefresh();
+            } else {
+                if (btn) btn.className = 'px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 cursor-pointer';
+                if (label) label.innerText = 'Auto-Refresh: OFF';
+                if (ind) ind.className = 'w-2 h-2 rounded-full bg-slate-500';
+                if (statusBadge) {
+                    statusBadge.innerText = 'PAUSED';
+                    statusBadge.className = 'px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700';
+                }
+                stopLiquidityIntelAutoRefresh();
+            }
+        }
+
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', () => {
+                const tabEl = document.getElementById('tab-liquidity_intel');
+                const isIntelTabActive = tabEl && !tabEl.classList.contains('hidden');
+
+                if (!document.hidden && isIntelTabActive && intelAutoRefreshEnabled) {
+                    intelCountdownSeconds = 1;
+                }
+            });
         }
 
         function renderMarketPosture(ctx) {
@@ -696,12 +906,19 @@
                 filtered = filtered.filter(e => e.event_type.includes('ABSORPTION') || e.event_type.includes('OI_'));
             }
 
+            const pEl = document.getElementById('intelWhaleEventsPaginationContainer');
+
             if (!filtered || filtered.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500">No events matching filter '${currentWhaleFilter}'.</td></tr>`;
+                if (pEl) pEl.innerHTML = '';
                 return;
             }
 
-            tbody.innerHTML = filtered.map(ev => {
+            const paged = (typeof paginateList === 'function')
+                ? paginateList('intel_whale_events', filtered)
+                : filtered;
+
+            tbody.innerHTML = paged.map(ev => {
                 let badgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
                 if (ev.event_type.includes('BID') || ev.event_type.includes('BUY')) badgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-800';
                 else if (ev.event_type.includes('ASK') || ev.event_type.includes('SELL')) badgeClass = 'bg-rose-950 text-rose-300 border-rose-800';
@@ -733,6 +950,21 @@
                     </tr>
                 `;
             }).join('');
+
+            if (typeof renderPaginationControls === 'function') {
+                renderPaginationControls('intel_whale_events', 'intelWhaleEventsPaginationContainer', () => {
+                    renderWhaleEventsTable();
+                });
+            }
+        }
+
+        // Window exports for cross-module coordination
+        if (typeof window !== 'undefined') {
+            window.startLiquidityIntelAutoRefresh = startLiquidityIntelAutoRefresh;
+            window.stopLiquidityIntelAutoRefresh = stopLiquidityIntelAutoRefresh;
+            window.toggleIntelAutoRefresh = toggleIntelAutoRefresh;
+            window.triggerManualIntelRefresh = triggerManualIntelRefresh;
+            window.loadLiquidityIntel = loadLiquidityIntel;
         }
 
         // =========================================================================

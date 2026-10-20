@@ -7,7 +7,25 @@ paired comparison records, and simulated research execution metrics.
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+import math
+from typing import Any, Dict, List, Optional, Tuple
+
+
+def compute_wilson_ci(k: int, n: int, confidence: float = 0.95) -> Tuple[float, float]:
+    """Calculate the Wilson score confidence interval for a binomial proportion.
+    
+    Used for expressing statistical uncertainty on trade win rates when N is small.
+    """
+    if n <= 0:
+        return 0.0, 0.0
+    z = 1.95996  # 95% confidence
+    p = float(k) / float(n)
+    denom = 1.0 + (z**2) / n
+    center = (p + (z**2) / (2.0 * n)) / denom
+    margin = (z * math.sqrt(max(0.0, (p * (1.0 - p) / n) + ((z**2) / (4.0 * (n**2)))))) / denom
+    lower = max(0.0, round((center - margin) * 100.0, 1))
+    upper = min(100.0, round((center + margin) * 100.0, 1))
+    return lower, upper
 
 
 class ResearchVariant(str, Enum):
@@ -191,6 +209,10 @@ class VariantPerformanceMetrics:
     total_slippage_drag_usdt: float = 0.0
     total_funding_drag_usdt: float = 0.0
     max_drawdown_usdt: float = 0.0
+    win_rate_ci_lower_pct: float = 0.0
+    win_rate_ci_upper_pct: float = 0.0
+    sample_size_adequate: bool = True
+    sample_size_warning: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

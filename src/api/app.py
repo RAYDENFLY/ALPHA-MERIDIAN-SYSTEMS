@@ -74,6 +74,27 @@ from src.research import (
     VARIANT_METADATA,
     VariantRuleEngine,
 )
+from src.exchange.aster_adapter import AsterAdapter
+from src.demand_zone.scanner import AsterDexDemandZoneScanner
+from src.demand_zone.storage import DemandZoneStorage
+from src.demand_zone.types import (
+    BTCZonePolicy,
+    DemandZoneCandidateStatus,
+    DemandZoneConfig,
+)
+from src.screener import (
+    CrossExchangeMarketAsset,
+    MultiExchangeMarketScreener,
+    ScreenerFilterParams,
+    VenueMarketMetrics,
+)
+from src.ai_analyst import (
+    AIAnalystConfig,
+    AIAnalystService,
+    AIAnalystStorage,
+    AnalysisRequest,
+    AIConfigUpdateRequest,
+)
 import sqlite3
 
 
@@ -171,6 +192,25 @@ whale_ranking_engine = WhaleRankingEngine(
     exchange_service=model_b_runner.exchange_service,
     whale_detector=market_context_service.whale_detector,
     db=db,
+)
+
+# AsterDEX Demand-Zone LONG Scanner
+demand_zone_storage = DemandZoneStorage(db)
+demand_zone_scanner = AsterDexDemandZoneScanner(
+    db=db,
+    adapter=AsterAdapter(),
+    storage=demand_zone_storage,
+)
+
+# Multi-Exchange Perpetual Futures Market Screener (Read-Only)
+market_screener = MultiExchangeMarketScreener()
+
+# Groq AI Trading Analyst (Logically isolated, advisory research only)
+ai_analyst_storage = AIAnalystStorage(db)
+ai_analyst_service = AIAnalystService(
+    db=db,
+    adapter=AsterAdapter(),
+    storage=ai_analyst_storage,
 )
 
 specs_map: Dict[str, Any] = {}
@@ -767,7 +807,7 @@ async def market_context_endpoint(
 @app.get("/api/chart/klines")
 async def chart_klines_endpoint(
     symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT"),
-    timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h"),
+    timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h, 1d"),
     limit: int = Query(200, ge=10, le=500, description="Number of candles"),
     start_time_ms: Optional[int] = Query(None, description="Start time in ms"),
     end_time_ms: Optional[int] = Query(None, description="End time in ms"),
@@ -785,10 +825,12 @@ async def chart_klines_endpoint(
 @app.get("/api/chart/liquidity_layers")
 async def chart_liquidity_layers_endpoint(
     symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT"),
-    timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h"),
+    timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h, 1d"),
     limit: int = Query(150, ge=20, le=400, description="Number of candles"),
     as_of_index: Optional[int] = Query(None, description="Historical replay bar index limit"),
     as_of_timestamp_ms: Optional[int] = Query(None, description="Historical replay timestamp cutoff"),
+    include_1d_overlay: bool = Query(False, description="Overlay confirmed 1D structural levels on lower timeframes"),
+    venue_source: str = Query("combined", description="Venue filter: combined, asterdex, binance, bybit"),
 ) -> Dict[str, Any]:
     """Retrieve complete liquidity layers: structural levels, sweep/reclaim events, order-book depth, and liquidation estimates."""
     return liquidity_chart_service.get_liquidity_layers(
@@ -797,6 +839,22 @@ async def chart_liquidity_layers_endpoint(
         limit=limit,
         as_of_index=as_of_index,
         as_of_timestamp_ms=as_of_timestamp_ms,
+        include_1d_overlay=include_1d_overlay,
+        venue_source=venue_source,
+    )
+
+
+@app.get("/api/chart/cross_book")
+async def chart_cross_book_endpoint(
+    symbol: str = Query(..., description="Perpetual symbol e.g. LTCUSDT"),
+    bucket_bps: float = Query(5.0, ge=1.0, le=50.0, description="Bucket size in basis points"),
+    venue_source: str = Query("combined", description="Venue filter: combined, asterdex, binance, bybit"),
+) -> Dict[str, Any]:
+    """Retrieve multi-exchange Level-2 order-book liquidity heatmap across AsterDEX, Binance, and Bybit."""
+    return liquidity_chart_service.get_cross_exchange_book(
+        symbol=symbol,
+        bucket_bps=bucket_bps,
+        venue_filter=venue_source,
     )
 
 
@@ -813,7 +871,7 @@ async def chart_symbols_endpoint() -> Dict[str, Any]:
         "symbols": ordered_symbols,
         "default_symbol": ordered_symbols[0] if ordered_symbols else "BTCUSDT",
         "default_timeframe": "1h",
-        "supported_timeframes": ["15m", "1h", "4h"],
+        "supported_timeframes": ["15m", "1h", "4h", "1d"],
     }
 
 
@@ -2157,6 +2215,356 @@ async def trigger_model_b_research_replay():
         "candidates_replayed": len(candidates),
         "symbols_count": len(symbols),
         "summary": {k: v.to_dict() for k, v in summary.items()},
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ==============================================================================
+# AsterDEX Demand-Zone LONG Scanner REST API Endpoints
+# ==============================================================================
+
+
+class DemandZoneConfigUpdate(BaseModel):
+    min_24h_volume_usdt: Optional[float] = None
+    risk_budget_usdt: Optional[float] = None
+    min_distance_to_demand_pct: Optional[float] = None
+    max_distance_to_demand_pct: Optional[float] = None
+    min_stop_loss_dist_pct: Optional[float] = None
+    max_stop_loss_dist_pct: Optional[float] = None
+    hard_max_stop_loss_pct: Optional[float] = None
+    min_net_reward_to_risk: Optional[float] = None
+    min_resistance_clearance_rr: Optional[float] = None
+    btc_zone_lower: Optional[float] = None
+    btc_zone_upper: Optional[float] = None
+    btc_policy: Optional[str] = None
+    leverage: Optional[float] = None
+
+
+@app.get("/api/demand_zone/candidates")
+async def get_demand_zone_candidates(
+    status: Optional[str] = Query(None, description="Filter by candidate status (e.g. READY, APPROACHING, WATCHLIST, INFEASIBLE, INVALIDATED)"),
+    symbol: Optional[str] = Query(None, description="Filter by symbol (e.g. BTCUSDT)"),
+    min_score: float = Query(0.0, description="Minimum composite setup score"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Retrieve AsterDEX Demand-Zone LONG candidate setups with filtering and counts."""
+    candidates = demand_zone_storage.get_recent_candidates(
+        limit=limit,
+        status=status,
+        symbol=symbol,
+        min_score=min_score,
+    )
+    if not candidates and demand_zone_scanner.latest_candidates:
+        filtered = demand_zone_scanner.latest_candidates
+        if status:
+            filtered = [c for c in filtered if c.status.value == status.upper()]
+        if symbol:
+            filtered = [c for c in filtered if c.symbol.upper() == symbol.upper()]
+        if min_score > 0:
+            filtered = [c for c in filtered if c.composite_setup_score >= min_score]
+        candidates = [c.to_dict() for c in filtered[offset : offset + limit]]
+
+    all_recent = demand_zone_storage.get_recent_candidates(limit=500) or [c.to_dict() for c in demand_zone_scanner.latest_candidates]
+    status_counts = {
+        "READY": sum(1 for c in all_recent if c.get("status") == "READY"),
+        "APPROACHING": sum(1 for c in all_recent if c.get("status") == "APPROACHING"),
+        "WATCHLIST": sum(1 for c in all_recent if c.get("status") == "WATCHLIST"),
+        "INFEASIBLE": sum(1 for c in all_recent if c.get("status") == "INFEASIBLE"),
+        "INVALIDATED": sum(1 for c in all_recent if c.get("status") == "INVALIDATED"),
+    }
+
+    return {
+        "status": "SUCCESS",
+        "total_count": len(all_recent),
+        "status_counts": status_counts,
+        "returned_count": len(candidates),
+        "candidates": candidates,
+        "btc_context": demand_zone_scanner.latest_btc_context.to_dict() if demand_zone_scanner.latest_btc_context else None,
+        "telemetry": demand_zone_scanner.latest_telemetry,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/demand_zone/btc_context")
+async def get_demand_zone_btc_context():
+    """Get current BTC Market Context, zone proximity, policy evaluation, and observation history."""
+    btc_ctx = demand_zone_scanner.latest_btc_context
+    if not btc_ctx:
+        try:
+            bulk = demand_zone_scanner.adapter.get_bulk_market_snapshot()
+            btc_snap = bulk.get("BTCUSDT", {})
+            btc_px = float(btc_snap.get("last_price") or btc_snap.get("mid_price") or 80000.0)
+            klines = demand_zone_scanner.adapter.get_klines("BTCUSDT", "1h", limit=30)
+            btc_ctx = demand_zone_scanner.btc_evaluator.evaluate(btc_px, klines)
+            demand_zone_scanner.latest_btc_context = btc_ctx
+        except Exception as e:
+            logger.warning(f"Failed to fetch on-demand BTC context: {e}")
+
+    return {
+        "status": "SUCCESS",
+        "btc_context": btc_ctx.to_dict() if btc_ctx else None,
+        "history": demand_zone_scanner.btc_evaluator.history,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/demand_zone/config")
+async def get_demand_zone_config():
+    """Retrieve active Demand-Zone scanner configuration."""
+    return {
+        "status": "SUCCESS",
+        "config": demand_zone_scanner.config.to_dict(),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/demand_zone/config")
+async def update_demand_zone_config(req: DemandZoneConfigUpdate):
+    """Update Demand-Zone scanner configuration parameters."""
+    c = demand_zone_scanner.config
+    if req.min_24h_volume_usdt is not None:
+        c.min_24h_volume_usdt = float(req.min_24h_volume_usdt)
+    if req.risk_budget_usdt is not None:
+        c.risk_budget_usdt = float(req.risk_budget_usdt)
+    if req.min_distance_to_demand_pct is not None:
+        c.min_distance_to_demand_pct = float(req.min_distance_to_demand_pct)
+    if req.max_distance_to_demand_pct is not None:
+        c.max_distance_to_demand_pct = float(req.max_distance_to_demand_pct)
+    if req.min_stop_loss_dist_pct is not None:
+        c.min_stop_loss_dist_pct = float(req.min_stop_loss_dist_pct)
+    if req.max_stop_loss_dist_pct is not None:
+        c.max_stop_loss_dist_pct = float(req.max_stop_loss_dist_pct)
+    if req.hard_max_stop_loss_pct is not None:
+        c.hard_max_stop_loss_pct = float(req.hard_max_stop_loss_pct)
+    if req.min_net_reward_to_risk is not None:
+        c.min_net_reward_to_risk = float(req.min_net_reward_to_risk)
+    if req.min_resistance_clearance_rr is not None:
+        c.min_resistance_clearance_rr = float(req.min_resistance_clearance_rr)
+    if req.btc_zone_lower is not None:
+        c.btc_zone_lower = float(req.btc_zone_lower)
+    if req.btc_zone_upper is not None:
+        c.btc_zone_upper = float(req.btc_zone_upper)
+    if req.leverage is not None:
+        c.leverage = float(req.leverage)
+    if req.btc_policy is not None:
+        p_str = req.btc_policy.strip()
+        if p_str in ("A", "OBSERVE_CONTINUOUSLY", "Policy A"):
+            c.btc_policy = BTCZonePolicy.OBSERVE_CONTINUOUSLY
+        elif p_str in ("B", "PRIORITIZE_ON_APPROACH", "Policy B"):
+            c.btc_policy = BTCZonePolicy.PRIORITIZE_ON_APPROACH
+        elif p_str in ("C", "REQUIRE_CONFIRMATION", "Policy C"):
+            c.btc_policy = BTCZonePolicy.REQUIRE_CONFIRMATION
+        else:
+            try:
+                c.btc_policy = BTCZonePolicy(p_str)
+            except ValueError:
+                pass
+
+    # Propagate updated config to sub-engines
+    demand_zone_scanner.btc_evaluator.config = c
+    demand_zone_scanner.zone_detector.config = c
+    demand_zone_scanner.risk_sizer.config = c
+    demand_zone_scanner.tp_planner.config = c
+    demand_zone_scanner.ob_analyzer.config = c
+
+    return {
+        "status": "SUCCESS",
+        "updated_config": c.to_dict(),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/demand_zone/scan")
+async def trigger_demand_zone_scan(
+    max_symbols: int = Query(50, ge=5, le=100, description="Max symbols to evaluate"),
+):
+    """Trigger an on-demand scan across AsterDEX USDT perpetual markets."""
+    candidates = await asyncio.to_thread(
+        demand_zone_scanner.scan_universe,
+        max_symbols_to_evaluate=max_symbols,
+    )
+    return {
+        "status": "SUCCESS",
+        "candidates_count": len(candidates),
+        "telemetry": demand_zone_scanner.latest_telemetry,
+        "ready_count": sum(1 for c in candidates if c.status == DemandZoneCandidateStatus.READY),
+        "approaching_count": sum(1 for c in candidates if c.status == DemandZoneCandidateStatus.APPROACHING),
+        "watchlist_count": sum(1 for c in candidates if c.status == DemandZoneCandidateStatus.WATCHLIST),
+        "infeasible_count": sum(1 for c in candidates if c.status == DemandZoneCandidateStatus.INFEASIBLE),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/demand_zone/telemetry")
+async def get_demand_zone_telemetry():
+    """Retrieve latest scan telemetry and audit metrics."""
+    return {
+        "status": "SUCCESS",
+        "telemetry": demand_zone_scanner.latest_telemetry,
+        "recent_scans": demand_zone_storage.get_recent_scans(limit=10),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ==============================================================================
+# Multi-Exchange Perpetual Futures Market Screener REST API Endpoints
+# ==============================================================================
+
+
+@app.get("/api/screener/markets")
+async def get_screener_markets(
+    search: Optional[str] = Query(None, description="Search symbol or base asset"),
+    min_volume_usdt: float = Query(1000000.0, ge=0.0, description="Minimum 24h quote volume turnover"),
+    max_volume_usdt: Optional[float] = Query(None, ge=0.0, description="Optional maximum volume turnover"),
+    min_oi_usdt: Optional[float] = Query(None, ge=0.0, description="Optional minimum open interest notional"),
+    max_oi_usdt: Optional[float] = Query(None, ge=0.0, description="Optional maximum open interest notional"),
+    funding_direction: Optional[str] = Query(None, description="Filter funding direction: ALL, POSITIVE, NEGATIVE"),
+    min_funding_abs_pct: Optional[float] = Query(None, ge=0.0, description="Minimum absolute funding percentage"),
+    max_spread_bps: Optional[float] = Query(None, ge=0.0, description="Maximum bid-ask spread in bps"),
+    exchanges: Optional[str] = Query(None, description="Comma-separated exchanges to include"),
+    cross_listed_only: bool = Query(False, description="Filter assets listed on >= 2 venues"),
+    sort_by: str = Query("volume_desc", description="Sort field and direction"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(25, ge=5, le=100, description="Items per page"),
+    force_refresh: bool = Query(False, description="Force fresh network fetch"),
+):
+    """Retrieve filtered, sorted, paginated multi-exchange perpetual market assets."""
+    ex_list = [e.strip().lower() for e in exchanges.split(",") if e.strip()] if exchanges else None
+    params = ScreenerFilterParams(
+        search=search,
+        min_volume_usdt=min_volume_usdt,
+        max_volume_usdt=max_volume_usdt,
+        min_oi_usdt=min_oi_usdt,
+        max_oi_usdt=max_oi_usdt,
+        funding_direction=funding_direction,
+        min_funding_abs_pct=min_funding_abs_pct,
+        max_spread_bps=max_spread_bps,
+        exchanges=ex_list,
+        cross_listed_only=cross_listed_only,
+        sort_by=sort_by,
+        page=page,
+        page_size=page_size,
+    )
+    result = await asyncio.to_thread(market_screener.filter_and_paginate, params=params, force_refresh=force_refresh)
+    return result
+
+
+@app.get("/api/screener/venues")
+async def get_screener_venues():
+    """Retrieve connection telemetry and contract counts for all monitored exchanges."""
+    return {
+        "status": "SUCCESS",
+        "venues": market_screener.get_venue_telemetry(),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/screener/refresh")
+async def refresh_screener_data():
+    """Trigger manual cache invalidation and fresh multi-exchange fetch."""
+    await asyncio.to_thread(market_screener.refresh_all_venues, force=True)
+    return {
+        "status": "SUCCESS",
+        "venues_telemetry": market_screener.get_venue_telemetry(),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ==============================================================================
+# Groq AI Trading Analyst REST API Endpoints
+# ==============================================================================
+
+
+@app.post("/api/ai_analyst/analyze")
+async def analyze_with_ai(req: AnalysisRequest):
+    """Trigger manual qualitative and quantitative market structure analysis via Groq LLM."""
+    try:
+        result = await asyncio.to_thread(
+            ai_analyst_service.analyze_symbol,
+            symbol=req.symbol,
+            timeframe=req.timeframe,
+            risk_budget_usdt=req.risk_budget_usdt,
+            force_refresh=req.force_refresh,
+            model_id_override=req.model_id,
+        )
+        return {
+            "status": "SUCCESS",
+            "result": result,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"AI Analyst error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ai_analyst/history")
+async def get_ai_analyst_history(
+    symbol: Optional[str] = Query(None, description="Filter by symbol"),
+    timeframe: Optional[str] = Query(None, description="Filter by timeframe (15m, 1h, 4h, 1d)"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """Retrieve historical AI market analysis records."""
+    records = ai_analyst_storage.get_history(symbol=symbol, timeframe=timeframe, limit=limit, offset=offset)
+    return {
+        "status": "SUCCESS",
+        "total_returned": len(records),
+        "history": records,
+        "records": records,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/ai_analyst/symbols")
+async def get_ai_analyst_symbols():
+    """Retrieve list of eligible AsterDEX perpetual symbols for AI analysis."""
+    symbols = ai_analyst_service.get_supported_symbols()
+    return {
+        "status": "SUCCESS",
+        "symbols": symbols,
+        "count": len(symbols),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/ai_analyst/config")
+async def get_ai_analyst_config():
+    """Get active AI Analyst configuration (keys masked)."""
+    return {
+        "status": "SUCCESS",
+        "config": ai_analyst_service.config.to_dict(),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/ai_analyst/config", dependencies=[Depends(require_mutating_api_access)])
+async def update_ai_analyst_config(req: AIConfigUpdateRequest):
+    """Update Groq model ID, API key, and risk budget."""
+    updated = ai_analyst_service.update_config(
+        groq_api_key=req.groq_api_key,
+        groq_model_id=req.groq_model_id,
+        risk_budget_usdt=req.default_risk_budget_usdt,
+        default_leverage=req.default_leverage,
+    )
+    return {
+        "status": "SUCCESS",
+        "config": updated,
+        "updated_config": updated,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/ai_analyst/{analysis_id}")
+async def get_ai_analysis_by_id(analysis_id: str):
+    """Retrieve a single AI analysis record by ID."""
+    record = ai_analyst_storage.get_by_id(analysis_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Analysis record not found")
+    return {
+        "status": "SUCCESS",
+        "result": record,
+        "record": record,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
 

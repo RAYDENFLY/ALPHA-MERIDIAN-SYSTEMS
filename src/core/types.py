@@ -179,6 +179,14 @@ class Candle:
         [0: open_time, 1: open, 2: high, 3: low, 4: close, 5: volume, 6: close_time,
          7: quote_volume, 8: trades, 9: taker_buy_base, 10: taker_buy_quote, 11: ignore]
         """
+        import time as _time
+        close_time = int(raw[6]) if len(raw) > 6 and raw[6] is not None else 0
+        now_ms = int(_time.time() * 1000)
+        # In live feeds, if close_time_ms is in the future, the bar is still forming (unclosed)
+        is_closed = True
+        if close_time > 0 and close_time > now_ms:
+            is_closed = False
+
         return cls(
             symbol=symbol,
             timeframe=timeframe,
@@ -188,10 +196,10 @@ class Candle:
             low=float(raw[3]),
             close=float(raw[4]),
             volume=float(raw[5]),
-            close_time_ms=int(raw[6]),
+            close_time_ms=close_time,
             quote_volume=float(raw[7]) if len(raw) > 7 else 0.0,
             trades_count=int(raw[8]) if len(raw) > 8 else 0,
-            is_closed=True,
+            is_closed=is_closed,
         )
 
 

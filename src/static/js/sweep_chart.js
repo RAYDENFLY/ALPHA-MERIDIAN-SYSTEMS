@@ -1,9 +1,29 @@
 // =========================================================================
 // FEATURE E: INTERACTIVE LIQUIDITY SWEEP & RECLAIM CHART ENGINE
 // =========================================================================
+        let chartAutoRefreshTimer = null;
+
+        function startChartAutoRefresh() {
+            stopChartAutoRefresh();
+            chartAutoRefreshTimer = setInterval(() => {
+                const tabEl = document.getElementById('tab-sweep_chart');
+                if (tabEl && !tabEl.classList.contains('hidden') && !isReplayMode) {
+                    loadLiquidityChartData(null, true);
+                }
+            }, 10000);
+        }
+
+        function stopChartAutoRefresh() {
+            if (chartAutoRefreshTimer) {
+                clearInterval(chartAutoRefreshTimer);
+                chartAutoRefreshTimer = null;
+            }
+        }
+
         function initOrRefreshLiquidityChart() {
             loadLiquidityChartSymbols();
             loadLiquidityChartData();
+            startChartAutoRefresh();
         }
 
         async function loadLiquidityChartSymbols() {
@@ -257,9 +277,27 @@
             }
         });
 
+        let currentVenueSource = 'combined';
+
+        function setVenueSource(venue) {
+            currentVenueSource = venue || 'combined';
+            ['combined', 'asterdex', 'binance', 'bybit'].forEach(v => {
+                const btn = document.getElementById(`venueBtn-${v}`);
+                if (btn) {
+                    if (v === currentVenueSource) {
+                        btn.className = 'px-2 py-0.5 rounded bg-emerald-600 text-white font-bold transition shadow-sm';
+                    } else {
+                        btn.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white transition';
+                    }
+                }
+            });
+            // Preserve viewport zoom/pan during venue toggling
+            loadLiquidityChartData(null, true);
+        }
+
         function setChartTimeframe(tf) {
             currentChartTf = tf;
-            ['15m', '1h', '4h'].forEach(t => {
+            ['15m', '1h', '4h', '1d'].forEach(t => {
                 const btn = document.getElementById(`chartTf-${t}`);
                 if (btn) {
                     if (t === tf) {
@@ -269,11 +307,100 @@
                     }
                 }
             });
+
+            const macroContainer = document.getElementById('overlay1DMacroContainer');
+            if (macroContainer) {
+                if (tf === '1d') {
+                    macroContainer.classList.add('opacity-40', 'pointer-events-none');
+                } else {
+                    macroContainer.classList.remove('opacity-40', 'pointer-events-none');
+                }
+            }
+
             if (isReplayMode) toggleReplayMode();
             loadLiquidityChartData();
         }
 
-        async function loadLiquidityChartData(asOfIndex = null) {
+        function renderVenueMetadata(data) {
+            const ob = data.order_book_overlay || {};
+            const fs = data.feed_status || {};
+            const venueNameEl = document.getElementById('chartActiveVenueName');
+            const statusBadge = document.getElementById('chartVenueStatusBadge');
+            const contribContainer = document.getElementById('chartContributingVenuesContainer');
+            const midEl = document.getElementById('chartVenueMidDisplay');
+            const spreadEl = document.getElementById('chartVenueSpreadDisplay');
+            const depthEl = document.getElementById('chartVenueDepthDisplay');
+            const wallsCountEl = document.getElementById('chartVenueWallsCountDisplay');
+            const freshnessEl = document.getElementById('chartVenueFreshnessDisplay');
+            const warningBanner = document.getElementById('chartVenueWarningBanner');
+            const warningMsg = document.getElementById('chartVenueWarningMessage');
+
+            const venue = ob.venue_filter || currentVenueSource || 'combined';
+            const vName = ob.venue_name || (venue === 'combined' ? 'Combined (Cross-Exchange)' : venue.toUpperCase());
+            if (venueNameEl) venueNameEl.textContent = vName;
+
+            const st = ob.status || 'AVAILABLE';
+            if (statusBadge) {
+                if (st === 'LIVE' || st === 'AVAILABLE') {
+                    statusBadge.textContent = 'LIVE';
+                    statusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800';
+                } else if (st === 'STALE') {
+                    statusBadge.textContent = `STALE (${(ob.age_seconds || 0).toFixed(1)}s)`;
+                    statusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800';
+                } else if (st === 'UNAVAILABLE') {
+                    statusBadge.textContent = 'UNAVAILABLE';
+                    statusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800';
+                } else {
+                    statusBadge.textContent = 'ERROR';
+                    statusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800';
+                }
+            }
+
+            if (contribContainer) {
+                const venues = ob.contributing_venues || [];
+                if (venues.length > 0) {
+                    contribContainer.innerHTML = venues.map(v => 
+                        `<span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-slate-800 text-slate-300 border border-slate-700">${v.toUpperCase()}</span>`
+                    ).join('');
+                } else {
+                    contribContainer.innerHTML = '';
+                }
+            }
+
+            if (midEl) {
+                midEl.textContent = ob.mid_price ? `$${formatPrice(ob.mid_price)}` : '--';
+            }
+            if (spreadEl) {
+                spreadEl.textContent = ob.spread_bps !== undefined && ob.spread_bps !== null ? `${ob.spread_bps.toFixed(2)} bps` : '--';
+            }
+            if (depthEl) {
+                if (ob.total_bid_depth_usdt !== undefined && ob.total_ask_depth_usdt !== undefined && ob.mid_price) {
+                    depthEl.textContent = `Bids $${(ob.total_bid_depth_usdt / 1e6).toFixed(2)}M / Asks $${(ob.total_ask_depth_usdt / 1e6).toFixed(2)}M`;
+                } else {
+                    depthEl.textContent = '--';
+                }
+            }
+            if (wallsCountEl) {
+                const walls = ob.walls || [];
+                wallsCountEl.textContent = `${walls.length} Wall${walls.length === 1 ? '' : 's'}`;
+            }
+            if (freshnessEl) {
+                const age = ob.age_seconds !== undefined ? ob.age_seconds : (fs.order_book_age_seconds !== undefined ? fs.order_book_age_seconds : 0);
+                freshnessEl.textContent = `${age.toFixed(1)}s ago`;
+                freshnessEl.className = age <= 10.0 ? 'text-emerald-400 font-bold' : (age <= 30.0 ? 'text-amber-400 font-medium' : 'text-rose-400 font-medium');
+            }
+
+            if (warningBanner) {
+                if (st === 'UNAVAILABLE' || st === 'ERROR') {
+                    warningBanner.classList.remove('hidden');
+                    if (warningMsg) warningMsg.textContent = ob.error_message || `${vName} order book is currently unavailable for ${currentChartSymbol}.`;
+                } else {
+                    warningBanner.classList.add('hidden');
+                }
+            }
+        }
+
+        async function loadLiquidityChartData(asOfIndex = null, preserveViewport = false) {
             const chartInp = document.getElementById('chartSymbolInput');
             if (chartInp && chartInp.value !== currentChartSymbol) chartInp.value = currentChartSymbol;
             const chartSel = document.getElementById('chartSymbolSelect');
@@ -288,6 +415,12 @@
 
             try {
                 let url = `/api/chart/liquidity_layers?symbol=${encodeURIComponent(currentChartSymbol)}&timeframe=${encodeURIComponent(currentChartTf)}&limit=150`;
+                if (activeOverlays.macro_1d && currentChartTf !== '1d') {
+                    url += `&include_1d_overlay=true`;
+                }
+                if (currentVenueSource) {
+                    url += `&venue_source=${encodeURIComponent(currentVenueSource)}`;
+                }
                 if (asOfIndex !== null && asOfIndex !== undefined) {
                     url += `&as_of_index=${encodeURIComponent(asOfIndex)}`;
                 }
@@ -300,22 +433,36 @@
                 chartLayersData = data;
                 chartEventsData = data.sweep_events || [];
 
+                // Render Venue Metadata Bar
+                renderVenueMetadata(data);
+
+                // Update Feed Badge with Venue-specific Freshness
                 const feedBadge = document.getElementById('chartFeedBadge');
                 if (feedBadge && data.feed_status) {
                     const st = data.feed_status;
+                    const ob = data.order_book_overlay || {};
+                    const vName = ob.venue_name || (currentVenueSource === 'combined' ? 'Combined' : currentVenueSource.toUpperCase());
+                    const obAge = (ob.age_seconds !== undefined ? ob.age_seconds : 0.0).toFixed(1);
+
                     if (st.status === 'REPLAY') {
                         feedBadge.textContent = `REPLAY: BAR ${data.replay_metadata?.as_of_index ?? '--'}/${data.replay_metadata?.total_bars ?? '--'}`;
                         feedBadge.className = 'px-2 py-0.5 text-[10px] font-mono rounded bg-amber-950 text-amber-300 border border-amber-800';
-                    } else if (st.is_stale) {
-                        feedBadge.textContent = `FEED: STALE (${st.candle_age_seconds}s ago)`;
+                    } else if (ob.status === 'UNAVAILABLE') {
+                        feedBadge.textContent = `ORDER BOOK: UNAVAILABLE (${vName})`;
                         feedBadge.className = 'px-2 py-0.5 text-[10px] font-mono rounded bg-rose-950 text-rose-300 border border-rose-800';
+                    } else if (ob.status === 'ERROR') {
+                        feedBadge.textContent = `FEED ERROR (${vName})`;
+                        feedBadge.className = 'px-2 py-0.5 text-[10px] font-mono rounded bg-rose-950 text-rose-300 border border-rose-800';
+                    } else if (st.is_stale || ob.status === 'STALE') {
+                        feedBadge.textContent = `FEED: STALE (${obAge}s &bull; ${vName})`;
+                        feedBadge.className = 'px-2 py-0.5 text-[10px] font-mono rounded bg-amber-950 text-amber-300 border border-amber-800';
                     } else {
-                        feedBadge.textContent = `FEED: LIVE (${st.source})`;
+                        feedBadge.textContent = `FEED: LIVE (${vName} &bull; ${obAge}s)`;
                         feedBadge.className = 'px-2 py-0.5 text-[10px] font-mono rounded bg-emerald-950 text-emerald-300 border border-emerald-800';
                     }
                 }
 
-                renderLightweightChart(data);
+                renderLightweightChart(data, preserveViewport);
                 renderEventsList(chartEventsData);
 
                 if (data.replay_metadata) {
@@ -334,7 +481,7 @@
             }
         }
 
-        function renderLightweightChart(data) {
+        function renderLightweightChart(data, preserveViewport = false) {
             const container = document.getElementById('tvLightweightChartContainer');
             if (!container) return;
 
@@ -470,7 +617,7 @@
 
             renderChartOverlays(data);
 
-            if (!isReplayMode) {
+            if (!preserveViewport && !isReplayMode) {
                 tvChart.timeScale().fitContent();
             }
         }
@@ -489,7 +636,11 @@
                     let lineStyle = LightweightCharts.LineStyle.Dashed;
                     let title = lvl.source_label || 'BSL';
 
-                    if (lvl.level_type === 'SWING_LOW_SSL') {
+                    if (lvl.is_htf) {
+                        color = (lvl.level_type && lvl.level_type.includes('HIGH')) ? '#c084fc' : '#a855f7';
+                        lineStyle = LightweightCharts.LineStyle.Dashed;
+                        title = `[1D HTF] ${lvl.source_label || lvl.level_type}`;
+                    } else if (lvl.level_type === 'SWING_LOW_SSL') {
                         color = '#10b981';
                         title = lvl.source_label || 'SSL';
                     } else if (lvl.level_type === 'EQUAL_HIGHS') {
@@ -502,19 +653,21 @@
                         title = lvl.source_label || 'EQL';
                     }
 
-                    if (lvl.status === 'SWEPT_PENDING' || lvl.status === 'RECLAIMED') {
-                        color = '#f59e0b';
-                        title += ` [${lvl.status}]`;
-                    } else if (lvl.status === 'INVALIDATED_BROKEN') {
-                        color = '#64748b';
-                        title += ' [BROKEN]';
+                    if (!lvl.is_htf) {
+                        if (lvl.status === 'SWEPT_PENDING' || lvl.status === 'RECLAIMED') {
+                            color = '#f59e0b';
+                            title += ` [${lvl.status}]`;
+                        } else if (lvl.status === 'INVALIDATED_BROKEN') {
+                            color = '#64748b';
+                            title += ' [BROKEN]';
+                        }
                     }
 
                     try {
                         const pl = candleSeries.createPriceLine({
                             price: lvl.price,
                             color: color,
-                            lineWidth: 1,
+                            lineWidth: lvl.is_htf ? 2 : 1,
                             lineStyle: lineStyle,
                             axisLabelVisible: true,
                             title: title,
@@ -529,15 +682,22 @@
                 if (ob.walls && ob.walls.length > 0) {
                     ob.walls.forEach(w => {
                         const isBid = w.side === 'BID';
-                        const color = isBid ? 'rgba(5, 150, 105, 0.85)' : 'rgba(220, 38, 38, 0.85)';
+                        const color = isBid ? 'rgba(5, 150, 105, 0.9)' : 'rgba(220, 38, 38, 0.9)';
+                        let venueBadge = '';
+                        if (w.venues && w.venues.length > 0) {
+                            venueBadge = ` [${w.venues.map(v => v.toUpperCase()).join('/')}]`;
+                        }
+                        const confBadge = w.is_cross_confirmed ? ` [${w.confirmation_tier}]` : '';
+                        const title = `${w.side} WALL${confBadge}${venueBadge} $${Number(w.depth_usdt).toLocaleString()} (${w.distance_bps}bps)`;
+
                         try {
                             const pl = candleSeries.createPriceLine({
                                 price: w.price,
                                 color: color,
-                                lineWidth: 2,
+                                lineWidth: w.is_cross_confirmed ? 3 : 2,
                                 lineStyle: LightweightCharts.LineStyle.Solid,
                                 axisLabelVisible: true,
-                                title: `${w.side} WALL ${w.multiple}x ($${Number(w.depth_usdt).toLocaleString()})`,
+                                title: title,
                             });
                             activePriceLines.push(pl);
                         } catch (e) {}
@@ -570,6 +730,10 @@
         function toggleOverlay(overlayType) {
             if (overlayType === 'structural') {
                 activeOverlays.structural = document.getElementById('overlayStructuralCheck')?.checked ?? true;
+            } else if (overlayType === '1d_macro') {
+                activeOverlays.macro_1d = document.getElementById('overlay1DMacroCheck')?.checked ?? false;
+                loadLiquidityChartData();
+                return;
             } else if (overlayType === 'orderbook') {
                 activeOverlays.orderbook = document.getElementById('overlayOrderBookCheck')?.checked ?? true;
             } else if (overlayType === 'liquidation') {
@@ -596,12 +760,19 @@
 
             if (countBadge) countBadge.textContent = filtered.length;
 
+            const pEl = document.getElementById('chartEventsPaginationContainer');
+
             if (filtered.length === 0) {
                 container.innerHTML = `<div class="py-8 text-center text-xs text-slate-500 font-mono">No events matching filter '${currentChartEventFilter}'.</div>`;
+                if (pEl) pEl.innerHTML = '';
                 return;
             }
 
-            container.innerHTML = filtered.map(evt => {
+            const paged = (typeof paginateList === 'function')
+                ? paginateList('chart_events', filtered)
+                : filtered;
+
+            container.innerHTML = paged.map(evt => {
                 const isSelected = evt.event_id === currentSelectedEventId;
                 const isLong = evt.direction === 'LONG';
                 let statusBadge = '<span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">RECLAIMED</span>';
@@ -644,10 +815,17 @@
                     </div>
                 `;
             }).join('');
+
+            if (typeof renderPaginationControls === 'function') {
+                renderPaginationControls('chart_events', 'chartEventsPaginationContainer', () => {
+                    renderEventsList(chartEventsData);
+                });
+            }
         }
 
         function filterChartEvents(event) {
             currentChartEventFilter = event.target.value || 'ALL';
+            if (typeof resetPaginationPage === "function") resetPaginationPage("chart_events");
             renderEventsList(chartEventsData);
         }
 
@@ -713,6 +891,11 @@
 
         function toggleReplayMode() {
             isReplayMode = !isReplayMode;
+            if (isReplayMode) {
+                stopChartAutoRefresh();
+            } else {
+                startChartAutoRefresh();
+            }
             const btn = document.getElementById('replayModeBtn');
             const dot = document.getElementById('replayDot');
             const text = document.getElementById('replayModeText');

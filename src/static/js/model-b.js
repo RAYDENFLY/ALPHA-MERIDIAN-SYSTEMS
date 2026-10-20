@@ -187,12 +187,18 @@
                 const setups = data.setups || [];
                 if (badge) badge.innerText = `${setups.length} Candidate${setups.length === 1 ? '' : 's'}`;
 
+                const pElSetups = document.getElementById('modelBSetupsPaginationContainer');
                 if (setups.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No Model B setups recorded. Click "Scan Universal Markets Now" to trigger a 1H cycle.</td></tr>';
+                    if (pElSetups) pElSetups.innerHTML = '';
                     return;
                 }
 
-                tbody.innerHTML = setups.map(s => {
+                const pagedSetups = (typeof paginateList === 'function')
+                    ? paginateList('model_b_setups', setups)
+                    : setups;
+
+                tbody.innerHTML = pagedSetups.map(s => {
                     const isLong = (s.direction || '').toUpperCase() === 'LONG';
                     const dirClass = isLong ? 'text-emerald-400' : 'text-rose-400';
                     const dirBg = isLong ? 'border-emerald-600 bg-emerald-950/40' : 'border-rose-600 bg-rose-950/40';
@@ -290,6 +296,12 @@
                     `;
 
                 }).join('');
+
+                if (typeof renderPaginationControls === 'function') {
+                    renderPaginationControls('model_b_setups', 'modelBSetupsPaginationContainer', () => {
+                        fetchModelBSetups();
+                    });
+                }
 
             } catch (err) {
                 console.error("Model B setups error:", err);
@@ -605,12 +617,18 @@
                 if (!tbody) return;
 
                 const trades = data.trades || [];
+                const pElJournal = document.getElementById('modelBJournalPaginationContainer');
                 if (trades.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>';
+                    if (pElJournal) pElJournal.innerHTML = '';
                     return;
                 }
 
-                tbody.innerHTML = trades.map(t => {
+                const pagedTrades = (typeof paginateList === 'function')
+                    ? paginateList('model_b_journal', trades)
+                    : trades;
+
+                tbody.innerHTML = pagedTrades.map(t => {
                     const isLong = (t.direction || '').toUpperCase() === 'LONG';
                     const dirClass = isLong ? 'text-emerald-400' : 'text-rose-400';
                     const netPnl = Number(t.pnl_net || 0);
@@ -638,6 +656,12 @@
                         </tr>
                     `;
                 }).join('');
+
+                if (typeof renderPaginationControls === 'function') {
+                    renderPaginationControls('model_b_journal', 'modelBJournalPaginationContainer', () => {
+                        fetchModelBJournal();
+                    });
+                }
 
             } catch (err) {
                 console.error("Model B journal error:", err);
@@ -1113,7 +1137,9 @@
                     const winDelta = Number(optPort.win_rate_pct || 0) - Number(basePort.win_rate_pct || 0);
                     const pnlDelta = Number(optPort.net_pnl_usdt || 0) - Number(basePort.net_pnl_usdt || 0);
                     const ddDelta = Number(basePort.max_drawdown_usdt || 0) - Number(optPort.max_drawdown_usdt || 0);
-                    deltaEl.innerText = `Win Rate: +${winDelta.toFixed(1)}% | Net PnL: +$${pnlDelta.toFixed(2)} | Drawdown Cut: -$${ddDelta.toFixed(2)}`;
+                    const shortCount = optPort.short_trades || 0;
+                    const powerNote = shortCount < 30 ? ` | ⚠️ Low Power (N_short=${shortCount})` : '';
+                    deltaEl.innerText = `Win Rate: +${winDelta.toFixed(1)}% | Net PnL: +$${pnlDelta.toFixed(2)} | Drawdown Cut: -$${ddDelta.toFixed(2)}${powerNote}`;
                 }
 
                 // 3. Render 6-Variant Cards
@@ -1150,6 +1176,18 @@
                 const dd = Number(v.max_drawdown_usdt || 0).toFixed(2);
                 const sideBadgeClass = side === 'LONG' ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : (letter === 'F' ? 'bg-indigo-950 text-indigo-300 border-indigo-700' : 'bg-rose-950 text-rose-300 border-rose-800');
 
+                const nClosed = Number(v.simulated_closed || 0);
+                const isLowN = nClosed < 30;
+                const lowNBadge = isLowN ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-700" title="Sample size < 30 trades lacks statistical power">LOW N (${nClosed})</span>` : '';
+                const ciLow = v.win_rate_ci_lower_pct !== undefined ? Number(v.win_rate_ci_lower_pct).toFixed(1) : null;
+                const ciHigh = v.win_rate_ci_upper_pct !== undefined ? Number(v.win_rate_ci_upper_pct).toFixed(1) : null;
+                const ciText = (ciLow !== null && ciHigh !== null && nClosed > 0) ? `<div class="text-[9px] text-slate-400 font-mono">95% CI: [${ciLow}%-${ciHigh}%]</div>` : '';
+                const warningBox = isLowN ? `
+                    <div class="mt-2.5 p-2 rounded bg-amber-950/30 border border-amber-800/50 text-[10px] font-mono text-amber-300">
+                        ⚠️ <strong>Small Sample Size (N=${nClosed}):</strong> High variance. 95% CI is wide [${ciLow || 0}% &ndash; ${ciHigh || 0}%]. Do not declare strategy superior.
+                    </div>
+                ` : '';
+
                 return `
                     <div class="p-4 rounded-xl bg-slate-900/70 border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition">
                         <div>
@@ -1161,7 +1199,10 @@
                                         <div class="text-[10px] text-slate-500">${escapeHtml(m.description || '')}</div>
                                     </div>
                                 </div>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${sideBadgeClass}">${side}</span>
+                                <div class="flex items-center gap-1.5">
+                                    ${lowNBadge}
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${sideBadgeClass}">${side}</span>
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-3 gap-2 text-center text-xs font-mono pt-3">
@@ -1172,6 +1213,7 @@
                                 <div class="p-2 rounded bg-slate-950/60 border border-slate-800/80">
                                     <div class="text-slate-400 text-[10px]">Win Rate</div>
                                     <div class="text-xs font-bold text-white mt-0.5">${winRate}%</div>
+                                    ${ciText}
                                 </div>
                                 <div class="p-2 rounded bg-slate-950/60 border border-slate-800/80">
                                     <div class="text-slate-400 text-[10px]">Profit Factor</div>
@@ -1205,6 +1247,7 @@
                                     <span class="text-slate-300">${Number(v.avg_mae_pct || 0).toFixed(2)}% / ${Number(v.avg_mfe_pct || 0).toFixed(2)}%</span>
                                 </div>
                             </div>
+                            ${warningBox}
                         </div>
                     </div>
                 `;
@@ -1232,12 +1275,18 @@
                 const tbody = document.getElementById('researchSignalsTableBody');
                 if (!tbody) return;
 
+                const pElSignals = document.getElementById('researchSignalsPaginationContainer');
                 if (researchCachedSignals.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No research signals found matching filters.</td></tr>`;
+                    if (pElSignals) pElSignals.innerHTML = '';
                     return;
                 }
 
-                tbody.innerHTML = researchCachedSignals.map(sig => {
+                const pagedSignals = (typeof paginateList === 'function')
+                    ? paginateList('model_b_shadow_signals', researchCachedSignals)
+                    : researchCachedSignals;
+
+                tbody.innerHTML = pagedSignals.map(sig => {
                     const timeStr = new Date(sig.timestamp_ms).toLocaleString();
                     const isLong = sig.direction === 'LONG';
                     const dirClass = isLong ? 'text-emerald-400 bg-emerald-950 border-emerald-800' : 'text-rose-400 bg-rose-950 border-rose-800';
@@ -1313,6 +1362,12 @@
                         </tr>
                     `;
                 }).join('');
+
+                if (typeof renderPaginationControls === 'function') {
+                    renderPaginationControls('model_b_shadow_signals', 'researchSignalsPaginationContainer', () => {
+                        fetchModelBResearchSignals();
+                    });
+                }
 
             } catch (err) {
                 console.error("fetchModelBResearchSignals error:", err);

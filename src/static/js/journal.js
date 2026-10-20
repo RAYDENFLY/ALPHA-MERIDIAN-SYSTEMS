@@ -3,6 +3,7 @@
 // =========================================================================
         function setJournalModelFilter(model) {
             journalModelFilter = model;
+            if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
             ['ALL', 'MODEL_A', 'MODEL_B'].forEach(m => {
                 const btn = document.getElementById(`jModel-${m}`);
                 if (btn) {
@@ -30,6 +31,7 @@
 
         function setJournalOutcomeFilter(outcome) {
             journalOutcomeFilter = outcome;
+            if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
             ['ALL', 'WIN', 'LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
                 const btn = document.getElementById(`jOutcome-${o}`);
                 if (btn) {
@@ -42,25 +44,30 @@
 
         function handleJournalCategoryChange(val) {
             journalCategoryFilter = val;
+            if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
             loadJournal();
         }
 
         function handleJournalDirectionChange(val) {
             journalDirectionFilter = val;
+            if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
             loadJournal();
         }
 
         function handleJournalPeriodChange(val) {
             journalPeriodFilter = val;
+            if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
             loadJournal();
         }
 
         function handleJournalSearchInput(val) {
             journalSearchQuery = val.trim();
+            if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
             loadJournal();
         }
 
         function resetJournalFilters() {
+            if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
             journalOutcomeFilter = 'ALL';
             journalCategoryFilter = 'ALL';
             journalDirectionFilter = 'ALL';
@@ -179,40 +186,57 @@
                     }
                 }
 
-                // Populate table rows
-                const tbody = document.getElementById('journalTableBody');
-                const emptyState = document.getElementById('journalEmptyState');
+                lastJournalTrades = data.trades || [];
+                renderJournalRows();
+            } catch (err) {
+                console.error("Journal polling error:", err);
+            } finally {
+                if (refreshBtn) refreshBtn.classList.remove('opacity-75');
+            }
+        }
 
-                if (!data.trades || data.trades.length === 0) {
-                    tbody.innerHTML = '';
-                    if (emptyState) {
-                        emptyState.classList.remove('hidden');
-                        const emptyTitle = document.getElementById('journalEmptyTitle');
-                        const emptyMsg = document.getElementById('journalEmptyMessage');
-                        const hasActiveFilter = (journalModelFilter !== 'ALL') || (journalOutcomeFilter !== 'ALL') || (journalCategoryFilter !== 'ALL') || (journalDirectionFilter !== 'ALL') || Boolean(journalSearchQuery) || (journalPeriodFilter !== 'all');
-                        if (hasActiveFilter) {
-                            if (emptyTitle) emptyTitle.innerText = 'No Trades Match Filter Criteria';
-                            if (emptyMsg) emptyMsg.innerText = 'No trade executions match the active filters for the selected model scope. Try resetting filters or switching the model selector.';
-                        } else {
-                            if (emptyTitle) emptyTitle.innerText = 'No Paper Trades Recorded Yet';
-                            if (emptyMsg) emptyMsg.innerText = 'Paper trades are recorded automatically when qualifying setups decisively fill simulated limit orders and subsequently trigger take-profit or stop-loss brackets.';
-                        }
+        let lastJournalTrades = [];
+
+        function renderJournalRows() {
+            const tbody = document.getElementById('journalTableBody');
+            const emptyState = document.getElementById('journalEmptyState');
+            const pEl = document.getElementById('journalPaginationContainer');
+
+            if (!lastJournalTrades || lastJournalTrades.length === 0) {
+                if (tbody) tbody.innerHTML = '';
+                if (pEl) pEl.innerHTML = '';
+                if (emptyState) {
+                    emptyState.classList.remove('hidden');
+                    const emptyTitle = document.getElementById('journalEmptyTitle');
+                    const emptyMsg = document.getElementById('journalEmptyMessage');
+                    const hasActiveFilter = (journalModelFilter !== 'ALL') || (journalOutcomeFilter !== 'ALL') || (journalCategoryFilter !== 'ALL') || (journalDirectionFilter !== 'ALL') || Boolean(journalSearchQuery) || (journalPeriodFilter !== 'all');
+                    if (hasActiveFilter) {
+                        if (emptyTitle) emptyTitle.innerText = 'No Trades Match Filter Criteria';
+                        if (emptyMsg) emptyMsg.innerText = 'No trade executions match the active filters for the selected model scope. Try resetting filters or switching the model selector.';
+                    } else {
+                        if (emptyTitle) emptyTitle.innerText = 'No Paper Trades Recorded Yet';
+                        if (emptyMsg) emptyMsg.innerText = 'Paper trades are recorded automatically when qualifying setups decisively fill simulated limit orders and subsequently trigger take-profit or stop-loss brackets.';
                     }
-                    return;
                 }
+                return;
+            }
 
-                if (emptyState) emptyState.classList.add('hidden');
+            if (emptyState) emptyState.classList.add('hidden');
 
-                const fmtP = (p) => {
-                    if (p === undefined || p === null || isNaN(p)) return '--';
-                    const num = Number(p);
-                    if (num === 0) return '$0.00';
-                    if (Math.abs(num) < 0.001) return '$' + num.toFixed(6);
-                    if (Math.abs(num) < 1) return '$' + num.toFixed(4);
-                    return '$' + num.toFixed(2);
-                };
+            const fmtP = (p) => {
+                if (p === undefined || p === null || isNaN(p)) return '--';
+                const num = Number(p);
+                if (num === 0) return '$0.00';
+                if (Math.abs(num) < 0.001) return '$' + num.toFixed(6);
+                if (Math.abs(num) < 1) return '$' + num.toFixed(4);
+                return '$' + num.toFixed(2);
+            };
 
-                tbody.innerHTML = data.trades.map(t => {
+            const pagedTrades = (typeof paginateList === 'function')
+                ? paginateList('journal', lastJournalTrades)
+                : lastJournalTrades;
+
+            tbody.innerHTML = pagedTrades.map(t => {
                     const isLong = (t.direction || '').toUpperCase() === 'LONG';
                     const sideColor = isLong ? 'text-emerald-400' : 'text-rose-400';
                     const sideBg = isLong ? 'border-emerald-500/40 bg-emerald-950/40' : 'border-rose-500/40 bg-rose-950/40';
@@ -313,9 +337,9 @@
                     `;
                 }).join('');
 
-            } catch (err) {
-                console.error("Journal polling error:", err);
-            } finally {
-                if (refreshBtn) refreshBtn.classList.remove('opacity-75');
+            if (typeof renderPaginationControls === 'function') {
+                renderPaginationControls('journal', 'journalPaginationContainer', () => {
+                    renderJournalRows();
+                });
             }
         }

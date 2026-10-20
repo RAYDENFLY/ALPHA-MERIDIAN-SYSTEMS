@@ -11,8 +11,9 @@ All structural indicators are derived from transparent, verifiable market eviden
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import concurrent.futures
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.logger import logger
 from src.core.types import Candle
@@ -48,6 +49,7 @@ class UnifiedMarketContext:
     structural_indicators: Dict[str, str]
     market_posture_summary: str
     key_levels_to_watch: List[Dict[str, Any]]
+    data_freshness: Dict[str, Any] = field(default_factory=dict)
     generated_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> Dict[str, Any]:
@@ -65,6 +67,7 @@ class UnifiedMarketContext:
             "structural_indicators": self.structural_indicators,
             "market_posture_summary": self.market_posture_summary,
             "key_levels_to_watch": self.key_levels_to_watch,
+            "data_freshness": self.data_freshness,
             "generated_at_utc": self.generated_at_utc,
         }
 
@@ -97,14 +100,58 @@ class MarketContextService:
             if (now_mono - cached_time) < self.cache_ttl_sec:
                 return cached_ctx
 
-        # Fetch market data concurrently or sequentially via adapter
-        candles_4h = self.adapter.get_klines(sym, "4h", limit=40)
-        candles_1h = self.adapter.get_klines(sym, "1h", limit=50)
-        candles_15m = self.adapter.get_klines(sym, "15m", limit=50)
-        book = self.adapter.get_order_book(sym, limit=50)
-        trades = self.adapter.get_recent_trades(sym, limit=100)
-        oi_data = self.adapter.get_open_interest(sym)
-        prem_data = self.adapter.get_premium_index(sym)
+        # Fetch market data concurrently with safe failure isolation
+        def _safe_get_klines(s: str, tf: str, lim: int) -> List[Candle]:
+            try:
+                return self.adapter.get_klines(s, tf, limit=lim)
+            except Exception as e:
+                logger.warning(f"MarketContext: get_klines failed for {s} {tf}: {e}")
+                return []
+
+        def _safe_get_book(s: str, lim: int) -> Optional[NormalizedOrderBook]:
+            try:
+                return self.adapter.get_order_book(s, limit=lim)
+            except Exception as e:
+                logger.warning(f"MarketContext: get_order_book failed for {s}: {e}")
+                return None
+
+        def _safe_get_trades(s: str, lim: int) -> List[NormalizedTrade]:
+            try:
+                return self.adapter.get_recent_trades(s, limit=lim)
+            except Exception as e:
+                logger.warning(f"MarketContext: get_recent_trades failed for {s}: {e}")
+                return []
+
+        def _safe_get_oi(s: str) -> Optional[Dict[str, Any]]:
+            try:
+                return self.adapter.get_open_interest(s)
+            except Exception as e:
+                logger.warning(f"MarketContext: get_open_interest failed for {s}: {e}")
+                return None
+
+        def _safe_get_prem(s: str) -> Optional[Dict[str, Any]]:
+            try:
+                return self.adapter.get_premium_index(s)
+            except Exception as e:
+                logger.warning(f"MarketContext: get_premium_index failed for {s}: {e}")
+                return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            fut_4h = executor.submit(_safe_get_klines, sym, "4h", 40)
+            fut_1h = executor.submit(_safe_get_klines, sym, "1h", 50)
+            fut_15m = executor.submit(_safe_get_klines, sym, "15m", 50)
+            fut_book = executor.submit(_safe_get_book, sym, 50)
+            fut_trades = executor.submit(_safe_get_trades, sym, 100)
+            fut_oi = executor.submit(_safe_get_oi, sym)
+            fut_prem = executor.submit(_safe_get_prem, sym)
+
+            candles_4h = fut_4h.result()
+            candles_1h = fut_1h.result()
+            candles_15m = fut_15m.result()
+            book = fut_book.result()
+            trades = fut_trades.result()
+            oi_data = fut_oi.result()
+            prem_data = fut_prem.result()
 
         # Resolve current mark price
         mark_price = 0.0
@@ -120,6 +167,21 @@ class MarketContextService:
         oi_contracts = oi_data.get("open_interest") if oi_data else None
         funding_rate = prem_data.get("last_funding_rate") if prem_data else 0.0001
 
+        # Freshness metrics
+        now_ms = int(time.time() * 1000)
+        book_age_ms = max(0, now_ms - (book.timestamp_ms or now_ms)) if book else None
+        book_freshness = "LIVE" if (book_age_ms is not None and book_age_ms < 15000) else ("STALE" if book else "UNAVAILABLE")
+
+        freshness_info = {
+            "source_exchange": "AsterDEX",
+            "timestamp_ms": now_ms,
+            "order_book_status": book_freshness,
+            "order_book_age_ms": book_age_ms,
+            "trades_count": len(trades or []),
+            "klines_fresh": bool(candles_15m),
+            "status": book_freshness,
+        }
+
         # Synthesize context
         context = self.build_context_from_data(
             symbol=sym,
@@ -131,6 +193,7 @@ class MarketContextService:
             trades=trades,
             open_interest_contracts=oi_contracts,
             funding_rate=funding_rate,
+            data_freshness=freshness_info,
         )
 
         self._cached_contexts[sym] = (now_mono, context)
@@ -147,6 +210,7 @@ class MarketContextService:
         trades: Optional[List[NormalizedTrade]] = None,
         open_interest_contracts: Optional[float] = None,
         funding_rate: Optional[float] = None,
+        data_freshness: Optional[Dict[str, Any]] = None,
     ) -> UnifiedMarketContext:
         """Construct UnifiedMarketContext given market components."""
         sym = symbol.upper()
@@ -316,4 +380,5 @@ class MarketContextService:
             structural_indicators=indicators,
             market_posture_summary=summary_narrative,
             key_levels_to_watch=key_levels,
+            data_freshness=data_freshness or {},
         )

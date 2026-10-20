@@ -35,7 +35,15 @@ def detect_swings(
     if len(candles) < (left_bars + right_bars + 1):
         return []
 
-    limit = len(candles) if max_index is None else min(len(candles), max_index + 1)
+    # Find the latest closed candle. An unclosed (in-progress) candle can never confirm a swing pivot.
+    last_closed_idx = len(candles) - 1
+    while last_closed_idx >= 0 and not getattr(candles[last_closed_idx], "is_closed", True):
+        last_closed_idx -= 1
+
+    if last_closed_idx < 0:
+        return []
+
+    limit = (last_closed_idx + 1) if max_index is None else min(last_closed_idx + 1, max_index + 1)
     swings: List[SwingPoint] = []
 
     # A swing at index i can only be confirmed once candle (i + right_bars) has closed.

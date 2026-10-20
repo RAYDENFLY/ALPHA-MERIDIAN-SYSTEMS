@@ -1,24 +1,111 @@
-/* Component status badges */
-.badge-green { background-color: #064e3b; color: #34d399; border: 1px solid #059669; }
-.badge-red { background-color: #7f1d1d; color: #f87171; border: 1px solid #dc2626; }
-.badge-blue { background-color: #1e3a8a; color: #60a5fa; border: 1px solid #2563eb; }
-.badge-purple { background-color: #581c87; color: #c084fc; border: 1px solid #7c3aed; }
-.badge-yellow { background-color: #713f12; color: #facc15; border: 1px solid #ca8a04; }
-.badge-orange { background-color: #7c2d12; color: #fb923c; border: 1px solid #ea580c; }
-.badge-gray { background-color: #1f2937; color: #9ca3af; border: 1px solid #374151; }
+/* =========================================================================
+   SignalGenerator — Coinglass-Inspired Terminal Design System
+   Component Badges, Filter Buttons, Nav Dock, and Status Indicators
+   ========================================================================= */
 
-/* Filter chip active state */
-.filter-btn-active {
-    background-color: #4f46e5 !important;
-    color: #ffffff !important;
-    border-color: #6366f1 !important;
-    font-weight: 600;
+/* High-Density Component Status Badges */
+.badge-green {
+    background-color: rgba(6, 78, 59, 0.6);
+    color: #34d399;
+    border: 1px solid rgba(5, 150, 105, 0.6);
 }
 
-/* Candidate setup cards status borders */
-.card-ready { border-left: 4px solid #10b981; }
-.card-watchlist { border-left: 4px solid #f59e0b; }
-.card-infeasible { border-left: 4px solid #ef4444; }
-.card-invalidated { border-left: 4px solid #f97316; }
-.card-stale { border-left: 4px solid #6b7280; opacity: 0.85; }
-.card-error { border-left: 4px solid #ec4899; }
+.badge-red {
+    background-color: rgba(127, 29, 29, 0.6);
+    color: #f87171;
+    border: 1px solid rgba(220, 38, 38, 0.6);
+}
+
+.badge-blue {
+    background-color: rgba(30, 58, 138, 0.6);
+    color: #93c5fd;
+    border: 1px solid rgba(37, 99, 235, 0.6);
+}
+
+.badge-purple {
+    background-color: rgba(88, 28, 135, 0.6);
+    color: #d8b4fe;
+    border: 1px solid rgba(124, 58, 237, 0.6);
+}
+
+.badge-yellow {
+    background-color: rgba(113, 63, 18, 0.6);
+    color: #fde047;
+    border: 1px solid rgba(202, 138, 4, 0.6);
+}
+
+.badge-orange {
+    background-color: rgba(124, 45, 18, 0.6);
+    color: #fdba74;
+    border: 1px solid rgba(234, 88, 12, 0.6);
+}
+
+.badge-gray {
+    background-color: rgba(30, 41, 59, 0.8);
+    color: #94a3b8;
+    border: 1px solid #334155;
+}
+
+/* Filter Chip Buttons & Active States */
+.filter-btn-active {
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+    border-color: #3b82f6 !important;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Candidate Setup Cards Status Indicators */
+.card-ready {
+    border-left: 3px solid #10b981;
+}
+
+.card-watchlist {
+    border-left: 3px solid #f59e0b;
+}
+
+.card-infeasible {
+    border-left: 3px solid #ef4444;
+}
+
+.card-invalidated {
+    border-left: 3px solid #f97316;
+}
+
+.card-stale {
+    border-left: 3px solid #64748b;
+    opacity: 0.85;
+}
+
+.card-error {
+    border-left: 3px solid #ec4899;
+}
+
+/* Funding Direction Visual Indicators */
+.fr-badge-positive {
+    background-color: rgba(113, 63, 18, 0.5);
+    color: #fde047;
+    border: 1px solid rgba(202, 138, 4, 0.7);
+}
+
+.fr-badge-negative {
+    background-color: rgba(88, 28, 135, 0.5);
+    color: #e9d5ff;
+    border: 1px solid rgba(147, 51, 234, 0.7);
+}
+
+.fr-badge-neutral {
+    background-color: rgba(15, 23, 42, 0.8);
+    color: #94a3b8;
+    border: 1px solid #1e293b;
+}
+
+/* Compact Ticker Stat Badges */
+.ticker-stat {
+    display: flex;
+    flex-direction: column;
+    padding: 0.35rem 0.625rem;
+    border-radius: 0.375rem;
+    background-color: #0c101a;
+    border: 1px solid #1a2234;
+}
