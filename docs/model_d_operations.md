@@ -39,6 +39,14 @@ Current limitations: documented explorer adapters, scheduled background scanning
 
 `actor-context-v1` classifies wallet evidence separately from market activity. It can identify an active-wallet candidate or infrastructure/protocol context, but it does not identify a profitable trader or an AsterDEX account. `orderflow-wallet-context-v1` uses observed AsterDEX executions, liquidity, and AMD confirmation for direction; wallet evidence is contextual only. Missing or stale market data returns `WAIT`. Wallet balance or transfer direction cannot create a LONG/SHORT signal.
 
+## Market venue separation
+
+Model D now defaults to Binance USDⓈ-M Futures as the primary market-intelligence venue through the existing public `BinanceFuturesAdapter`. AsterDEX remains a separately available reference adapter for execution-price, spread, depth, fee, and paper-fill evaluation. Binance data is never silently replaced by AsterDEX data when Binance collection fails.
+
+The current Binance slice supports public REST exchange info, depth, recent trades, premium index/funding/mark price, and open interest. `BinanceOrderBookSync` rejects sequence gaps and requires a new snapshot. WebSocket transport, historical OI series, and full incremental persistence remain future work; unavailable fields stay explicit rather than being synthesized.
+
+Source health records `venue`, `symbol`, exchange/source timestamp, local receive timestamp, and `LIVE`/`STALE`/`UNAVAILABLE`/`ERROR` status. The chronological evaluator deduplicates signal IDs, uses the final 20% of observations as out-of-sample data, separates LONG and SHORT results, and reports `INSUFFICIENT_DATA` below the configured sample threshold. No current ledger data is sufficient to claim an out-of-sample edge.
+
 ## Configuration
 
 Defaults are conservative:

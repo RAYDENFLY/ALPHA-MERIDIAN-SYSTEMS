@@ -13,6 +13,8 @@ class DataAvailability(str, Enum):
 @dataclass
 class SourceHealth:
     source: str
+    venue: Optional[str] = None
+    symbol: Optional[str] = None
     status: DataAvailability = DataAvailability.UNAVAILABLE
     exchange_timestamp_ms: Optional[int] = None
     observed_timestamp_ms: Optional[int] = None
@@ -22,6 +24,8 @@ class SourceHealth:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "source": self.source,
+            "venue": self.venue,
+            "symbol": self.symbol,
             "status": self.status.value,
             "exchange_timestamp_ms": self.exchange_timestamp_ms,
             "observed_timestamp_ms": self.observed_timestamp_ms,
