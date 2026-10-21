@@ -771,6 +771,17 @@ class ModelBRunner:
                 "pending_orders_count": len(pending_orders),
                 "daily_circuit_breaker_active": risk_summary["daily_circuit_breaker_active"],
                 "weekly_circuit_breaker_active": risk_summary["weekly_circuit_breaker_active"],
+                "daily_circuit_breaker_enforced": risk_summary["daily_circuit_breaker_enforced"],
+                "weekly_circuit_breaker_enforced": risk_summary["weekly_circuit_breaker_enforced"],
+                "diagnostic_override_active": risk_summary["diagnostic_override_active"],
+                "entry_kill_switch": risk_summary["entry_kill_switch"],
+            },
+            "diagnostic": {
+                "override_active": risk_summary["diagnostic_override_active"],
+                "label": "DIAGNOSTIC_OVERRIDE_ACTIVE" if risk_summary["diagnostic_override_active"] else None,
+                "entry_kill_switch": risk_summary["entry_kill_switch"],
+                "started_at_utc": self.risk_manager.diagnostic_state.get("started_at_utc"),
+                "paper_only": True,
             },
             "paper": {
                 "enabled": True,

@@ -15,6 +15,7 @@
                 fetchModelBWhaleEvents(),
                 fetchModelBResearchMetrics(),
                 fetchModelBResearchSignals(),
+                fetchModelBDiagnosticReport(),
             ]);
         }
 
@@ -31,11 +32,46 @@
                 const dailyEl = document.getElementById('modelBDailyLossDisplay');
                 if (dailyEl) dailyEl.innerText = `$${Number(data.risk_limits.daily_loss_realized_usdt || 0).toFixed(2)} / $${Number(data.risk_limits.daily_loss_limit_usdt || 3.0).toFixed(2)}`;
 
+                const overrideActive = Boolean(data.risk_limits?.diagnostic_override_active || data.diagnostic?.override_active);
+                const killSwitchOn = Boolean(data.risk_limits?.entry_kill_switch || data.diagnostic?.entry_kill_switch);
+
+                const bannerEl = document.getElementById('modelBDiagnosticBanner');
+                if (bannerEl) {
+                    if (overrideActive) {
+                        bannerEl.classList.remove('hidden');
+                    } else {
+                        bannerEl.classList.add('hidden');
+                    }
+                }
+
+                const killBtn = document.getElementById('modelBKillSwitchBtn');
+                const killBtnText = document.getElementById('modelBKillSwitchBtnText');
+                const killBtnDot = document.getElementById('modelBKillSwitchDot');
+                if (killBtn && killBtnText) {
+                    if (killSwitchOn) {
+                        killBtn.className = 'px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 shadow-sm bg-rose-600 hover:bg-rose-500 text-white border border-rose-500 animate-pulse';
+                        killBtnText.innerText = 'Deactivate Kill Switch (ENTRIES BLOCKED)';
+                        if (killBtnDot) killBtnDot.className = 'w-2 h-2 rounded-full bg-white';
+                    } else {
+                        killBtn.className = 'px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 shadow-sm bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-600';
+                        killBtnText.innerText = 'Activate Kill Switch';
+                        if (killBtnDot) killBtnDot.className = 'w-2 h-2 rounded-full bg-rose-400';
+                    }
+                }
+
                 const dailyStat = document.getElementById('modelBDailyStatus');
                 if (dailyStat) {
-                    if (data.risk_limits.daily_circuit_breaker_active) {
-                        dailyStat.innerText = 'CIRCUIT BREAKER (HALTED)';
+                    if (killSwitchOn) {
+                        dailyStat.innerText = 'KILL SWITCH (ENTRIES BLOCKED)';
                         dailyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
+                    } else if (data.risk_limits.daily_circuit_breaker_active) {
+                        if (overrideActive) {
+                            dailyStat.innerText = 'BYPASSED (DIAGNOSTIC)';
+                            dailyStat.className = 'text-xs text-amber-400 font-mono font-bold';
+                        } else {
+                            dailyStat.innerText = 'CIRCUIT BREAKER (HALTED)';
+                            dailyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
+                        }
                     } else {
                         dailyStat.innerText = 'Active (3R Cap)';
                         dailyStat.className = 'text-xs text-emerald-400 font-mono';
@@ -47,9 +83,17 @@
 
                 const weeklyStat = document.getElementById('modelBWeeklyStatus');
                 if (weeklyStat) {
-                    if (data.risk_limits.weekly_circuit_breaker_active) {
-                        weeklyStat.innerText = 'CIRCUIT BREAKER (HALTED)';
+                    if (killSwitchOn) {
+                        weeklyStat.innerText = 'KILL SWITCH (ENTRIES BLOCKED)';
                         weeklyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
+                    } else if (data.risk_limits.weekly_circuit_breaker_active) {
+                        if (overrideActive) {
+                            weeklyStat.innerText = 'BYPASSED (DIAGNOSTIC)';
+                            weeklyStat.className = 'text-xs text-amber-400 font-mono font-bold';
+                        } else {
+                            weeklyStat.innerText = 'CIRCUIT BREAKER (HALTED)';
+                            weeklyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
+                        }
                     } else {
                         weeklyStat.innerText = 'Active (7.5R Cap)';
                         weeklyStat.className = 'text-xs text-emerald-400 font-mono';
@@ -1489,6 +1533,7 @@
                     await Promise.allSettled([
                         fetchModelBResearchMetrics(),
                         fetchModelBResearchSignals(),
+                fetchModelBDiagnosticReport(),
                     ]);
                 }
             } catch (err) {
@@ -1500,3 +1545,222 @@
         }
 
         // =========================================================================
+        // =========================================================================
+        // MODEL B DIAGNOSTIC BREAKER OVERRIDE & LONG VS SHORT COHORT ANALYSIS
+        // =========================================================================
+
+        let modelBDiagCohort = 'experiment';
+
+        async function toggleModelBKillSwitch() {
+            const isCurrentlyOn = Boolean(modelBCachedStatus?.risk_limits?.entry_kill_switch);
+            const targetState = !isCurrentlyOn;
+            try {
+                const res = await fetch('/api/model_b/diagnostic/kill_switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: targetState })
+                });
+                if (res.ok) {
+                    await fetchModelBStatus();
+                    await fetchModelBDiagnosticReport();
+                } else {
+                    const err = await res.json();
+                    alert('Kill switch action failed: ' + (err.detail || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Kill switch request error: ' + e.message);
+            }
+        }
+
+        function switchModelBDiagCohort(cohort) {
+            modelBDiagCohort = cohort;
+            ['experiment', 'baseline', 'all'].forEach(c => {
+                const cap = c.charAt(0).toUpperCase() + c.slice(1);
+                const btn = document.getElementById(`btnDiagCohort${cap}`);
+                if (btn) {
+                    if (c === cohort) {
+                        btn.className = 'px-2.5 py-1 rounded bg-amber-600 text-white font-medium shadow transition';
+                    } else {
+                        btn.className = 'px-2.5 py-1 rounded text-slate-400 hover:text-white transition';
+                    }
+                }
+            });
+            fetchModelBDiagnosticReport();
+        }
+
+        async function fetchModelBDiagnosticReport() {
+            try {
+                const cohort = modelBDiagCohort || 'experiment';
+                const res = await fetch(`/api/model_b/diagnostic/report?cohort=${cohort}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const cBadge = document.getElementById('modelBDiagCohortBadge');
+                if (cBadge) cBadge.innerText = `${(data.cohort || cohort).toUpperCase()} COHORT`;
+
+                const oBadge = document.getElementById('modelBDiagOverrideBadge');
+                if (oBadge) {
+                    oBadge.innerText = data.override_active ? 'OVERRIDE ACTIVE' : 'OVERRIDE INACTIVE';
+                    oBadge.className = data.override_active
+                        ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-700 animate-pulse'
+                        : 'px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 text-slate-300 border border-slate-700';
+                }
+
+                const statusText = document.getElementById('modelBDiagStatusText');
+                if (statusText) {
+                    statusText.innerText = data.override_active ? 'ACTIVE (BYPASSED)' : 'INACTIVE (HALTED)';
+                    statusText.className = data.override_active ? 'text-sm font-bold text-amber-300 mt-0.5' : 'text-sm font-bold text-slate-400 mt-0.5';
+                }
+
+                const startText = document.getElementById('modelBDiagStartedText');
+                if (startText) {
+                    startText.innerText = data.override_started_at_utc ? `Started: ${new Date(data.override_started_at_utc).toLocaleTimeString()}` : 'Not started';
+                }
+
+                const killText = document.getElementById('modelBDiagKillSwitchStatus');
+                if (killText) {
+                    const kOn = Boolean(data.diagnostic?.entry_kill_switch || data.risk_status?.entry_kill_switch);
+                    killText.innerText = kOn ? 'ON (BLOCKED)' : 'OFF (ALLOWING)';
+                    killText.className = kOn ? 'text-sm font-bold text-rose-400 mt-0.5 animate-pulse' : 'text-sm font-bold text-emerald-400 mt-0.5';
+                }
+
+                const dupText = document.getElementById('modelBDiagDuplicatesText');
+                if (dupText) dupText.innerText = `${data.duplicates_dropped || 0} Duplicates Filtered`;
+
+                // Render directional metrics
+                const dirs = data.per_direction || {};
+                const l = dirs.LONG || {};
+                const s = dirs.SHORT || {};
+
+                const metricsBody = document.getElementById('modelBDiagMetricsTableBody');
+                if (metricsBody) {
+                    const lWinPct = l.win_rate_pct != null ? `${l.win_rate_pct}%` : 'N/A';
+                    const sWinPct = s.win_rate_pct != null ? `${s.win_rate_pct}%` : 'N/A';
+                    const winDelta = (l.win_rate_pct != null && s.win_rate_pct != null) ? `${(l.win_rate_pct - s.win_rate_pct).toFixed(1)}%` : '--';
+
+                    const lNet = Number(l.net_realized_pnl || 0);
+                    const sNet = Number(s.net_realized_pnl || 0);
+                    const totNet = (lNet + sNet).toFixed(4);
+
+                    const lGross = Number(l.gross_realized_pnl || 0);
+                    const sGross = Number(s.gross_realized_pnl || 0);
+                    const totGross = (lGross + sGross).toFixed(4);
+
+                    const lExp = l.expectancy_per_trade != null ? `$${l.expectancy_per_trade.toFixed(4)}` : 'N/A';
+                    const sExp = s.expectancy_per_trade != null ? `$${s.expectancy_per_trade.toFixed(4)}` : 'N/A';
+
+                    const lPayoff = l.payoff_ratio != null ? l.payoff_ratio.toFixed(2) : 'N/A';
+                    const sPayoff = s.payoff_ratio != null ? s.payoff_ratio.toFixed(2) : 'N/A';
+
+                    const lExits = Object.entries(l.exit_reason_distribution || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || 'None';
+                    const sExits = Object.entries(s.exit_reason_distribution || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || 'None';
+
+                    metricsBody.innerHTML = `
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Closed Trades (n)</td>
+                            <td class="px-4 py-2.5 font-bold text-white">${l.closed_trades || 0} (${l.wins || 0}W / ${l.losses || 0}L)</td>
+                            <td class="px-4 py-2.5 font-bold text-white">${s.closed_trades || 0} (${s.wins || 0}W / ${s.losses || 0}L)</td>
+                            <td class="px-4 py-2.5 text-slate-300">Total: ${(l.closed_trades || 0) + (s.closed_trades || 0)} trades</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Win Rate %</td>
+                            <td class="px-4 py-2.5 font-bold ${l.win_rate_pct >= 50 ? 'text-emerald-400' : 'text-amber-400'}">${lWinPct}</td>
+                            <td class="px-4 py-2.5 font-bold ${s.win_rate_pct >= 50 ? 'text-emerald-400' : 'text-rose-400'}">${sWinPct}</td>
+                            <td class="px-4 py-2.5 font-mono text-indigo-300">Delta: ${winDelta}</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Net Realized PnL</td>
+                            <td class="px-4 py-2.5 font-bold ${lNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}">$${lNet.toFixed(4)} USDT</td>
+                            <td class="px-4 py-2.5 font-bold ${sNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}">$${sNet.toFixed(4)} USDT</td>
+                            <td class="px-4 py-2.5 font-bold text-white">Net: $${totNet} USDT</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Gross Realized PnL</td>
+                            <td class="px-4 py-2.5 font-mono ${lGross >= 0 ? 'text-emerald-300' : 'text-rose-300'}">$${lGross.toFixed(4)}</td>
+                            <td class="px-4 py-2.5 font-mono ${sGross >= 0 ? 'text-emerald-300' : 'text-rose-300'}">$${sGross.toFixed(4)}</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-400">Gross: $${totGross}</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Fees &amp; Slippage</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-400">Fee: $${(l.fees || 0).toFixed(4)} | Slip: $${(l.slippage_embedded_in_fills || 0).toFixed(4)}</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-400">Fee: $${(s.fees || 0).toFixed(4)} | Slip: $${(s.slippage_embedded_in_fills || 0).toFixed(4)}</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-400">Funding: $${((l.funding || 0) + (s.funding || 0)).toFixed(4)}</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Expectancy / Trade</td>
+                            <td class="px-4 py-2.5 font-bold ${l.expectancy_per_trade > 0 ? 'text-emerald-400' : 'text-slate-300'}">${lExp}</td>
+                            <td class="px-4 py-2.5 font-bold ${s.expectancy_per_trade > 0 ? 'text-emerald-400' : 'text-rose-400'}">${sExp}</td>
+                            <td class="px-4 py-2.5 text-slate-400">Target Risk: $1.00</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Avg Win / Avg Loss (Payoff)</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-300">+$${(l.avg_win || 0).toFixed(2)} / -$${Math.abs(l.avg_loss || 0).toFixed(2)} (${lPayoff}x)</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-300">+$${(s.avg_win || 0).toFixed(2)} / -$${Math.abs(s.avg_loss || 0).toFixed(2)} (${sPayoff}x)</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-400">Min R:R 1.5x</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Max Drawdown</td>
+                            <td class="px-4 py-2.5 font-mono text-amber-300">$${(l.max_drawdown || 0).toFixed(4)}</td>
+                            <td class="px-4 py-2.5 font-mono text-rose-300">$${(s.max_drawdown || 0).toFixed(4)}</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-400">Peak-to-trough</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2.5 text-slate-400 font-medium">Exit Distribution</td>
+                            <td class="px-4 py-2.5 font-mono text-xs text-slate-300">${lExits}</td>
+                            <td class="px-4 py-2.5 font-mono text-xs text-slate-300">${sExits}</td>
+                            <td class="px-4 py-2.5 font-mono text-slate-400">Trailing &amp; SL tags</td>
+                        </tr>
+                    `;
+                }
+
+                // Render Candidate Signals Funnel
+                const sigs = data.signals || {};
+                const sigL = sigs.LONG || {};
+                const sigS = sigs.SHORT || {};
+                const totalSigs = (sigL.signals_total || 0) + (sigS.signals_total || 0);
+
+                const sigTotEl = document.getElementById('modelBDiagSignalsTotal');
+                if (sigTotEl) sigTotEl.innerText = `${totalSigs} Signals Evaluated`;
+
+                const sigLEl = document.getElementById('modelBDiagSignalsLong');
+                if (sigLEl) sigLEl.innerText = `Total: ${sigL.signals_total || 0} | Eligible: ${sigL.eligible || 0} | Rejected: ${sigL.rejected || 0}`;
+
+                const sigSEl = document.getElementById('modelBDiagSignalsShort');
+                if (sigSEl) sigSEl.innerText = `Total: ${sigS.signals_total || 0} | Eligible: ${sigS.eligible || 0} | Rejected: ${sigS.rejected || 0}`;
+
+                const rejLEl = document.getElementById('modelBDiagRejectionsLong');
+                if (rejLEl) {
+                    const topL = Object.entries(sigL.rejection_reasons || {})[0];
+                    rejLEl.innerText = topL ? `Top Rejection: ${topL[0]} (${topL[1]})` : 'No rejections';
+                }
+
+                const rejSEl = document.getElementById('modelBDiagRejectionsShort');
+                if (rejSEl) {
+                    const topS = Object.entries(sigS.rejection_reasons || {})[0];
+                    rejSEl.innerText = topS ? `Top Rejection: ${topS[0]} (${topS[1]})` : 'No rejections';
+                }
+
+                // Render Breaker Reconciliation
+                const recon = data.breaker_reconciliation || {};
+                const wRecon = recon.weekly || {};
+                const recPer = document.getElementById('modelBDiagReconPeriod');
+                if (recPer) recPer.innerText = `Week: ${recon.week || 'Current'}`;
+
+                const recLoss = document.getElementById('modelBDiagReconLoss');
+                if (recLoss) recLoss.innerText = `$${Number(wRecon.sum_of_losing_trades_used_by_breaker || 0).toFixed(2)} / $${Number(data.risk_status?.weekly_loss_limit_usdt || 7.50).toFixed(2)} Cap`;
+
+                const recWin = document.getElementById('modelBDiagReconWin');
+                if (recWin) recWin.innerText = `+$${Number(wRecon.sum_of_winning_trades_ignored_by_breaker || 0).toFixed(2)} USDT`;
+
+                const recNet = document.getElementById('modelBDiagReconNet');
+                if (recNet) recNet.innerText = `$${Number(wRecon.net_realized_pnl || 0).toFixed(2)} USDT`;
+
+                const recEnf = document.getElementById('modelBDiagReconEnforcement');
+                if (recEnf) {
+                    recEnf.innerText = data.override_active ? 'BYPASSED (Diagnostic Override Active)' : 'ENFORCED (Halted)';
+                    recEnf.className = data.override_active ? 'font-bold text-amber-400' : 'font-bold text-rose-400';
+                }
+            } catch (err) {
+                console.error('Failed to fetch Model B diagnostic report:', err);
+            }
+        }

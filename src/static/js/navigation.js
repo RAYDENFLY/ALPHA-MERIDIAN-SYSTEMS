@@ -40,6 +40,7 @@ const ALL_KNOWN_TABS = [
     'journal',
     'alerts',
     'model_b',
+    'model_d',
     'liquidity_intel',
     'sweep_chart',
     'demand_zone',
@@ -102,6 +103,9 @@ function switchTab(tabId) {
     if (tabId !== 'liquidity_intel' && typeof stopLiquidityIntelAutoRefresh === 'function') {
         stopLiquidityIntelAutoRefresh();
     }
+    if (tabId !== 'model_d' && typeof stopModelDAutoRefresh === 'function') {
+        stopModelDAutoRefresh();
+    }
 
     // 6. Trigger active tab data loader
     if (tabId === 'setups' && typeof fetchSetups === 'function') fetchSetups();
@@ -110,6 +114,7 @@ function switchTab(tabId) {
     if (tabId === 'backtest' && typeof loadBacktest === 'function') loadBacktest();
     if (tabId === 'alerts' && typeof loadAlerts === 'function') loadAlerts();
     if (tabId === 'model_b' && typeof loadModelB === 'function') loadModelB();
+    if (tabId === 'model_d' && typeof loadModelD === 'function') loadModelD();
     if (tabId === 'liquidity_intel') {
         if (typeof loadLiquidityChartSymbols === 'function') loadLiquidityChartSymbols();
         if (typeof startLiquidityIntelAutoRefresh === 'function') {

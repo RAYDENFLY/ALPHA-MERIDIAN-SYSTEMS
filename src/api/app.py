@@ -28,6 +28,8 @@ from src.journal.repository import JournalRepository
 from src.risk.manager import RiskManager
 from src.risk.model_b_risk import ModelBRiskManager
 from src.scheduler.model_b_runner import ModelBRunner
+from src.risk.model_b_diagnostic import resolve_override_state
+from src.research.model_b_diagnostics import build_report as build_model_b_diagnostic_report
 from src.scheduler.runner import ScannerRunner, rank_candidates
 from src.backtest.engine import BacktestEngine
 from src.ml.models import ModelRegistry
@@ -95,6 +97,11 @@ from src.ai_analyst import (
     AnalysisRequest,
     AIConfigUpdateRequest,
 )
+from src.model_d import ModelDCollector
+from src.model_d.binance import BinanceModelDCollector
+from src.model_d.features import build_features
+from src.model_d.ledger import ModelDShadowLedger
+from src.model_d.wallets import WalletRegistry
 import sqlite3
 
 
@@ -175,7 +182,10 @@ alert_engine = PriceAlertEngine(
 
 # Model B Aggressive Multi-Exchange Liquidity Research Engine
 model_b_config: ModelBConfig = getattr(cfg, "model_b", None) or ModelBConfig()
+# Diagnostic override is honored only in PAPER/RESEARCH with live trading locked (Model B scope only).
+model_b_diagnostic_state = resolve_override_state(cfg)
 model_b_risk_mgr = ModelBRiskManager(config=model_b_config)
+model_b_risk_mgr.diagnostic_state = model_b_diagnostic_state
 model_b_runner = ModelBRunner(
     db=db,
     journal=journal,
@@ -184,6 +194,19 @@ model_b_runner = ModelBRunner(
     paper_config=cfg.paper,
     risk_manager=model_b_risk_mgr,
 )
+
+# Model D is read-only and independently scoped. It is not started as a background
+# executor here; collection is explicit and paper research never reaches order APIs.
+model_d_config = cfg.model_d
+model_d_aster_reference = AsterAdapter(base_url=cfg.exchange.base_url)
+model_d_collector = (BinanceModelDCollector(config=model_d_config, reference_adapter=model_d_aster_reference)
+                     if model_d_config.market_primary_venue == "binance"
+                     else ModelDCollector(adapter=model_d_aster_reference, config=model_d_config))
+model_d_ledger = ModelDShadowLedger(
+    fee_rate=cfg.exchange.taker_fee_rate,
+    slippage_rate=cfg.exchange.slippage_rate,
+)
+model_d_wallet_registry = WalletRegistry(db)
 
 # AsterDEX Position Intelligence & Market Liquidity Context Service
 market_context_service = MarketContextService()
@@ -1646,6 +1669,104 @@ def get_model_b_status():
     return model_b_runner.get_status()
 
 
+@app.get("/api/model_d/status")
+def get_model_d_status(symbol: Optional[str] = Query(None, max_length=32)) -> Dict[str, Any]:
+    """Read-only Model D health and source freshness."""
+    payload: Dict[str, Any] = {
+        "model_id": "MODEL_D", "enabled": model_d_config.enabled,
+        "paper_only": True, "live_trading_locked": bool(cfg.live_trading_locked),
+        "collector_enabled": model_d_config.collector_enabled,
+        "wallet_tracking": "UNAVAILABLE", "sources": {}, "symbol": None,
+    }
+    if symbol and model_d_config.collector_enabled:
+        data = model_d_collector.collect_symbol(symbol)
+        payload["symbol"] = data["symbol"]
+        payload["sources"] = data["sources"]
+    else:
+        payload["sources"] = {k: v.to_dict() for k, v in model_d_collector.health.items()}
+    return payload
+
+
+@app.get("/api/model_d/signals")
+def get_model_d_signals(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> Dict[str, Any]:
+    """Bounded, read-only signal history; empty until the research runner records signals."""
+    records = list(model_d_ledger.records.values())
+    return {"model_id": "MODEL_D", "items": [r.__dict__ for r in records[offset:offset + limit]], "count": len(records), "offset": offset, "limit": limit}
+
+
+@app.get("/api/model_d/liquidity")
+def get_model_d_liquidity(symbol: str = Query(..., min_length=3, max_length=32)) -> Dict[str, Any]:
+    if not model_d_config.collector_enabled:
+        return {"model_id": "MODEL_D", "symbol": symbol.upper(), "status": "UNAVAILABLE", "reason": "collector_disabled"}
+    data = model_d_collector.collect_symbol(symbol)
+    features = build_features(data.get("order_book"), data.get("trades", []), model_d_config.trade_reference_window)
+    return {"model_id": "MODEL_D", "symbol": data["symbol"], "features": features.to_dict(), "sources": data["sources"], "wallet_activity": "UNAVAILABLE"}
+
+
+@app.get("/api/model_d/whale-events")
+def get_model_d_whale_events(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> Dict[str, Any]:
+    return {"model_id": "MODEL_D", "items": [], "count": 0, "offset": offset, "limit": limit, "status": "UNAVAILABLE", "reason": "event_persistence_not_configured"}
+
+
+@app.get("/api/model_d/diagnostic/report")
+def get_model_d_report() -> Dict[str, Any]:
+    return {"model_id": "MODEL_D", "paper_only": True, "metrics": model_d_ledger.summary(), "long": {"sample_size": 0}, "short": {"sample_size": 0}, "warning": "Insufficient observations for performance claims."}
+
+
+@app.get("/api/model_d/wallets/status")
+def get_model_d_wallet_status() -> Dict[str, Any]:
+    counts = model_d_wallet_registry.count_by_chain()
+    return {"model_id": "MODEL_D", "enabled": model_d_config.wallet_scanner_enabled,
+            "target": model_d_config.wallet_discovery_target, "counts_by_chain": counts,
+            "unique_candidates": sum(counts.values()), "wallet_tracking": "UNAVAILABLE" if not model_d_config.wallet_scanner_enabled else "CONFIGURED",
+            "source_status": "UNAVAILABLE" if not any(model_d_config.wallet_rpc_urls.values()) else "CONFIGURED"}
+
+
+@app.get("/api/model_d/wallets")
+def get_model_d_wallets(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), chain_id: Optional[int] = Query(None)) -> Dict[str, Any]:
+    rows = model_d_wallet_registry.list_candidates(limit=limit, offset=offset, chain_id=chain_id)
+    return {"model_id": "MODEL_D", "items": rows, "count": len(rows), "limit": limit, "offset": offset}
+
+
+@app.get("/api/model_d/wallets/{wallet_id}")
+def get_model_d_wallet(wallet_id: str) -> Dict[str, Any]:
+    with db.get_connection() as conn:
+        row = conn.execute("SELECT * FROM model_d_wallet_candidates WHERE wallet_id=?", (wallet_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="wallet candidate not found")
+    return {"model_id": "MODEL_D", "wallet": dict(row)}
+
+
+@app.get("/api/model_b/diagnostic/report")
+async def model_b_diagnostic_report(cohort: str = Query("auto", pattern="^(auto|experiment|baseline|all)$")) -> Dict[str, Any]:
+    """Read-only LONG vs SHORT diagnostic metrics, signal/rejection stats and breaker reconciliation."""
+    trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B") + journal.get_open_trades(model_id="MODEL_B")
+    candidates = journal.get_latest_setups(limit=5000, model_id="MODEL_B")
+    report = build_model_b_diagnostic_report(trades, candidates, {**model_b_risk_mgr.diagnostic_state, "active": model_b_risk_mgr.diagnostic_override_active}, cohort=cohort)
+    status = model_b_runner.get_status()
+    report["risk_status"] = status.get("risk_limits", {})
+    report["diagnostic"] = status.get("diagnostic", {})
+    last = status.get("last_successful_scan_utc")
+    stale = None
+    if last:
+        stale = (datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds() > 900
+    report["data_quality"] = {"last_successful_scan_utc": last, "scan_stale": stale}
+    return report
+
+
+class ModelBKillSwitchPayload(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/model_b/diagnostic/kill_switch", dependencies=[Depends(require_mutating_api_access)])
+async def model_b_kill_switch(payload: ModelBKillSwitchPayload) -> Dict[str, Any]:
+    """Immediately block (or re-allow) NEW Model B paper entries. Resting paper orders are cancelled when ON."""
+    model_b_risk_mgr.entry_kill_switch = payload.enabled
+    model_b_runner.config.entry_kill_switch = payload.enabled
+    logger.warning(f"MODEL_B_ENTRY_KILL_SWITCH set to {payload.enabled}")
+    return {"entry_kill_switch": payload.enabled, "paper_only": True}
+
+
 @app.get("/api/model_b/scanner_telemetry")
 def get_model_b_scanner_telemetry(limit: int = Query(10, ge=1, le=50)):
     """Retrieve real-world performance telemetry, coverage stats, and request latencies for Model B."""
@@ -2086,8 +2207,9 @@ def get_model_b_research_metrics():
             "capital": active_status.get("capital", {}),
             "risk_limits": active_status.get("risk_limits", {}),
             "execution_metrics": active_status.get("execution_metrics", {}),
-            "circuit_breaker_active": active_status.get("risk_limits", {}).get("daily_circuit_breaker_active", False)
-            or active_status.get("risk_limits", {}).get("weekly_circuit_breaker_active", False),
+            "circuit_breaker_active": active_status.get("risk_limits", {}).get("daily_circuit_breaker_enforced", False)
+            or active_status.get("risk_limits", {}).get("weekly_circuit_breaker_enforced", False),
+            "diagnostic": active_status.get("diagnostic", {}),
         },
         "market_data_freshness": {
             "last_scan_utc": active_status.get("last_scan_utc"),

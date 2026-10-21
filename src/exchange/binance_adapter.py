@@ -224,3 +224,28 @@ class BinanceFuturesAdapter:
         except Exception as err:
             logger.warning(f"BinanceFutures: Failed to fetch premiumIndex: {err}")
             return {}
+
+    def get_open_interest(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Fetch current USDⓈ-M open interest from the public endpoint."""
+        try:
+            resp = self.session.get(f"{self.base_url}/fapi/v1/openInterest", params={"symbol": symbol.upper()}, timeout=self.timeout_sec)
+            if resp.status_code != 200: return None
+            data = resp.json()
+            if not isinstance(data, dict) or "openInterest" not in data: return None
+            return {"symbol": symbol.upper(), "open_interest": float(data["openInterest"]), "timestamp_ms": int(data.get("time", time.time() * 1000))}
+        except Exception as err:
+            logger.warning(f"BinanceFutures: Failed to fetch open interest for {symbol}: {err}")
+            return None
+
+    def get_premium_index(self, symbol: str) -> Optional[Dict[str, Any]]:
+        try:
+            resp = self.session.get(f"{self.base_url}/fapi/v1/premiumIndex", params={"symbol": symbol.upper()}, timeout=self.timeout_sec)
+            if resp.status_code != 200: return None
+            row = resp.json()
+            if not isinstance(row, dict): return None
+            return {"symbol": symbol.upper(), "mark_price": float(row["markPrice"]), "index_price": float(row["indexPrice"]),
+                    "last_funding_rate": float(row["lastFundingRate"]), "next_funding_time_ms": int(row["nextFundingTime"]),
+                    "timestamp_ms": int(row.get("time", time.time() * 1000))}
+        except Exception as err:
+            logger.warning(f"BinanceFutures: Failed to fetch premium index for {symbol}: {err}")
+            return None

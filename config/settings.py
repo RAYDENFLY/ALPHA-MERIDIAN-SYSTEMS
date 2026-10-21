@@ -5,7 +5,7 @@ Driven by Pydantic models with support for YAML configuration files and environm
 
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
@@ -165,6 +165,8 @@ class ModelBConfig(BaseModel):
     scanner_max_workers: int = Field(default=8, ge=1, le=20, description="ThreadPoolExecutor concurrency for candle/depth fetches")
     rotation_slice_size: int = Field(default=25, ge=1, le=50, description="Number of rotating mid-cap symbols per cycle")
     anchor_symbol_count: int = Field(default=10, ge=1, le=20, description="Number of top-volume anchor symbols evaluated every cycle")
+    diagnostic_breaker_override: bool = Field(default=False, description="TEMPORARY Model B paper-only diagnostic: bypass daily/weekly loss breaker entry blocks. Baseline limits are NOT altered. Env: MODEL_B_DIAGNOSTIC_BREAKER_OVERRIDE")
+    entry_kill_switch: bool = Field(default=False, description="Immediately blocks all new Model B paper entries. Env: MODEL_B_ENTRY_KILL_SWITCH")
     scan_interval_sec: int = Field(default=60, ge=5, le=3600, description="Evaluation loop cadence")
     enabled_venues: List[str] = Field(
         default_factory=lambda: ["asterdex", "binance", "hyperliquid"],
@@ -208,6 +210,33 @@ class ModelCConfig(BaseModel):
     jito_block_engine_url: Optional[str] = Field(default=None, description="Optional Jito block engine endpoint for bundle simulation")
 
 
+class ModelDConfig(BaseModel):
+    """Independent, paper-only configuration for Whale & Order Flow research."""
+    enabled: bool = Field(default=False, description="Enable Model D research collection and evaluation")
+    paper_only: bool = Field(default=True, description="Hard invariant: Model D never places exchange orders")
+    collector_enabled: bool = Field(default=False, description="Enable Model D public market-data collection")
+    whale_tracking_enabled: bool = Field(default=True, description="Enable observable trade and resting-liquidity analysis")
+    wallet_tracking_enabled: bool = Field(default=False, description="Enable only when a documented chain source is configured")
+    model_id: str = "MODEL_D"
+    version: str = "0.1.0-research"
+    symbols: List[str] = Field(default_factory=list, description="Empty means use the configured perpetual universe")
+    decision_timeframe: str = "1h"
+    max_event_age_sec: int = Field(default=30, ge=1)
+    max_book_age_sec: int = Field(default=10, ge=1)
+    trade_reference_window: int = Field(default=200, ge=20)
+    wall_reference_window: int = Field(default=50, ge=10)
+    shadow_horizon_bars: int = Field(default=12, ge=1)
+    simulated_fill_model: str = "conservative_midpoint"
+    market_primary_venue: str = Field(default="binance", pattern="^(binance|asterdex)$")
+    wallet_scanner_enabled: bool = Field(default=False, description="Enable multi-chain wallet discovery")
+    wallet_discovery_target: int = Field(default=1000, ge=1, le=100000)
+    wallet_enrichment_enabled: bool = True
+    wallet_ranking_enabled: bool = True
+    wallet_max_concurrency: int = Field(default=2, ge=1, le=20)
+    wallet_scan_interval_seconds: int = Field(default=3600, ge=60)
+    wallet_rpc_urls: Dict[int, Optional[str]] = Field(default_factory=lambda: {1: None, 56: None, 42161: None, 8453: None})
+
+
 class AppConfig(BaseModel):
     app_name: str = "SMC-SNR ML Perpetual Scanner"
     version: str = "1.0.0"
@@ -228,6 +257,7 @@ class AppConfig(BaseModel):
     paper: PaperExecutionConfig = Field(default_factory=PaperExecutionConfig)
     model_b: ModelBConfig = Field(default_factory=ModelBConfig)
     model_c: ModelCConfig = Field(default_factory=ModelCConfig)
+    model_d: ModelDConfig = Field(default_factory=ModelDConfig)
     discord_price_alert_webhook_url: Optional[str] = Field(
         default=None,
         description="Optional Discord webhook URL for universal perpetual price alerts notifications",
@@ -333,9 +363,37 @@ def _apply_env_overrides(cfg: AppConfig) -> AppConfig:
             cfg.model_b.weekly_loss_limit_usdt = float(env_mb_weekly)
         except ValueError:
             pass
+    env_mb_override = os.getenv("MODEL_B_DIAGNOSTIC_BREAKER_OVERRIDE")
+    if env_mb_override is not None:
+        cfg.model_b.diagnostic_breaker_override = env_mb_override.strip().lower() in ("true", "1", "yes")
+    env_mb_kill = os.getenv("MODEL_B_ENTRY_KILL_SWITCH")
+    if env_mb_kill is not None:
+        cfg.model_b.entry_kill_switch = env_mb_kill.strip().lower() in ("true", "1", "yes")
     env_mb_discord = os.getenv("DISCORD_MODEL_B_WEBHOOK_URL")
     if env_mb_discord:
         cfg.model_b.discord_webhook_url = env_mb_discord.strip()
+
+    # Model D environment overrides. These are deliberately independent of Model B.
+    def _env_bool(name: str, current: bool) -> bool:
+        value = os.getenv(name)
+        return current if value is None else value.strip().lower() in ("true", "1", "yes")
+
+    cfg.model_d.enabled = _env_bool("MODEL_D_ENABLED", cfg.model_d.enabled)
+    cfg.model_d.collector_enabled = _env_bool("MODEL_D_COLLECTOR_ENABLED", cfg.model_d.collector_enabled)
+    cfg.model_d.whale_tracking_enabled = _env_bool("MODEL_D_WHALE_TRACKING_ENABLED", cfg.model_d.whale_tracking_enabled)
+    cfg.model_d.wallet_tracking_enabled = _env_bool("MODEL_D_WALLET_TRACKING_ENABLED", cfg.model_d.wallet_tracking_enabled)
+    cfg.model_d.wallet_scanner_enabled = _env_bool("MODEL_D_WALLET_SCANNER_ENABLED", cfg.model_d.wallet_scanner_enabled)
+    cfg.model_d.wallet_enrichment_enabled = _env_bool("MODEL_D_WALLET_ENRICHMENT_ENABLED", cfg.model_d.wallet_enrichment_enabled)
+    cfg.model_d.wallet_ranking_enabled = _env_bool("MODEL_D_WALLET_RANKING_ENABLED", cfg.model_d.wallet_ranking_enabled)
+    env_primary = os.getenv("MODEL_D_MARKET_PRIMARY_VENUE")
+    if env_primary and env_primary.strip().lower() in {"binance", "asterdex"}:
+        cfg.model_d.market_primary_venue = env_primary.strip().lower()
+    for chain_id in (1, 56, 42161, 8453):
+        env_rpc = os.getenv(f"MODEL_D_RPC_{chain_id}_URL")
+        if env_rpc:
+            cfg.model_d.wallet_rpc_urls[chain_id] = env_rpc.strip()
+    # Paper-only is not operator-overridable: accepting false here would weaken the invariant.
+    cfg.model_d.paper_only = True
 
     return cfg
 

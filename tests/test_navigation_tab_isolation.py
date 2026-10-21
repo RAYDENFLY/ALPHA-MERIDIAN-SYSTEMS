@@ -46,6 +46,7 @@ def test_dom_tree_hierarchy_all_tabs_inside_main_container():
         'tab-journal',
         'tab-alerts',
         'tab-model_b',
+        'tab-model_d',
         'tab-liquidity_intel',
         'tab-sweep_chart',
         'tab-demand_zone',
@@ -81,6 +82,7 @@ def test_initial_static_html_tab_visibility():
         'tab-journal',
         'tab-alerts',
         'tab-model_b',
+        'tab-model_d',
         'tab-liquidity_intel',
         'tab-sweep_chart',
         'tab-demand_zone',
@@ -121,6 +123,7 @@ def test_navigation_script_mutual_exclusivity_logic():
     all_tabs = [
         'setups', 'backtest', 'watchlist', 'journal', 'alerts',
         'model_b', 'liquidity_intel', 'sweep_chart', 'demand_zone', 'ai_analyst'
+        , 'model_d'
     ]
     for tab in all_tabs:
         assert f"tabId === '{tab}'" in content, f"Navigation coordinator must handle route '{tab}'"
@@ -134,6 +137,7 @@ def test_simulated_cross_tab_navigation_transitions():
     tabs = [
         'setups', 'backtest', 'watchlist', 'journal', 'alerts',
         'model_b', 'liquidity_intel', 'sweep_chart', 'demand_zone', 'ai_analyst'
+        , 'model_d'
     ]
 
     class TabStateSimulator:

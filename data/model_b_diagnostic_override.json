@@ -1,0 +1,23 @@
+{
+  "started_at_utc": "2026-10-21T19:32:28.282596+00:00",
+  "started_at_ms": 1792611148282,
+  "ended_at_utc": null,
+  "baseline_config": {
+    "daily_loss_limit_usdt": 3.0,
+    "weekly_loss_limit_usdt": 7.5,
+    "target_trade_risk_usdt": 1.0,
+    "max_open_positions": 3,
+    "max_leverage": 10,
+    "max_margin_usdt": 15.0,
+    "min_risk_reward": 1.5,
+    "max_spread_bps": 15.0,
+    "min_imbalance_ratio": 0.05,
+    "min_absorption_score": 0.25,
+    "initial_equity_usdt": 100.0,
+    "version": "1.0.0-alpha",
+    "scanner_mode": "PAPER",
+    "live_trading_locked": true,
+    "paper_slippage_rate": 0.0005,
+    "paper_taker_fee_rate": 0.0005
+  }
+}

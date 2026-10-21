@@ -8,6 +8,12 @@ Enforces:
 - Capital baseline: $100.00 USDT research equity.
 - Complete ledger isolation from Model A.
 - Hard safety invariant: live_trading_locked = True.
+
+Temporary paper-only diagnostics (default OFF, Model B scope only):
+- diagnostic_breaker_override: the daily/weekly loss breakers (and the remaining-risk-budget check
+  derived from them) stop blocking entries. Baseline limits are never modified; breaches are still
+  computed and reported as "breached but NOT enforced".
+- entry_kill_switch: blocks every new Model B paper entry immediately, regardless of override.
 """
 
 from datetime import datetime, timezone
@@ -28,6 +34,9 @@ class ModelBRiskManager:
         daily_loss_limit_usdt: float = 3.0,
         weekly_loss_limit_usdt: float = 7.5,
         max_open_positions: int = 3,
+        diagnostic_override_active: bool = False,
+        entry_kill_switch: bool = False,
+        live_trading_locked: bool = True,
     ) -> None:
         if config:
             self.initial_equity = config.initial_equity_usdt
@@ -35,16 +44,21 @@ class ModelBRiskManager:
             self.daily_loss_limit = config.daily_loss_limit_usdt
             self.weekly_loss_limit = config.weekly_loss_limit_usdt
             self.max_open_positions = config.max_open_positions
+            self.diagnostic_override_active = bool(getattr(config, "diagnostic_breaker_override", diagnostic_override_active))
+            self.entry_kill_switch = bool(getattr(config, "entry_kill_switch", entry_kill_switch))
         else:
             self.initial_equity = initial_equity_usdt
             self.trade_risk_usdt = trade_risk_usdt
             self.daily_loss_limit = daily_loss_limit_usdt
             self.weekly_loss_limit = weekly_loss_limit_usdt
             self.max_open_positions = max_open_positions
+            self.diagnostic_override_active = diagnostic_override_active
+            self.entry_kill_switch = entry_kill_switch
 
+        self.diagnostic_state: Dict[str, Any] = {}
         self.equity_usdt = self.initial_equity
         self.model_id = "MODEL_B"
-        self.live_trading_locked = True
+        self.live_trading_locked = live_trading_locked
 
         self.current_day_str: str = ""
         self.current_week_str: str = ""
@@ -142,12 +156,21 @@ class ModelBRiskManager:
         """Validate whether a new Model B position is permitted under risk governance."""
         self._sync_calendar_buckets(current_ts_ms)
 
+        # 0. Manual kill switch: always enforced, independent of the diagnostic override
+        if self.entry_kill_switch:
+            return False, "Model B entry kill switch is ON: new paper entries are blocked."
+
         # 1. Concurrent open positions cap
         if len(self.open_trades) >= self.max_open_positions:
             return (
                 False,
                 f"Model B concurrent position cap reached ({len(self.open_trades)}/{self.max_open_positions}).",
             )
+
+        # Diagnostic override (paper-only): the PnL breakers below are reported but not enforced.
+        # The position cap above and every other safeguard stay in force.
+        if self.diagnostic_override_active and self.live_trading_locked:
+            return True, None
 
         # 2. Daily circuit breaker
         if self.daily_loss_usdt >= self.daily_loss_limit:
@@ -212,6 +235,11 @@ class ModelBRiskManager:
             "max_open_positions": self.max_open_positions,
             "weekly_entries_count": self.weekly_entries_count,
             "live_trading_locked": self.live_trading_locked,
+            # *_active = raw breach of the unchanged baseline limit; *_enforced = actually blocking entries.
             "daily_circuit_breaker_active": self.daily_loss_usdt >= self.daily_loss_limit,
             "weekly_circuit_breaker_active": self.weekly_loss_usdt >= self.weekly_loss_limit,
+            "daily_circuit_breaker_enforced": (self.daily_loss_usdt >= self.daily_loss_limit) and not self.diagnostic_override_active,
+            "weekly_circuit_breaker_enforced": (self.weekly_loss_usdt >= self.weekly_loss_limit) and not self.diagnostic_override_active,
+            "diagnostic_override_active": self.diagnostic_override_active,
+            "entry_kill_switch": self.entry_kill_switch,
         }

@@ -385,6 +385,16 @@ class PaperExecutionEngine:
         """
         filled_or_terminal_orders: List[PaperOrder] = []
 
+        # Model B diagnostic kill switch: a fill is a new entry, so cancel resting paper orders instead
+        # of filling them. Risk managers without this attribute (Model A) are unaffected.
+        if getattr(self.risk_manager, "entry_kill_switch", False):
+            for order_id, order in list(self.pending_orders.items()):
+                order.transition_to(PaperOrderStatus.CANCELLED, reason="Model B entry kill switch ON: pending paper order cancelled.")
+                self.journal.save_paper_order(order.to_dict())
+                filled_or_terminal_orders.append(order)
+                self.pending_orders.pop(order_id, None)
+            return filled_or_terminal_orders
+
         for order_id, order in list(self.pending_orders.items()):
             candles = candles_by_symbol.get(order.symbol, [])
             # Evaluate only candles strictly after the order creation candle
