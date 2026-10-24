@@ -12,6 +12,7 @@ can be pulled (canceled) instantaneously before incoming market orders arrive.
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import logging
+import statistics
 from typing import Any, Dict, List, Optional
 
 from src.exchange.normalized import NormalizedOrderBook
@@ -80,7 +81,14 @@ class LiquidityWallHunter:
         if not isinstance(mid, (int, float)) or mid <= 0:
             return []
 
-        baseline = self._baseline_depth.get(sym, 10000.0)  # Default $10k baseline
+        if sym in self._baseline_depth and self._baseline_depth[sym] > 0:
+            baseline = self._baseline_depth[sym]
+        else:
+            top_notionals = [level.price * level.size for level in (book.bids[:20] + book.asks[:20]) if level.price * level.size > 0]
+            if top_notionals:
+                baseline = max(1000.0, float(statistics.median(top_notionals)))
+            else:
+                baseline = 10000.0
         current_walls: List[LiquidityWall] = []
 
         # 1. Scan Bid Levels
@@ -167,3 +175,5 @@ class LiquidityWallHunter:
     def get_persistent_walls(self, symbol: str) -> List[LiquidityWall]:
         """Return currently resting walls that meet persistence criteria."""
         return [w for w in self._active_walls.get(symbol.upper(), []) if w.is_persistent]
+
+    detect_walls = analyze_order_book

@@ -27,7 +27,7 @@ from src.exchange.service import MultiExchangeService
 from src.liquidity.collector import LiquidityCollector
 from src.liquidity.wall_hunter import LiquidityWallHunter
 from src.strategy.model_b.evaluator import evaluate_liquidity_setup
-from src.strategy.model_b.risk_controls import closed_context, short_gate, enforce_stop_floor
+from src.strategy.model_b.risk_controls import closed_context, short_gate, enforce_stop_floor, ema
 from config.settings import ModelBConfig
 
 
@@ -221,10 +221,11 @@ class ModelBStrategyGenerator:
             }
 
         # 4. Engine 2: New Market Opportunity Scanner evaluation
+        effective_listing_ms = getattr(instrument, "listing_time_ms", None) or listing_time_ms
         new_market_res = self.new_market_scanner.evaluate_instrument(
             instrument=instrument,
             order_book=book,
-            listing_time_ms=listing_time_ms,
+            listing_time_ms=effective_listing_ms,
             now_ms=current_ts,
         )
         self.engine_telemetry["new_market_scanner"]["evaluated"] += 1
@@ -260,10 +261,59 @@ class ModelBStrategyGenerator:
         if context is None and getattr(self.config, "short_regime_gate_enabled", False) and signal.direction == Direction.SHORT:
             regime_rejection = regime_rejection or "short_htf_context_unavailable"
 
-        # 7. Catalyst Conflict Gate (opposing confirmed news vetoes setup)
+        # 7. Rejections: Feasibility, HTF Bias, Order-flow, and Catalysts
         rejection_reasons: List[str] = []
         if regime_rejection:
             rejection_reasons.append(regime_rejection)
+
+        # Enforce NewMarketOpportunityScanner feasibility (e.g. min $5k depth within 10 bps)
+        if not new_market_res.is_feasible:
+            rejection_reasons.extend(new_market_res.rejection_reasons)
+
+        # True 4H Structure & EMA20/EMA50 Bias
+        bias_4h = MarketBias.NEUTRAL
+        structure_1h = StructureState.SIDEWAYS
+        if context is not None:
+            bias_4h = context.get("bias_4h", MarketBias.NEUTRAL)
+            structure_1h = context.get("structure_1h", StructureState.SIDEWAYS)
+        else:
+            if candles_4h and len(candles_4h) >= 20:
+                closes4 = [c.close for c in candles_4h]
+                e4_20 = ema(closes4, 20)
+                e4_50 = ema(closes4, 50) if len(closes4) >= 50 else e4_20
+                if e4_20 is not None:
+                    if candles_4h[-1].close > e4_20 and (e4_50 is None or e4_20 >= e4_50):
+                        bias_4h = MarketBias.BULLISH
+                    elif candles_4h[-1].close < e4_20 and (e4_50 is None or e4_20 <= e4_50):
+                        bias_4h = MarketBias.BEARISH
+            if candles and len(candles) >= 20:
+                closes1 = [c.close for c in candles]
+                e1_20 = ema(closes1, 20)
+                e1_50 = ema(closes1, 50) if len(closes1) >= 50 else e1_20
+                if e1_20 is not None:
+                    if candles[-1].close > e1_20 and (e1_50 is None or e1_20 >= e1_50):
+                        structure_1h = StructureState.BULLISH
+                    elif candles[-1].close < e1_20 and (e1_50 is None or e1_20 <= e1_50):
+                        structure_1h = StructureState.BEARISH
+
+        # Reject counter-trend setups strongly opposing 4H bias
+        if signal.direction == Direction.LONG and bias_4h == MarketBias.BEARISH:
+            rejection_reasons.append("COUNTER_TREND_4H_BEARISH_OPPOSES_LONG")
+        elif signal.direction == Direction.SHORT and bias_4h == MarketBias.BULLISH:
+            rejection_reasons.append("COUNTER_TREND_4H_BULLISH_OPPOSES_SHORT")
+
+        # Order-Flow & Opposing Wall Veto
+        req_side = "BID" if signal.direction == Direction.LONG else "ASK"
+        opp_side = "ASK" if signal.direction == Direction.LONG else "BID"
+        persistent_walls = wall_evidence.get("persistent_walls", [])
+        supporting_wall_notional = sum(w["notional"] for w in persistent_walls if w.get("side") == req_side)
+        opposing_wall_notional = sum(w["notional"] for w in persistent_walls if w.get("side") == opp_side)
+
+        has_opposing_wall = opposing_wall_notional > 0 and (supporting_wall_notional == 0 or opposing_wall_notional > supporting_wall_notional * 1.5)
+        has_opposing_imbalance = (signal.direction == Direction.LONG and snapshot.imbalance_25bps < -0.10) or (signal.direction == Direction.SHORT and snapshot.imbalance_25bps > 0.10)
+        if has_opposing_wall or has_opposing_imbalance:
+            rejection_reasons.append("OPPOSING_ORDER_FLOW_IMBALANCE")
+
         is_vetoed = False
         if catalyst_bias_info is not None:
             c_bias = catalyst_bias_info.get("bias")
@@ -281,11 +331,25 @@ class ModelBStrategyGenerator:
         if is_vetoed:
             self.engine_telemetry["news_catalyst"]["vetoed"] += 1
 
-        # 8. Sizing and risk assessment
+        # 8. Sizing and risk assessment with TP1/TP2 rescaling
         if context and context.get("atr_1h") is not None:
             signal.stop_loss = enforce_stop_floor(signal.entry_price, signal.stop_loss, signal.direction, context["atr_1h"], self.config.min_stop_distance_pct, self.config.min_stop_atr_multiple)
         else:
             signal.stop_loss = enforce_stop_floor(signal.entry_price, signal.stop_loss, signal.direction, None, self.config.min_stop_distance_pct, 0.0)
+
+        # Recalculate TP1/TP2 after stop floor enforcement to maintain favorable R:R
+        widened_risk = abs(signal.entry_price - signal.stop_loss)
+        if widened_risk > 0:
+            if signal.direction == Direction.LONG:
+                signal.take_profit_1 = round(signal.entry_price + (widened_risk * 1.5), 8)
+                signal.take_profit_2 = round(max(signal.take_profit_2 or 0.0, signal.entry_price + (widened_risk * 2.5)), 8)
+            else:
+                signal.take_profit_1 = round(signal.entry_price - (widened_risk * 1.5), 8)
+                signal.take_profit_2 = round(min(signal.take_profit_2 or 1e9, signal.entry_price - (widened_risk * 2.5)), 8)
+
+        dynamic_gross_rr = round(abs(signal.take_profit_1 - signal.entry_price) / widened_risk, 4) if widened_risk > 0 else 1.5
+        dynamic_net_rr = round(max(0.1, dynamic_gross_rr - 0.1), 4)
+
         assessment = self.size_position(
             entry_price=signal.entry_price,
             stop_loss=signal.stop_loss,
@@ -338,14 +402,14 @@ class ModelBStrategyGenerator:
             symbol=symbol,
             timestamp_ms=ts_ms,
             direction=signal.direction,
-            bias_4h=(context["bias_4h"] if context else MarketBias.NEUTRAL),
-            structure_1h=(context["structure_1h"] if context else StructureState.SIDEWAYS),
+            bias_4h=bias_4h,
+            structure_1h=structure_1h,
             entry_price=signal.entry_price,
             stop_loss=signal.stop_loss,
             take_profit_1=signal.take_profit_1,
             take_profit_2=signal.take_profit_2,
-            gross_reward_to_risk=1.5,
-            net_reward_to_risk=1.4,
+            gross_reward_to_risk=dynamic_gross_rr,
+            net_reward_to_risk=dynamic_net_rr,
             invalidation_price=signal.stop_loss,
             invalidation_reason="Stop loss breached",
             smc_evidence=["Liquidity sweep and reclaim on 1H"],
@@ -362,6 +426,7 @@ class ModelBStrategyGenerator:
             expires_at_ms=expires_at,
             ai_analysis={
                 "strategy": "Model_B_Liquidity_Sweep",
+                "cohort_version": "MODEL_B_V2_REMEDIATED",
                 "signal_type": signal.signal_type,
                 "reasons": supporting_reasons,
                 "spread_bps": snapshot.spread_bps,

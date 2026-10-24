@@ -46,7 +46,8 @@ class ResearchIngestor:
             observations = self._fetch_with_retry(fetch, policy)
             inserted = self.store.insert_observations(observations)
             latest = max((x.observation_timestamp for x in observations), default=None)
-            self.store.update_sync_state(source_id, dataset_id, last_success_at=now(), last_observation_timestamp=latest, observation_count=inserted, sync_status="AVAILABLE", records_inserted=inserted, error_category=None, last_error=None)
+            outcome = "SUCCESS_WITH_NEW_DATA" if inserted else "SUCCESS_NO_NEW_DATA"
+            self.store.update_sync_state(source_id, dataset_id, last_success_at=now(), last_observation_timestamp=latest, observation_count=inserted, sync_status=outcome, records_inserted=inserted, error_category=None, last_error=None)
             return inserted
         except ValueError as exc:
             self.store.update_sync_state(source_id, dataset_id, sync_status="INVALID", error_category="VALIDATION", last_error=str(exc))

@@ -15,7 +15,7 @@ class ResearchDataStore:
         rows=[]; t=now()
         for x in items: x.validate(); rows.append((x.source_id,x.dataset_id,x.market_id,x.symbol,x.observation_timestamp,x.publication_timestamp,x.reporting_period,x.value,x.unit,x.source_url,x.freshness_state,x.quality_state,x.payload_hash,t))
         with self.db.get_connection() as c:
-            n=c.executemany("INSERT OR IGNORE INTO research_observations(source_id,dataset_id,market_id,symbol,observation_timestamp,publication_timestamp,reporting_period,value,unit,source_url,freshness_state,quality_state,payload_hash,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",rows).rowcount; c.commit(); return n
+            n=c.executemany("INSERT OR IGNORE INTO research_observations(source_id,dataset_id,market_id,symbol,observation_timestamp,publication_timestamp,reporting_period,value,unit,source_url,freshness_state,quality_state,payload_hash,retrieved_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[r[:-1]+(t,r[-1]) for r in rows]).rowcount; c.commit(); return n
     def list_observations(self,dataset_id,symbol=None,limit=500):
         q="SELECT * FROM research_observations WHERE dataset_id=?"; p=[dataset_id]
         if symbol: q+=" AND symbol=?"; p.append(symbol)
@@ -31,3 +31,6 @@ class ResearchDataStore:
         with self.db.get_connection() as c:
             row=c.execute("SELECT * FROM research_sync_state WHERE dataset_id=?",(dataset_id,)).fetchone()
             return dict(row) if row else None
+    def total_observation_count(self, dataset_id):
+        with self.db.get_connection() as c:
+            return c.execute("SELECT COUNT(*) FROM research_observations WHERE dataset_id=?", (dataset_id,)).fetchone()[0]

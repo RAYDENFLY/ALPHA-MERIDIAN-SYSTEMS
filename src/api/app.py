@@ -3513,8 +3513,9 @@ async def research_datasets_endpoint() -> Dict[str, Any]:
 async def research_data_endpoint(dataset_id: str, symbol: Optional[str] = Query(None), limit: int = Query(500, ge=1, le=5000)) -> Dict[str, Any]:
     rows = research_store.list_observations(dataset_id, symbol=symbol, limit=limit)
     sync = research_store.get_sync_state(dataset_id)
+    total = research_store.total_observation_count(dataset_id)
     status = (sync or {}).get("sync_status") or ("MISSING" if not rows else "AVAILABLE")
-    return {"dataset_id": dataset_id, "observations": rows, "status": status, "sync": sync}
+    return {"dataset_id": dataset_id, "observations": rows, "status": status, "sync": sync, "inserted_count": (sync or {}).get("observation_count", 0), "total_observation_count": total}
 
 
 if __name__ == "__main__":

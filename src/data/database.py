@@ -294,6 +294,7 @@ CREATE TABLE IF NOT EXISTS research_observations (
     freshness_state TEXT NOT NULL,
     quality_state TEXT NOT NULL,
     payload_hash TEXT NOT NULL,
+    retrieved_at TEXT,
     created_at TEXT NOT NULL,
     UNIQUE(dataset_id, market_id, symbol, observation_timestamp, payload_hash)
 );
@@ -348,6 +349,10 @@ class DatabaseManager:
         ]:
             if name not in research_sync_columns:
                 cur.execute(f"ALTER TABLE research_sync_state ADD COLUMN {name} {definition};")
+        cur.execute("PRAGMA table_info(research_observations);")
+        observation_columns = {row["name"] for row in cur.fetchall()}
+        if "retrieved_at" not in observation_columns:
+            cur.execute("ALTER TABLE research_observations ADD COLUMN retrieved_at TEXT;")
 
         # trade_journal migrations
         cur.execute("PRAGMA table_info(trade_journal);")
