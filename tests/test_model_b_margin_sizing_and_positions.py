@@ -427,5 +427,5 @@ class TestModelBExchangeStylePaperPositions:
         assert model_b_config.target_account_equity_usdt == 100.0
         assert model_b_config.target_trade_risk_usdt == 1.0
         assert model_b_config.max_margin_usdt == 15.0
-        assert model_b_config.max_open_positions == 3
+        assert model_b_config.max_open_positions == 6
         assert model_b_config.max_leverage == 10.0

@@ -15,7 +15,7 @@ const ALL_KNOWN_TABS = [
     'sweep_chart',
     'demand_zone',
     'ai_analyst'
-    ,'market_participant','cot','retail_sentiment'
+    ,'market_participant','cot','institutional_positioning','retail_sentiment'
 ];
 
 // Mapping each tab to its category
@@ -32,7 +32,7 @@ const TAB_TO_CATEGORY_MAP = {
     'model_d': 'ai_research',
     'ai_analyst': 'ai_research',
     'backtest': 'exchange_data'
-    ,'market_participant': 'participants','cot': 'participants','retail_sentiment': 'participants'
+    ,'market_participant': 'participants','cot': 'participants','institutional_positioning': 'participants','retail_sentiment': 'participants'
 };
 
 function toggleSidebarCollapse() {

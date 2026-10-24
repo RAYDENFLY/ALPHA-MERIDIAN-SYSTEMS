@@ -87,7 +87,10 @@ model_b:
   target_trade_risk_usdt: 1.00
   daily_loss_limit_usdt: 3.00
   weekly_loss_limit_usdt: 7.50
-  max_open_positions: 3
+  max_open_positions: 6
+  max_open_per_direction: 3
+  cohort_version: "MODEL_B_V2_REMEDIATED"
+  cohort_cutover_ms: 1792838400000
   max_leverage: 10
   short_regime_gate_enabled: true
   diagnostic_breaker_override: false

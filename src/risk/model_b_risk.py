@@ -33,8 +33,10 @@ class ModelBRiskManager:
         trade_risk_usdt: float = 1.0,
         daily_loss_limit_usdt: float = 3.0,
         weekly_loss_limit_usdt: float = 7.5,
-        max_open_positions: int = 3,
-        max_open_per_direction: int = 2,
+        max_open_positions: int = 6,
+        max_open_per_direction: int = 3,
+        cohort_version: Optional[str] = None,
+        cohort_cutover_ms: Optional[int] = None,
         diagnostic_override_active: bool = False,
         entry_kill_switch: bool = False,
         live_trading_locked: bool = True,
@@ -45,7 +47,9 @@ class ModelBRiskManager:
             self.daily_loss_limit = config.daily_loss_limit_usdt
             self.weekly_loss_limit = config.weekly_loss_limit_usdt
             self.max_open_positions = config.max_open_positions
-            self.max_open_per_direction = max_open_per_direction
+            self.max_open_per_direction = getattr(config, "max_open_per_direction", max_open_per_direction)
+            self.cohort_version = getattr(config, "cohort_version", cohort_version)
+            self.cohort_cutover_ms = getattr(config, "cohort_cutover_ms", cohort_cutover_ms)
             self.diagnostic_override_active = bool(getattr(config, "diagnostic_breaker_override", diagnostic_override_active))
             self.entry_kill_switch = bool(getattr(config, "entry_kill_switch", entry_kill_switch))
         else:
@@ -55,6 +59,8 @@ class ModelBRiskManager:
             self.weekly_loss_limit = weekly_loss_limit_usdt
             self.max_open_positions = max_open_positions
             self.max_open_per_direction = max_open_per_direction
+            self.cohort_version = cohort_version
+            self.cohort_cutover_ms = cohort_cutover_ms
             self.diagnostic_override_active = diagnostic_override_active
             self.entry_kill_switch = entry_kill_switch
 
@@ -96,6 +102,8 @@ class ModelBRiskManager:
         journal: Any,
         now_ms: Optional[int] = None,
         model_id: Optional[str] = "MODEL_B",
+        cohort_filter: Optional[str] = None,
+        cutover_ms: Optional[int] = None,
     ) -> None:
         """Authoritatively restore realized loss counters and equity from journal for Model B."""
         if journal is None:
@@ -107,6 +115,25 @@ class ModelBRiskManager:
         # Query closed trades specifically for Model B
         trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
         closed_trades = [t for t in trades if not t.get("is_open", False) and t.get("exit_timestamp_ms") is not None]
+
+        # Cohort scoping: if cohort_filter is set (or configured on risk manager), exclude legacy cohorts
+        active_cohort = cohort_filter if cohort_filter is not None else getattr(self, "cohort_version", None)
+        active_cutover = cutover_ms if cutover_ms is not None else getattr(self, "cohort_cutover_ms", None)
+
+        if active_cohort or active_cutover:
+            filtered_closed = []
+            for t in closed_trades:
+                det = {}
+                if t.get("details_json"):
+                    try:
+                        det = json.loads(t["details_json"])
+                    except Exception:
+                        pass
+                c_ver = det.get("cohort_version")
+                e_ts = int(t.get("entry_timestamp_ms") or 0)
+                if c_ver == active_cohort or (active_cutover and e_ts >= active_cutover):
+                    filtered_closed.append(t)
+            closed_trades = filtered_closed
 
         daily_pnl = 0.0
         weekly_pnl = 0.0
@@ -139,8 +166,22 @@ class ModelBRiskManager:
         self.weekly_entries_count = weekly_entries
         self.equity_usdt = round(self.initial_equity + cumulative_realized_pnl, 4)
 
-        # Sync open trades
+        # Sync open trades (scoped to target cohort if active)
         raw_open = journal.get_open_trades(model_id="MODEL_B")
+        if active_cohort or active_cutover:
+            filtered_open = []
+            for r in raw_open:
+                det = {}
+                if r.get("details_json"):
+                    try:
+                        det = json.loads(r["details_json"])
+                    except Exception:
+                        pass
+                c_ver = det.get("cohort_version")
+                e_ts = int(r.get("entry_timestamp_ms") or 0)
+                if c_ver == active_cohort or (active_cutover and e_ts >= active_cutover):
+                    filtered_open.append(r)
+            raw_open = filtered_open
         self.open_trades = [
             TradeRecord(
                 trade_id=r["trade_id"],

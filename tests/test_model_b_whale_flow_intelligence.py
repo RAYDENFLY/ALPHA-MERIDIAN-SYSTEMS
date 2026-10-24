@@ -329,7 +329,7 @@ class TestWhaleFlowIntelligenceCriteria:
         assert mb.initial_equity_usdt == 100.0
         assert mb.target_trade_risk_usdt == 1.0
         assert mb.max_margin_usdt == 15.0
-        assert mb.max_open_positions == 3
+        assert mb.max_open_positions == 6
         assert mb.daily_loss_limit_usdt == 3.0
         assert mb.weekly_loss_limit_usdt == 7.5
         assert mb.max_leverage == 10.0

@@ -73,7 +73,7 @@ class TestModelBRiskManager:
         assert risk.trade_risk_usdt == 1.0
         assert risk.daily_loss_limit == 3.0
         assert risk.weekly_loss_limit == 7.5
-        assert risk.max_open_positions == 3
+        assert risk.max_open_positions == 6
         assert risk.live_trading_locked is True
 
     def test_concurrent_position_gating(self):

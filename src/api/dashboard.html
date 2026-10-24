@@ -409,6 +409,7 @@
                         <div id="catGroup-participants" class="space-y-0.5 pl-1">
                             <button type="button" onclick="switchTab('market_participant')" id="sideBtn-market_participant" class="sidebar-item w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300"><i class="fa-solid fa-users sidebar-icon text-cyan-400" aria-hidden="true"></i><span class="sidebar-text">Market Participant</span></button>
                             <button type="button" onclick="switchTab('cot')" id="sideBtn-cot" class="sidebar-item w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300"><i class="fa-solid fa-chart-column sidebar-icon text-indigo-400" aria-hidden="true"></i><span class="sidebar-text">Commitment of Traders</span></button>
+                            <button type="button" onclick="switchTab('institutional_positioning')" id="sideBtn-institutional_positioning" class="sidebar-item w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300"><i class="fa-solid fa-building-columns sidebar-icon text-purple-400" aria-hidden="true"></i><span class="sidebar-text">Institutional Positioning</span></button>
                             <button type="button" onclick="switchTab('retail_sentiment')" id="sideBtn-retail_sentiment" class="sidebar-item w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300"><i class="fa-solid fa-scale-balanced sidebar-icon text-amber-400" aria-hidden="true"></i><span class="sidebar-text">Retail Sentiment</span></button>
                         </div>
                     </div>
@@ -453,6 +454,9 @@
         </div>
         <div id="tab-cot" class="hidden space-y-4">
             <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Commitment of Traders</h2><p class="text-xs text-slate-400 mt-1">Weekly CFTC report-date data. Not real-time positioning.</p><div id="cotState" class="mt-5 text-sm text-slate-400">Loading research data…</div><div id="cotTable" class="mt-4 overflow-x-auto"></div></div>
+        </div>
+        <div id="tab-institutional_positioning" class="hidden space-y-4">
+            <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Institutional Positioning</h2><p class="text-xs text-slate-400 mt-1">CFTC-reported futures categories only; not all institutional crypto positioning.</p><div id="institutionalState" class="mt-5 text-sm text-slate-400">Loading research data…</div><div id="institutionalTable" class="mt-4 overflow-x-auto"></div></div>
         </div>
         <div id="tab-retail_sentiment" class="hidden space-y-4">
             <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Retail Sentiment</h2><div class="mt-5 p-4 rounded border border-amber-900/60 bg-amber-950/20 text-sm text-amber-200">UNAVAILABLE — no verified retail positioning dataset is currently configured. No sentiment values are fabricated.</div></div>

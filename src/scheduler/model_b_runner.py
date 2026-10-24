@@ -259,9 +259,17 @@ class ModelBRunner:
         return final_targets, len(snapshots), len(qualified_instruments)
 
     def _rehydrate_risk_counters(self, now_ms: Optional[int] = None) -> None:
-        """Authoritatively rehydrate risk counters from SQLite journal using net PnL."""
+        """Authoritatively rehydrate risk counters from SQLite journal using net PnL scoped to V2 cohort."""
         if self.risk_manager and self.journal:
-            self.risk_manager.sync_state_from_journal(self.journal, now_ms=now_ms, model_id="MODEL_B")
+            cohort_ver = getattr(self.config, "cohort_version", "MODEL_B_V2_REMEDIATED")
+            cutover_ts = getattr(self.config, "cohort_cutover_ms", 1792838400000)
+            self.risk_manager.sync_state_from_journal(
+                self.journal,
+                now_ms=now_ms,
+                model_id="MODEL_B",
+                cohort_filter=cohort_ver,
+                cutover_ms=cutover_ts,
+            )
 
     def run_scan_cycle(self, now_ms: Optional[int] = None) -> List[SetupCandidate]:
         """Execute a full Model B scan, candidate formulation, and paper order evaluation cycle."""
