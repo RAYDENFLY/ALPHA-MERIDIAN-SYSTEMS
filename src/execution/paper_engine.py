@@ -50,7 +50,10 @@ class PaperExecutionEngine:
 
     def _serialize_position_details(self, pos: PaperPosition) -> str:
         """Serialize extended position state (TP1/TP2, trailing stop, partial PnL) to JSON."""
-        return json.dumps(pos.to_dict())
+        d = pos.to_dict()
+        if pos.model_id == "MODEL_B":
+            d["cohort_version"] = "MODEL_B_V2_REMEDIATED"
+        return json.dumps(d)
 
     def _build_open_trade_record(self, pos: PaperPosition, order_status: str = "FILLED") -> TradeRecord:
         """Construct an open TradeRecord reflecting current PaperPosition state for SQLite persistence."""
@@ -224,7 +227,7 @@ class PaperExecutionEngine:
         )
 
         # 4. Account Risk Gate Check
-        can_open, reason = self.risk_manager.can_open_new_position(now_ms)
+        can_open, reason = self.risk_manager.can_open_new_position(now_ms, direction=candidate.direction)
         if not can_open:
             logger.warning(f"PaperEngine: Risk limits rejected order for {sym}: {reason}")
             rejected_order = PaperOrder(
@@ -1044,24 +1047,50 @@ class PaperExecutionEngine:
         return closed_trades
 
     def _settle_funding(self, pos: PaperPosition, current_candle_ts_ms: int) -> None:
-        """Settle 8-hour funding payments between entry and current timestamp."""
-        # Query recorded funding rates for this symbol
-        rates = self.db.get_funding_rates(pos.symbol)
-        for r in rates:
-            f_time = r["funding_time_ms"]
-            # Check if this funding settlement happened while position was open and not yet settled
-            if pos.entry_timestamp_ms < f_time <= current_candle_ts_ms:
-                if f_time not in pos.settled_funding_timestamps:
-                    rate = float(r["funding_rate"])
-                    # Positive rate: Long pays short, Short receives
-                    if pos.direction == Direction.LONG:
-                        payment = pos.notional_usdt * rate
-                    else:
-                        payment = pos.notional_usdt * (-rate)
+        """Settle 8-hour funding payments between entry and current timestamp.
 
-                    pos.funding_paid += payment
-                    pos.settled_funding_timestamps.append(f_time)
-                    logger.debug(
-                        f"PaperEngine: Settled funding for {pos.symbol} at {f_time}: "
-                        f"rate={rate:.6f}, payment={payment:.4f} USDT."
-                    )
+        Detects missing expected 8-hour settlement boundaries (00:00, 08:00, 16:00 UTC),
+        flags pos.funding_data_missing = True, and applies a conservative 1 bps (0.0001)
+        fallback penalty against position direction.
+        """
+        rates = self.db.get_funding_rates(pos.symbol) if self.db else []
+        rate_by_time = {r["funding_time_ms"]: float(r["funding_rate"]) for r in rates}
+
+        FUNDING_INTERVAL_MS = 28_800_000  # 8 hours
+        first_boundary = ((pos.entry_timestamp_ms // FUNDING_INTERVAL_MS) + 1) * FUNDING_INTERVAL_MS
+        expected_boundaries: List[int] = []
+        b = first_boundary
+        while b <= current_candle_ts_ms:
+            expected_boundaries.append(b)
+            b += FUNDING_INTERVAL_MS
+
+        for b_time in expected_boundaries:
+            if b_time in pos.settled_funding_timestamps:
+                continue
+
+            matched_rate = None
+            if b_time in rate_by_time:
+                matched_rate = rate_by_time[b_time]
+            else:
+                for r_time, r_val in rate_by_time.items():
+                    if abs(r_time - b_time) <= 3_600_000:
+                        matched_rate = r_val
+                        break
+
+            if matched_rate is not None:
+                rate = matched_rate
+            else:
+                pos.funding_data_missing = True
+                rate = 0.0001 if pos.direction == Direction.LONG else -0.0001
+
+            if pos.direction == Direction.LONG:
+                payment = pos.notional_usdt * rate
+            else:
+                payment = pos.notional_usdt * (-rate)
+
+            pos.funding_paid += payment
+            pos.settled_funding_timestamps.append(b_time)
+            logger.debug(
+                f"PaperEngine: Settled funding for {pos.symbol} at {b_time}: "
+                f"rate={rate:.6f}, payment={payment:.4f} USDT, missing={matched_rate is None}."
+            )

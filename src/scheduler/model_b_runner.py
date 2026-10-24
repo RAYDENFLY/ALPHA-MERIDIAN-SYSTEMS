@@ -258,6 +258,11 @@ class ModelBRunner:
         final_targets = priority_monitored + target_list
         return final_targets, len(snapshots), len(qualified_instruments)
 
+    def _rehydrate_risk_counters(self, now_ms: Optional[int] = None) -> None:
+        """Authoritatively rehydrate risk counters from SQLite journal using net PnL."""
+        if self.risk_manager and self.journal:
+            self.risk_manager.sync_state_from_journal(self.journal, now_ms=now_ms, model_id="MODEL_B")
+
     def run_scan_cycle(self, now_ms: Optional[int] = None) -> List[SetupCandidate]:
         """Execute a full Model B scan, candidate formulation, and paper order evaluation cycle."""
         acquired = self._lock.acquire(blocking=False)
@@ -276,7 +281,7 @@ class ModelBRunner:
 
         try:
             # 1. Sync risk manager with SQLite journal
-            self.risk_manager.sync_state_from_journal(self.journal, now_ms=current_ms, model_id="MODEL_B")
+            self._rehydrate_risk_counters(now_ms=current_ms)
 
             if not self.discovered_universe:
                 self.discover_universe()
@@ -490,7 +495,7 @@ class ModelBRunner:
                                     cand.rejection_reasons.append(reason)
                                 self.journal.save_setup(cand)
                             else:
-                                can_open, r_reason = self.risk_manager.can_open_new_position(current_ms)
+                                can_open, r_reason = self.risk_manager.can_open_new_position(current_ms, direction=cand.direction)
                                 if not can_open:
                                     cand.execution_status = ExecutionStatus.REJECTED
                                     reason = r_reason or "Account risk limits exceeded."

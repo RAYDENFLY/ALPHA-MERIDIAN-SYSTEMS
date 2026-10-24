@@ -152,6 +152,7 @@ class PaperOrder:
             "symbol": self.symbol,
             "direction": self.direction.value if hasattr(self.direction, "value") else str(self.direction),
             "entry_category": self.entry_category,
+            "cohort_version": "MODEL_B_V2_REMEDIATED" if self.model_id == "MODEL_B" else None,
             "order_type": self.order_type,
             "price": self.price,
             "stop_price": self.stop_loss,

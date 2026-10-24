@@ -190,6 +190,7 @@ class TestModelBExchangeStylePaperPositions:
             risk_manager=risk_manager,
             paper_engine=paper_engine,
         )
+        runner.get_mark_price = MagicMock(return_value=(0.07000, 1792342800000, 'FRESH'))
 
         # Create an open position matching AGTUSDT filled order
         t_now = 1792342800000
@@ -426,5 +427,5 @@ class TestModelBExchangeStylePaperPositions:
         assert model_b_config.target_account_equity_usdt == 100.0
         assert model_b_config.target_trade_risk_usdt == 1.0
         assert model_b_config.max_margin_usdt == 15.0
-        assert model_b_config.max_open_positions == 10
+        assert model_b_config.max_open_positions == 3
         assert model_b_config.max_leverage == 10.0

@@ -33,7 +33,8 @@ class ModelBRiskManager:
         trade_risk_usdt: float = 1.0,
         daily_loss_limit_usdt: float = 3.0,
         weekly_loss_limit_usdt: float = 7.5,
-        max_open_positions: int = 10,
+        max_open_positions: int = 3,
+        max_open_per_direction: int = 2,
         diagnostic_override_active: bool = False,
         entry_kill_switch: bool = False,
         live_trading_locked: bool = True,
@@ -44,6 +45,7 @@ class ModelBRiskManager:
             self.daily_loss_limit = config.daily_loss_limit_usdt
             self.weekly_loss_limit = config.weekly_loss_limit_usdt
             self.max_open_positions = config.max_open_positions
+            self.max_open_per_direction = max_open_per_direction
             self.diagnostic_override_active = bool(getattr(config, "diagnostic_breaker_override", diagnostic_override_active))
             self.entry_kill_switch = bool(getattr(config, "entry_kill_switch", entry_kill_switch))
         else:
@@ -52,6 +54,7 @@ class ModelBRiskManager:
             self.daily_loss_limit = daily_loss_limit_usdt
             self.weekly_loss_limit = weekly_loss_limit_usdt
             self.max_open_positions = max_open_positions
+            self.max_open_per_direction = max_open_per_direction
             self.diagnostic_override_active = diagnostic_override_active
             self.entry_kill_switch = entry_kill_switch
 
@@ -62,6 +65,8 @@ class ModelBRiskManager:
 
         self.current_day_str: str = ""
         self.current_week_str: str = ""
+        self.daily_net_pnl: float = 0.0
+        self.weekly_net_pnl: float = 0.0
         self.daily_loss_usdt: float = 0.0
         self.weekly_loss_usdt: float = 0.0
         self.weekly_entries_count: int = 0
@@ -78,10 +83,12 @@ class ModelBRiskManager:
         if day_str != self.current_day_str:
             self.current_day_str = day_str
             self.daily_loss_usdt = 0.0
+            self.daily_net_pnl = 0.0
 
         if week_str != self.current_week_str:
             self.current_week_str = week_str
             self.weekly_loss_usdt = 0.0
+            self.weekly_net_pnl = 0.0
             self.weekly_entries_count = 0
 
     def sync_state_from_journal(
@@ -101,8 +108,8 @@ class ModelBRiskManager:
         trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
         closed_trades = [t for t in trades if not t.get("is_open", False) and t.get("exit_timestamp_ms") is not None]
 
-        daily_losses = 0.0
-        weekly_losses = 0.0
+        daily_pnl = 0.0
+        weekly_pnl = 0.0
         weekly_entries = 0
         cumulative_realized_pnl = 0.0
 
@@ -114,12 +121,10 @@ class ModelBRiskManager:
             if exit_ts:
                 exit_dt = datetime.fromtimestamp(exit_ts / 1000.0, tz=timezone.utc)
                 if exit_dt.strftime("%Y-%m-%d") == self.current_day_str:
-                    if net_pnl < 0:
-                        daily_losses += abs(net_pnl)
+                    daily_pnl += net_pnl
 
                 if exit_dt.strftime("%Y-W%W") == self.current_week_str:
-                    if net_pnl < 0:
-                        weekly_losses += abs(net_pnl)
+                    weekly_pnl += net_pnl
 
             entry_ts = t.get("entry_timestamp_ms")
             if entry_ts:
@@ -127,8 +132,10 @@ class ModelBRiskManager:
                 if entry_dt.strftime("%Y-W%W") == self.current_week_str:
                     weekly_entries += 1
 
-        self.daily_loss_usdt = round(daily_losses, 4)
-        self.weekly_loss_usdt = round(weekly_losses, 4)
+        self.daily_net_pnl = daily_pnl
+        self.weekly_net_pnl = weekly_pnl
+        self.daily_loss_usdt = round(max(0.0, -daily_pnl), 4)
+        self.weekly_loss_usdt = round(max(0.0, -weekly_pnl), 4)
         self.weekly_entries_count = weekly_entries
         self.equity_usdt = round(self.initial_equity + cumulative_realized_pnl, 4)
 
@@ -152,7 +159,7 @@ class ModelBRiskManager:
             for r in raw_open
         ]
 
-    def can_open_new_position(self, current_ts_ms: int) -> Tuple[bool, Optional[str]]:
+    def can_open_new_position(self, current_ts_ms: int, direction: Optional[Any] = None) -> Tuple[bool, Optional[str]]:
         """Validate whether a new Model B position is permitted under risk governance."""
         self._sync_calendar_buckets(current_ts_ms)
 
@@ -166,6 +173,19 @@ class ModelBRiskManager:
                 False,
                 f"Model B concurrent position cap reached ({len(self.open_trades)}/{self.max_open_positions}).",
             )
+
+        # 1b. Directional concurrency cap
+        if direction is not None:
+            dir_str = direction.value if hasattr(direction, "value") else str(direction).upper()
+            dir_count = sum(
+                1 for t in self.open_trades
+                if (t.direction.value if hasattr(t.direction, "value") else str(t.direction).upper()) == dir_str
+            )
+            if dir_count >= self.max_open_per_direction:
+                return (
+                    False,
+                    f"Model B directional position cap reached for {dir_str} ({dir_count}/{self.max_open_per_direction}).",
+                )
 
         # Diagnostic override (paper-only): the PnL breakers below are reported but not enforced.
         # The position cap above and every other safeguard stay in force.
@@ -199,6 +219,10 @@ class ModelBRiskManager:
 
         return True, None
 
+    def validate_entry(self, current_ts_ms: int, direction: Optional[Any] = None) -> Tuple[bool, Optional[str]]:
+        """Validate whether a new Model B position is permitted under risk governance."""
+        return self.can_open_new_position(current_ts_ms, direction=direction)
+
     def record_entry(self, trade: TradeRecord) -> None:
         """Track entry of a new simulated paper position."""
         if not any(t.trade_id == trade.trade_id for t in self.open_trades):
@@ -215,11 +239,10 @@ class ModelBRiskManager:
 
         net_pnl = float(trade.pnl_net)
         self.equity_usdt = round(self.equity_usdt + net_pnl, 4)
-
-        if net_pnl < 0:
-            loss = abs(net_pnl)
-            self.daily_loss_usdt = round(self.daily_loss_usdt + loss, 4)
-            self.weekly_loss_usdt = round(self.weekly_loss_usdt + loss, 4)
+        self.daily_net_pnl += net_pnl
+        self.weekly_net_pnl += net_pnl
+        self.daily_loss_usdt = round(max(0.0, -self.daily_net_pnl), 4)
+        self.weekly_loss_usdt = round(max(0.0, -self.weekly_net_pnl), 4)
 
     def get_risk_summary(self) -> Dict[str, Any]:
         """Telemetry snapshot for dashboard and API exposure."""
@@ -233,6 +256,7 @@ class ModelBRiskManager:
             "weekly_loss_limit_usdt": round(self.weekly_loss_limit, 2),
             "open_positions_count": len(self.open_trades),
             "max_open_positions": self.max_open_positions,
+            "max_open_per_direction": self.max_open_per_direction,
             "weekly_entries_count": self.weekly_entries_count,
             "live_trading_locked": self.live_trading_locked,
             # *_active = raw breach of the unchanged baseline limit; *_enforced = actually blocking entries.
