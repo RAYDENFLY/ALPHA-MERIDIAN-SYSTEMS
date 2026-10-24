@@ -33,7 +33,7 @@ class ModelBRiskManager:
         trade_risk_usdt: float = 1.0,
         daily_loss_limit_usdt: float = 3.0,
         weekly_loss_limit_usdt: float = 7.5,
-        max_open_positions: int = 3,
+        max_open_positions: int = 10,
         diagnostic_override_active: bool = False,
         entry_kill_switch: bool = False,
         live_trading_locked: bool = True,

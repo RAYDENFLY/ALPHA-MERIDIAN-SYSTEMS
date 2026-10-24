@@ -14,6 +14,13 @@
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/components.css">
     <link rel="stylesheet" href="/static/css/charts.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<style>
+.model-d-terminal{--md-surface:rgba(15,23,42,.72);--md-border:rgba(71,85,105,.55)}
+.model-d-hero{display:flex;gap:1.25rem;justify-content:space-between;align-items:flex-end;padding:1.2rem 1.25rem;border:1px solid var(--md-border);border-radius:.75rem;background:linear-gradient(110deg,rgba(15,23,42,.94),rgba(9,15,29,.82))}
+.model-d-eyebrow{font:600 10px/1.4 ui-monospace,SFMono-Regular,monospace;letter-spacing:.16em;color:#a5b4fc}.model-d-hero h2{margin:.45rem 0 0;font-size:1.25rem;color:#f8fafc}.model-d-hero p,.model-d-panel-head p{margin:.3rem 0 0;font-size:.72rem;line-height:1.45;color:#94a3b8}.model-d-hero-controls{display:flex;align-items:end;gap:.5rem;flex-wrap:wrap}.model-d-hero-controls label,.model-d-filters label{font:600 10px/1.3 ui-monospace,SFMono-Regular,monospace;letter-spacing:.08em;color:#94a3b8}.model-d-hero-controls input,.model-d-filters input,.model-d-filters select{display:block;margin-top:.3rem;min-height:2.35rem;border:1px solid #334155;border-radius:.45rem;background:#0f172a;padding:.45rem .65rem;color:#f8fafc;font:500 .75rem ui-monospace,SFMono-Regular,monospace;outline:none}.model-d-hero-controls input:focus,.model-d-filters input:focus,.model-d-filters select:focus{border-color:#818cf8;box-shadow:0 0 0 3px rgba(129,140,248,.2)}.model-d-lock,.model-d-status{display:inline-flex;align-items:center;min-height:1.5rem;padding:.18rem .45rem;border:1px solid #475569;border-radius:.35rem;font:600 9px ui-monospace,SFMono-Regular,monospace;letter-spacing:.08em;color:#cbd5e1}.model-d-status[data-state=disabled]{border-color:#92400e;color:#fbbf24}.model-d-status[data-state=unavailable],.model-d-status[data-state=error]{border-color:#991b1b;color:#fca5a5}.model-d-status[data-state=live]{border-color:#166534;color:#86efac}.model-d-panel{min-width:0;border:1px solid var(--md-border);border-radius:.75rem;background:var(--md-surface);padding:1rem}.model-d-panel-head{display:flex;justify-content:space-between;gap:1rem;align-items:start;margin-bottom:.8rem}.model-d-panel h3{margin:0;color:#f8fafc;font-size:.82rem;font-weight:650}.model-d-muted{color:#64748b;font:500 .68rem ui-monospace,SFMono-Regular,monospace}.model-d-kpi{min-width:0;border:1px solid var(--md-border);border-radius:.65rem;background:rgba(15,23,42,.55);padding:.75rem}.model-d-kpi span{display:block;color:#64748b;font:600 9px ui-monospace,SFMono-Regular,monospace;text-transform:uppercase;letter-spacing:.08em}.model-d-kpi strong{display:block;margin-top:.35rem;color:#e2e8f0;font:600 1rem ui-monospace,SFMono-Regular,monospace}.model-d-table-wrap{overflow-x:auto}.model-d-table{width:100%;border-collapse:collapse;min-width:760px;font-size:.7rem}.model-d-table th{padding:.55rem .6rem;text-align:left;color:#64748b;font:600 9px ui-monospace,SFMono-Regular,monospace;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}.model-d-table td{padding:.65rem .6rem;border-top:1px solid rgba(51,65,85,.55);color:#cbd5e1;vertical-align:top}.model-d-table tr:hover td{background:rgba(51,65,85,.16)}.model-d-filters{display:flex;flex-wrap:wrap;align-items:end;gap:.6rem;margin-bottom:.9rem}.model-d-filters label{min-width:7rem}.model-d-filters .model-d-button{min-height:2.35rem;border:1px solid #475569;border-radius:.45rem;background:#1e293b;padding:.45rem .7rem;color:#cbd5e1;font-size:.7rem}.model-d-filters .model-d-button:hover{background:#334155}.model-d-data-list{min-height:3rem;color:#cbd5e1;font-size:.72rem}.model-d-data-row{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid rgba(51,65,85,.45)}.model-d-data-row span:first-child{color:#64748b}.model-d-details{margin-top:.8rem;border-top:1px solid rgba(51,65,85,.5);padding-top:.65rem;color:#94a3b8;font-size:.7rem}.model-d-details summary{cursor:pointer;min-height:2rem}.model-d-details pre{max-height:14rem;overflow:auto;white-space:pre-wrap;color:#94a3b8;font:500 .65rem/1.5 ui-monospace,SFMono-Regular,monospace}.model-d-skeleton{border:1px solid var(--md-border);border-radius:.65rem;background:linear-gradient(90deg,rgba(15,23,42,.7),rgba(30,41,59,.7),rgba(15,23,42,.7));background-size:200% 100%;animation:model-d-shimmer 1.6s ease-in-out infinite}@keyframes model-d-shimmer{to{background-position:-200% 0}}
+@media (max-width:800px){.model-d-hero{align-items:stretch;flex-direction:column}.model-d-hero-controls{align-items:stretch}.model-d-hero-controls label{flex:1}.model-d-hero-controls input{width:100%}.model-d-lock{min-height:2rem}.model-d-filters label{flex:1 1 9rem}.model-d-filters .model-d-button{width:100%}}
+</style>
 </head>
 <body class="min-h-screen text-slate-200 antialiased bg-[#080b11]">
     <div class="terminal-shell space-y-3">
@@ -26,6 +33,9 @@
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
                     </span>
+                    <button type="button" onclick="toggleMobileSidebar()" class="lg:hidden p-1 rounded text-slate-400 hover:text-white bg-slate-800 border border-slate-700" title="Toggle Navigation Sidebar">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
                     <h1 class="text-base font-extrabold tracking-tight text-white font-mono flex items-center">
                         SIGNALGENERATOR
                         <span class="text-blue-400 text-xs font-semibold ml-2 hidden sm:inline px-1.5 py-0.5 rounded bg-blue-950/60 border border-blue-800/60 font-mono">TERMINAL v2.5</span>
@@ -230,70 +240,194 @@
             </div>
         </div>
 
-        <!-- Terminal Module Navigation Dock -->
-        <div class="card-bg p-1.5 rounded-lg border border-[#1c2436] space-y-1.5">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
-                <div class="flex items-center gap-1 overflow-x-auto" id="navCategoryPills">
-                    <button type="button" onclick="setNavCategory('all')" id="navCat-all" class="px-2.5 py-1 text-xs font-semibold rounded bg-blue-600 text-white shadow-sm transition" data-i18n="tab_nav_category_all">All Modules (10)</button>
-                    <button type="button" onclick="setNavCategory('exec')" id="navCat-exec" class="px-2.5 py-1 text-xs font-medium rounded bg-[#131929] hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition" data-i18n="tab_nav_category_exec">Execution (4)</button>
-                    <button type="button" onclick="setNavCategory('models')" id="navCat-models" class="px-2.5 py-1 text-xs font-medium rounded bg-[#131929] hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition" data-i18n="tab_nav_category_models">Strategy &amp; Models (2)</button>
-                    <button type="button" onclick="setNavCategory('intel')" id="navCat-intel" class="px-2.5 py-1 text-xs font-medium rounded bg-[#131929] hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition" data-i18n="tab_nav_category_intel">Market Intelligence (4)</button>
-                </div>
-                <div class="text-[10px] font-mono text-slate-500 hidden md:flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>AsterDEX WebSocket &bull; Coinglass Multi-Exchange Normalizer</span>
-                </div>
-            </div>
+        <!-- Main Application Shell with Expandable Responsive Sidebar -->
+        <div class="app-container relative">
+            
+            <!-- Mobile Backdrop -->
+            <div id="sidebarMobileBackdrop" onclick="toggleMobileSidebar()" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"></div>
 
-            <!-- Tab Navigation Strip -->
-            <div class="flex items-center gap-1.5 overflow-x-auto pt-1 pb-0.5 scrollbar-none border-t border-slate-800/60 text-xs font-medium" id="mainTabStrip">
-                <button onclick="switchTab('setups')" id="tabBtn-setups" data-nav-cat="exec" class="px-3 py-1.5 rounded text-white bg-blue-600/20 border border-blue-500/60 whitespace-nowrap flex items-center gap-1.5 font-semibold transition">
-                    <span data-i18n="tab_setups">Candidate Setups</span>
-                </button>
-                <button onclick="switchTab('watchlist')" id="tabBtn-watchlist" data-nav-cat="exec" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent whitespace-nowrap flex items-center gap-1.5 transition">
-                    <span data-i18n="tab_watchlist">Watchlist &amp; Controls</span>
-                </button>
-                <button onclick="switchTab('journal')" id="tabBtn-journal" data-nav-cat="exec" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent whitespace-nowrap flex items-center gap-1.5 transition">
-                    <span data-i18n="tab_journal">Trading Journal</span>
-                </button>
-                <button onclick="switchTab('alerts')" id="tabBtn-alerts" data-nav-cat="exec" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent flex items-center gap-1.5 whitespace-nowrap transition">
-                    <span data-i18n="tab_alerts">Price Alerts</span>
-                    <span id="alertsActiveBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-900 text-indigo-300 font-bold border border-indigo-700">0</span>
-                </button>
-                <button onclick="switchTab('model_b')" id="tabBtn-model_b" data-nav-cat="models" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent flex items-center gap-1.5 whitespace-nowrap transition">
-                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                    <span data-i18n="tab_model_b">Model B (Liquidity Engine)</span>
-                    <span id="modelBBadge" class="px-1.5 py-0.2 rounded text-[9px] bg-amber-900/60 text-amber-300 font-bold border border-amber-700">RESEARCH</span>
-                </button>
-                <button onclick="switchTab('model_d')" id="tabBtn-model_d" data-nav-cat="models" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent whitespace-nowrap transition">
-                    <span data-i18n="tab_model_d">Model D (Order Flow Research)</span>
-                    <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-slate-400 border border-slate-700">PAPER</span>
-                </button>
-                <button onclick="switchTab('backtest')" id="tabBtn-backtest" data-nav-cat="models" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent whitespace-nowrap flex items-center gap-1.5 transition">
-                    <span data-i18n="tab_backtest">Historical Backtest</span>
-                </button>
-                <button onclick="switchTab('demand_zone')" id="tabBtn-demand_zone" data-nav-cat="intel" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent flex items-center gap-1.5 whitespace-nowrap transition">
-                    <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                    <span data-i18n="tab_market_screener">Market Screener</span>
-                    <span id="screenerTabBadge" class="px-1.5 py-0.2 rounded text-[9px] bg-blue-900/60 text-blue-300 font-bold border border-blue-700 font-mono">4 VENUES</span>
-                </button>
-                <button onclick="switchTab('liquidity_intel')" id="tabBtn-liquidity_intel" data-nav-cat="intel" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent flex items-center gap-1.5 whitespace-nowrap transition">
-                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                    <span data-i18n="tab_liquidity_intel">Market Liquidity Intelligence</span>
-                    <span class="px-1.5 py-0.2 rounded text-[9px] bg-cyan-950 text-cyan-300 font-bold border border-cyan-800">HEATMAP &amp; WHALES</span>
-                </button>
-                <button onclick="switchTab('sweep_chart')" id="tabBtn-sweep_chart" data-nav-cat="intel" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent flex items-center gap-1.5 whitespace-nowrap transition">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span data-i18n="tab_sweep_chart">Liquidity Sweep Chart</span>
-                    <span class="px-1.5 py-0.2 rounded text-[9px] bg-emerald-950 text-emerald-300 font-bold border border-emerald-800">INTERACTIVE</span>
-                </button>
-                <button onclick="switchTab('ai_analyst')" id="tabBtn-ai_analyst" data-nav-cat="intel" class="px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent flex items-center gap-1.5 whitespace-nowrap transition">
-                    <span class="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
-                    <span data-i18n="tab_ai_analyst">AI Analyst</span>
-                    <span id="aiAnalystTabBadge" class="px-1.5 py-0.2 rounded text-[9px] bg-purple-950 text-purple-300 font-bold border border-purple-800 font-mono">GROQ REASONER</span>
-                </button>
-            </div>
-        </div>
+            <!-- Expandable Sidebar Navigation -->
+            <aside id="sidebarNav" class="sidebar-nav rounded-lg border border-[#1c2436] p-2 space-y-2 select-none">
+                <!-- Sidebar Top Controls: Mini-Sidebar Toggle -->
+                <div class="flex items-center justify-between px-2 py-1.5 border-b border-slate-800/80">
+                    <span class="sidebar-text text-[11px] font-bold uppercase tracking-wider text-slate-400 font-mono">Navigation</span>
+                    <button type="button" onclick="toggleSidebarCollapse()" class="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Toggle Mini-Sidebar Mode">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+                    </button>
+                </div>
+
+                <div class="space-y-1.5 overflow-y-auto max-h-[calc(100vh-160px)] pr-0.5">
+                    
+                    <!-- 1. OVERVIEW -->
+                    <div class="space-y-0.5">
+                        <button type="button" onclick="toggleCategoryAccordion('overview')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-house sidebar-icon" aria-hidden="true"></i>
+                                <span class="sidebar-cat-title text-[11px] uppercase tracking-wider font-mono">Overview</span>
+                            </span>
+                            <svg id="catChevron-overview" class="chevron w-3.5 h-3.5 transform rotate-180 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="catGroup-overview" class="space-y-0.5 pl-1">
+                            <button type="button" onclick="switchTab('setups')" id="sideBtn-setups" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-crosshairs sidebar-icon text-blue-400" aria-hidden="true"></i>
+                                <span class="sidebar-text">Overview</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. TRADING & SIGNALS -->
+                    <div class="space-y-0.5">
+                        <button type="button" onclick="toggleCategoryAccordion('trading')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-bolt sidebar-icon" aria-hidden="true"></i>
+                                <span class="sidebar-cat-title text-[11px] uppercase tracking-wider font-mono">Trading &amp; Signals</span>
+                            </span>
+                            <svg id="catChevron-trading" class="chevron w-3.5 h-3.5 transform rotate-180 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="catGroup-trading" class="space-y-0.5 pl-1">
+                            <button type="button" onclick="switchTab('watchlist')" id="sideBtn-watchlist" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-list-check sidebar-icon text-indigo-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Watchlist &amp; Controls</span>
+                                </span>
+                            </button>
+                            <button type="button" onclick="switchTab('journal')" id="sideBtn-journal" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-book-open sidebar-icon text-emerald-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Trading Journal</span>
+                                </span>
+                            </button>
+                            <button type="button" onclick="switchTab('alerts')" id="sideBtn-alerts" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-bell sidebar-icon text-amber-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Price Alerts</span>
+                                </span>
+                                <span id="alertsActiveBadge" class="sidebar-badge hidden px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-900 text-indigo-300 font-bold border border-indigo-700">0</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 3. MARKET INTELLIGENCE -->
+                    <div class="space-y-0.5">
+                        <button type="button" onclick="toggleCategoryAccordion('intel')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-water sidebar-icon" aria-hidden="true"></i>
+                                <span class="sidebar-cat-title text-[11px] uppercase tracking-wider font-mono">Market Intel</span>
+                            </span>
+                            <svg id="catChevron-intel" class="chevron w-3.5 h-3.5 transform rotate-180 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="catGroup-intel" class="space-y-0.5 pl-1">
+                            <button type="button" onclick="switchTab('liquidity_intel')" id="sideBtn-liquidity_intel" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-water sidebar-icon text-cyan-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Liquidity Intelligence</span>
+                                </span>
+                            </button>
+                            <button type="button" onclick="switchTab('sweep_chart')" id="sideBtn-sweep_chart" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-chart-line sidebar-icon text-teal-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Liquidity Sweep Chart</span>
+                                </span>
+                            </button>
+                            <button type="button" onclick="switchTab('demand_zone')" id="sideBtn-demand_zone" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-filter sidebar-icon text-blue-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Market Screener</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4. AI & RESEARCH -->
+                    <div class="space-y-0.5">
+                        <button type="button" onclick="toggleCategoryAccordion('ai_research')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-brain sidebar-icon" aria-hidden="true"></i>
+                                <span class="sidebar-cat-title text-[11px] uppercase tracking-wider font-mono">AI &amp; Research</span>
+                            </span>
+                            <svg id="catChevron-ai_research" class="chevron w-3.5 h-3.5 transform rotate-180 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="catGroup-ai_research" class="space-y-0.5 pl-1">
+                            <button type="button" onclick="switchTab('model_a')" id="sideBtn-model_a" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-shield-halved sidebar-icon text-blue-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Model A Engine</span>
+                                </span>
+                                <span class="sidebar-badge px-1.5 py-0.2 rounded text-[9px] bg-blue-950/80 text-blue-300 font-bold border border-blue-800">FROZEN</span>
+                            </button>
+                            <button type="button" onclick="switchTab('model_b')" id="sideBtn-model_b" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-brain sidebar-icon text-amber-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Model B Engine</span>
+                                </span>
+                                <span class="sidebar-badge px-1.5 py-0.2 rounded text-[9px] bg-amber-900/60 text-amber-300 font-bold border border-amber-700">PAPER</span>
+                            </button>
+                            <button type="button" onclick="switchTab('model_d')" id="sideBtn-model_d" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-arrows-left-right-to-line sidebar-icon text-slate-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Model D Order Flow</span>
+                                </span>
+                                <span class="sidebar-badge px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-slate-400 border border-slate-700">PAPER</span>
+                            </button>
+                            <button type="button" onclick="switchTab('ai_analyst')" id="sideBtn-ai_analyst" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-robot sidebar-icon text-purple-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">AI Analyst (Groq)</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 5. EXCHANGE & DATA -->
+                    <div class="space-y-0.5">
+                        <button type="button" onclick="toggleCategoryAccordion('exchange_data')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-database sidebar-icon" aria-hidden="true"></i>
+                                <span class="sidebar-cat-title text-[11px] uppercase tracking-wider font-mono">Exchange &amp; Data</span>
+                            </span>
+                            <svg id="catChevron-exchange_data" class="chevron w-3.5 h-3.5 transform rotate-180 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="catGroup-exchange_data" class="space-y-0.5 pl-1">
+                            <button type="button" onclick="switchTab('backtest')" id="sideBtn-backtest" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-clock-rotate-left sidebar-icon text-slate-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Historical Backtest</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 6. SETTINGS -->
+                    <div class="space-y-0.5">
+                        <button type="button" onclick="toggleCategoryAccordion('settings')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-gear sidebar-icon" aria-hidden="true"></i>
+                                <span class="sidebar-cat-title text-[11px] uppercase tracking-wider font-mono">Settings</span>
+                            </span>
+                            <svg id="catChevron-settings" class="chevron w-3.5 h-3.5 transform rotate-180 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="catGroup-settings" class="space-y-0.5 pl-1">
+                            <button type="button" onclick="openAIAnalystConfigModal()" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-sliders sidebar-icon text-slate-500" aria-hidden="true"></i>
+                                    <span class="sidebar-text">AI Analyst Config</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="pt-2 border-t border-slate-800/60 text-[10px] font-mono text-slate-500 px-2 sidebar-text">
+                    <div>AsterDEX &bull; Hyperliquid</div>
+                    <div class="text-[9px] text-slate-600 mt-0.5">Mode: PAPER RESEARCH</div>
+                </div>
+            </aside>
+
+            <!-- Main Content Container with all Tabs -->
+            <main class="main-content space-y-4">
 
         <!-- TAB 1: CANDIDATE SETUPS -->
         <div id="tab-setups" class="space-y-4">
@@ -454,7 +588,7 @@
                 </div>
 
                 <!-- Backtest Comparison Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Deterministic Baseline -->
                     <div class="card-inner p-4 rounded-lg border border-slate-700">
                         <div class="flex items-center justify-between">
@@ -698,6 +832,10 @@
                             <span class="w-2 h-2 rounded-full bg-slate-400"></span>
                             <span>Breakeven</span>
                         </button>
+                        <button onclick="setJournalOutcomeFilter('SHORT_LOSS')" id="jOutcome-SHORT_LOSS" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-800/80 transition flex items-center gap-1 font-semibold" title="Filter trades with Direction=SHORT and Net PnL < 0">
+                            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                            <span>SHORT + Loss</span>
+                        </button>
                         <button onclick="setJournalOutcomeFilter('OPEN')" id="jOutcome-OPEN" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
                             <span class="w-2 h-2 rounded-full bg-blue-400"></span>
                             <span>Open Positions</span>
@@ -748,18 +886,19 @@
                     <table class="w-full text-left text-xs font-mono">
                         <thead class="text-[11px] text-slate-400 uppercase bg-slate-900 border-b border-slate-800">
                             <tr>
-                                <th class="px-3 py-3">Trade / Setup ID</th>
+                                <th class="px-3 py-3">Trade / Setup ID / Source</th>
                                 <th class="px-3 py-3">Model</th>
                                 <th class="px-3 py-3">Symbol & Side</th>
-                                <th class="px-3 py-3">Entry Category</th>
-                                <th class="px-3 py-3">Entry (UTC / Price)</th>
-                                <th class="px-3 py-3">Exit (UTC / Price)</th>
+                                <th class="px-3 py-3">Category & Setup Reason</th>
+                                <th class="px-3 py-3">Opened At (WIB / Price)</th>
+                                <th class="px-3 py-3">Closed At (WIB / Price)</th>
                                 <th class="px-3 py-3">SL / TP Targets</th>
-                                <th class="px-3 py-3">Duration</th>
+                                <th class="px-3 py-3">Duration & Excursions (MFE/MAE)</th>
                                 <th class="px-3 py-3">Gross PnL</th>
                                 <th class="px-3 py-3">Total Fees</th>
                                 <th class="px-3 py-3">Net PnL & Outcome</th>
                                 <th class="px-3 py-3">Exit Reason</th>
+                                <th class="px-3 py-3 text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody id="journalTableBody" class="divide-y divide-slate-800/80">
@@ -1029,19 +1168,410 @@
 
         </div>
 
+        <!-- TAB: MODEL A DEFENSIVE SMC & SNR PERPETUAL ENGINE (READ-ONLY) -->
+        <div id="tab-model_a" class="hidden space-y-5">
+            <!-- Section A: Strategy Status & Safety Invariants Banner -->
+            <div class="card-bg p-5 rounded-xl border border-blue-800/60 bg-gradient-to-r from-blue-950/30 via-slate-900/90 to-slate-950/80 space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-3.5">
+                    <div class="space-y-1.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <i class="fa-solid fa-shield-halved text-blue-400 text-base"></i>
+                            <h2 class="text-lg font-bold text-white tracking-wide font-mono">Model A: Defensive SMC &amp; SnR Perpetual Engine</h2>
+                            <span id="modelAStateBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-blue-950 text-blue-300 border border-blue-700">CHECKING...</span>
+                            <span id="modelAPaperBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-950 text-amber-300 border border-amber-700">PAPER ONLY &bull; LIVE LOCKED</span>
+                            <span id="modelAConfigIdBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-300 border border-slate-700">MODEL_A_FROZEN_v1.0.0</span>
+                        </div>
+                        <p class="text-xs text-slate-400 max-w-3xl leading-relaxed">
+                            Defensive institutional Smart Money Concepts (72H Dealing Range Premium/Discount, Order Blocks, Fair Value Gaps, Liquidity Sweeps) &amp; Multi-Timeframe Support/Resistance (4H Bias + 1H Execution). Strictly isolated from Model B (`model_id="MODEL_A"`). Read-only forward validation cohort baseline.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2.5 self-start md:self-center">
+                        <button type="button" onclick="loadModelA()" id="modelARefreshBtn" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs rounded-lg border border-slate-700 transition flex items-center gap-2">
+                            <i class="fa-solid fa-rotate text-blue-400" id="modelARefreshIcon"></i>
+                            <span>Refresh Telemetry</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Strategy Status KPI Strip -->
+                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                    <div class="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Engine State</div>
+                        <div class="text-sm font-bold text-white font-mono mt-1" id="modelAStatusState">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono mt-0.5 truncate" id="modelAStatusProcess">--</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Execution Lock</div>
+                        <div class="text-sm font-bold text-emerald-400 font-mono mt-1" id="modelAStatusLock">PAPER / LIVE LOCKED</div>
+                        <div class="text-[10px] text-slate-500 font-mono mt-0.5" id="modelAStatusMode">Mode: --</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Scanner Health</div>
+                        <div class="text-sm font-bold text-sky-400 font-mono mt-1" id="modelAStatusHealth">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono mt-0.5" id="modelAStatusWorker">Worker: --</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Last Scan (WIB)</div>
+                        <div class="text-sm font-bold text-white font-mono mt-1" id="modelAStatusLastScan">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono mt-0.5" id="modelAStatusLastSuccess">Last OK: --</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Scan Cycles</div>
+                        <div class="text-sm font-bold text-indigo-300 font-mono mt-1" id="modelAStatusScanCycles">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono mt-0.5" id="modelAStatusSessionScans">Session: 0</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">Active Config ID</div>
+                        <div class="text-sm font-bold text-slate-200 font-mono mt-1 truncate" id="modelAStatusConfigId">--</div>
+                        <div class="text-[10px] text-blue-400 font-mono mt-0.5">Read-Only Frozen</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section B: Strategy Configuration (Read-Only) -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-lock text-slate-400 text-xs"></i>
+                        <h3 class="text-sm font-bold text-white tracking-wide font-mono uppercase">Strategy Configuration (Read-Only Frozen Baseline)</h3>
+                    </div>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-700">IMMUTABLE IN UI</span>
+                </div>
+
+                <!-- Whitelisted Symbols Strip -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs font-mono text-slate-400">
+                        <span>Whitelisted Perpetual Universe (<strong id="modelAConfigSymbolCount" class="text-white">11</strong> Symbols on AsterDEX):</span>
+                        <span id="modelAConfigTimeframesLabel" class="text-blue-400">Bias: 4h &bull; Structure &amp; Execution: 1h &bull; Macro Window: 170 bars (7D)</span>
+                    </div>
+                    <div id="modelAConfigSymbolsList" class="flex flex-wrap gap-1.5 pt-1">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- 3-Column Frozen Parameters Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                    <!-- Column 1: SMC & Dealing Range Thresholds -->
+                    <div class="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-2">
+                        <div class="text-xs font-bold text-blue-400 font-mono uppercase border-b border-slate-800 pb-1.5">SMC &amp; Dealing Range Rules</div>
+                        <div id="modelAConfigStrategyParams" class="space-y-1.5 text-xs font-mono">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Risk & Capital Governance ($16 Tier) -->
+                    <div class="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-2">
+                        <div class="text-xs font-bold text-emerald-400 font-mono uppercase border-b border-slate-800 pb-1.5">Risk &amp; Sizing Governance</div>
+                        <div id="modelAConfigRiskParams" class="space-y-1.5 text-xs font-mono">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Column 3: ML Calibration & Cohort Anchor -->
+                    <div class="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-2">
+                        <div class="text-xs font-bold text-purple-400 font-mono uppercase border-b border-slate-800 pb-1.5">ML Ranking &amp; Cohort Anchor</div>
+                        <div id="modelAConfigCohortParams" class="space-y-1.5 text-xs font-mono">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section C: Forward Validation Cohort & Candidate vs Execution Funnel -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-filter-circle-dollar text-indigo-400 text-xs"></i>
+                        <h3 class="text-sm font-bold text-white tracking-wide font-mono uppercase">Forward Validation Cohort &amp; Evaluation Funnel</h3>
+                        <span id="modelACohortStatusBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-950 text-amber-300 border border-amber-700">UNPROVEN</span>
+                    </div>
+                    <span class="text-xs font-mono text-slate-400" id="modelACohortStartDisplay">Cohort Anchor: --</span>
+                </div>
+
+                <div id="modelACohortExplanationBanner" class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-xs font-mono text-slate-300">
+                    Loading forward validation cohort state...
+                </div>
+
+                <!-- Funnel Metrics: Clearly Distinguishing Candidate Setups from Paper Fills -->
+                <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2.5">
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">1H Candles Cached</div>
+                        <div class="text-base font-bold text-white font-mono mt-1" id="modelAFunnelCandles1h">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAFunnelCandles4h">4H: --</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Bar Evaluations</div>
+                        <div class="text-base font-bold text-slate-200 font-mono mt-1" id="modelAFunnelBarEvals">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAFunnelScanCycles">Cycles: --</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Candidate Setups</div>
+                        <div class="text-base font-bold text-indigo-300 font-mono mt-1" id="modelAFunnelCandidates">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono">Persisted Setups</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Valid / READY Setups</div>
+                        <div class="text-base font-bold text-emerald-400 font-mono mt-1" id="modelAFunnelValidSetups">0</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAFunnelWatchlistSetups">Watchlist: 0</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Rejected Setups</div>
+                        <div class="text-base font-bold text-amber-400 font-mono mt-1" id="modelAFunnelRejectedSetups">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAFunnelInfeasibleSub">Infeasible / Stale</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Paper Orders</div>
+                        <div class="text-base font-bold text-sky-400 font-mono mt-1" id="modelAFunnelPaperOrders">0</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAFunnelPendingOrders">Pending: 0</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Paper Fills</div>
+                        <div class="text-base font-bold text-white font-mono mt-1" id="modelAFunnelOrdersFilled">0</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAFunnelOpenPos">Open Pos: 0</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Completed Trades</div>
+                        <div class="text-base font-bold text-white font-mono mt-1" id="modelAFunnelCompletedTrades">0 / 30</div>
+                        <div class="text-[10px] text-amber-400 font-mono" id="modelAFunnelSampleReq">Req Sample: 30</div>
+                    </div>
+                </div>
+
+                <!-- Rejection Reasons Breakdown (Pre-Screen & Candidate Level) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div class="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                            <span class="text-xs font-bold text-slate-300 font-mono uppercase">Pre-Screen Bar Rejection Reasons (`paper_lifecycle_events`)</span>
+                            <span class="text-[10px] font-mono text-slate-500">MODEL_A ONLY</span>
+                        </div>
+                        <div id="modelAPreScreenRejections" class="space-y-1.5 text-xs font-mono">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <div class="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                            <span class="text-xs font-bold text-slate-300 font-mono uppercase">Candidate Setup Status &amp; Rejection Breakdown (`setup_candidates`)</span>
+                            <span class="text-[10px] font-mono text-slate-500">MODEL_A ONLY</span>
+                        </div>
+                        <div id="modelACandidateRejections" class="space-y-1.5 text-xs font-mono">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section F: Validation Metrics (with explicit INSUFFICIENT_SAMPLE handling) -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-emerald-400 text-xs"></i>
+                        <h3 class="text-sm font-bold text-white tracking-wide font-mono uppercase">Model A Validation Metrics</h3>
+                        <span id="modelAValidationSampleBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-950 text-amber-300 border border-amber-700">INSUFFICIENT_SAMPLE</span>
+                    </div>
+                    <span class="text-xs font-mono text-slate-400">Minimum Required Sample: <strong>30 Completed Paper Trades</strong></span>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Completed Trades</div>
+                        <div class="text-base font-bold text-white font-mono mt-1" id="modelAMetricCompleted">0 / 30</div>
+                        <div class="text-[10px] text-amber-400 font-mono" id="modelAMetricSampleStatus">INSUFFICIENT_SAMPLE</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Win Rate</div>
+                        <div class="text-base font-bold text-slate-200 font-mono mt-1" id="modelAMetricWinRate">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAMetricWinLossSub">0W / 0L / 0BE</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Net Realized PnL</div>
+                        <div class="text-base font-bold text-slate-200 font-mono mt-1" id="modelAMetricNetPnl">$0.0000</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAMetricFeesSub">Fees: $0.0000</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Expectancy / Trade</div>
+                        <div class="text-base font-bold text-slate-200 font-mono mt-1" id="modelAMetricExpectancy">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono">Net USDT / Trade</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Profit Factor</div>
+                        <div class="text-base font-bold text-slate-200 font-mono mt-1" id="modelAMetricProfitFactor">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono">Gross Win / Loss</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Max Drawdown</div>
+                        <div class="text-base font-bold text-slate-200 font-mono mt-1" id="modelAMetricMaxDD">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono">Realized Peak-to-Trough</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Avg Win / Avg Loss</div>
+                        <div class="text-base font-bold text-slate-200 font-mono mt-1" id="modelAMetricAvgWinLoss">-- / --</div>
+                        <div class="text-[10px] text-slate-500 font-mono">Realized USDT</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Long vs Short</div>
+                        <div class="text-xs font-bold text-slate-200 font-mono mt-1" id="modelAMetricLongShort">L: 0 ($0.00) | S: 0 ($0.00)</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelAMetricLongShortWR">WR: -- / --</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section D: Model A Open Paper Positions -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-blue-400 text-xs"></i>
+                        <h3 class="text-sm font-bold text-white tracking-wide font-mono uppercase">Model A Open Paper Positions</h3>
+                        <span id="modelAOpenPosCountBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-900 text-slate-300 border border-slate-700">0 / 1 Open</span>
+                    </div>
+                    <span class="text-[11px] font-mono text-slate-400">Strictly Isolated (`model_id = "MODEL_A"`)</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="terminal-table w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-[10px] uppercase font-mono text-slate-400">
+                                <th class="py-2 px-3">Symbol &amp; Side</th>
+                                <th class="py-2 px-3">Entry / Mark Price</th>
+                                <th class="py-2 px-3">Size &amp; Margin</th>
+                                <th class="py-2 px-3">Stop Loss / Take Profit</th>
+                                <th class="py-2 px-3">Unrealized PnL</th>
+                                <th class="py-2 px-3">Position Age</th>
+                                <th class="py-2 px-3">Source Strategy</th>
+                                <th class="py-2 px-3 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelAOpenPositionsBody" class="divide-y divide-slate-800/60 text-xs font-mono">
+                            <tr>
+                                <td colspan="8" class="py-6 text-center text-slate-500">Loading Model A open positions...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section E: Model A Trade Journal -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-book text-emerald-400 text-xs"></i>
+                        <h3 class="text-sm font-bold text-white tracking-wide font-mono uppercase">Model A Paper Trade Journal</h3>
+                        <span id="modelAJournalCountBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-900 text-slate-300 border border-slate-700">0 Records</span>
+                    </div>
+                    <span class="text-[11px] font-mono text-slate-400">Timestamps in Asia/Jakarta (WIB / UTC+7) &bull; `model_id = "MODEL_A"`</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="terminal-table w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-[10px] uppercase font-mono text-slate-400">
+                                <th class="py-2 px-3">Entry / Exit (WIB)</th>
+                                <th class="py-2 px-3">Symbol &amp; Side</th>
+                                <th class="py-2 px-3">Entry / Exit Price</th>
+                                <th class="py-2 px-3">Entry / Exit Reasons</th>
+                                <th class="py-2 px-3">Realized Net PnL</th>
+                                <th class="py-2 px-3">Fees &amp; Funding</th>
+                                <th class="py-2 px-3">MAE / MFE</th>
+                                <th class="py-2 px-3">Outcome</th>
+                                <th class="py-2 px-3 text-right">Inspector</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelATradeJournalBody" class="divide-y divide-slate-800/60 text-xs font-mono">
+                            <tr>
+                                <td colspan="9" class="py-6 text-center text-slate-500">Loading Model A trade journal...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section G: Diagnostics & Per-Symbol Data Freshness Audit -->
+            <div class="card-bg p-5 rounded-xl border border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-stethoscope text-sky-400 text-xs"></i>
+                        <h3 class="text-sm font-bold text-white tracking-wide font-mono uppercase">Model A Scanner Diagnostics &amp; Data Freshness</h3>
+                    </div>
+                    <span id="modelADiagFreshnessBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-900 text-slate-300 border border-slate-700">CHECKING</span>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2.5">
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Scanner Errors</div>
+                        <div class="text-sm font-bold text-emerald-400 font-mono mt-1 truncate" id="modelADiagErrors">None</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelADiagFailedCycles">Failed Cycles: 0</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Market Data State</div>
+                        <div class="text-sm font-bold text-amber-400 font-mono mt-1" id="modelADiagStaleState">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelADiagCandleAge">Age: --</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Missing Candles</div>
+                        <div class="text-sm font-bold text-white font-mono mt-1" id="modelADiagMissingCandles">0 Symbols</div>
+                        <div class="text-[10px] text-slate-500 font-mono">Min 170x 1H / 40x 4H</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Invalidated Setups</div>
+                        <div class="text-sm font-bold text-rose-400 font-mono mt-1" id="modelADiagInvalidated">0</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelADiagStaleSetups">Stale Setups: 0</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Infeasible Setups</div>
+                        <div class="text-sm font-bold text-amber-300 font-mono mt-1" id="modelADiagInfeasible">0</div>
+                        <div class="text-[10px] text-slate-500 font-mono">$5 Min Notional Gate</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Pending Orders</div>
+                        <div class="text-sm font-bold text-sky-400 font-mono mt-1" id="modelADiagPendingOrders">0</div>
+                        <div class="text-[10px] text-slate-500 font-mono">12H Limit Order TTL</div>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <div class="text-[10px] text-slate-400 font-mono uppercase">Last Successful Scan</div>
+                        <div class="text-xs font-bold text-white font-mono mt-1" id="modelADiagLastSuccess">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="modelADiagMetadataState">Specs: --</div>
+                    </div>
+                </div>
+
+                <!-- Watchlist Symbol Candle Sync & Freshness Table -->
+                <div class="overflow-x-auto pt-1">
+                    <table class="terminal-table w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-[10px] uppercase font-mono text-slate-400">
+                                <th class="py-2 px-3">Symbol</th>
+                                <th class="py-2 px-3">Watchlist Status</th>
+                                <th class="py-2 px-3">1H Candles (Req &ge; 170)</th>
+                                <th class="py-2 px-3">4H Candles (Req &ge; 40)</th>
+                                <th class="py-2 px-3">Latest 1H Bar (WIB)</th>
+                                <th class="py-2 px-3">Last DB Sync (WIB)</th>
+                                <th class="py-2 px-3">Candle Age</th>
+                                <th class="py-2 px-3">Freshness</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelADiagSymbolTableBody" class="divide-y divide-slate-800/60 text-xs font-mono">
+                            <tr>
+                                <td colspan="8" class="py-4 text-center text-slate-500">Loading symbol candle diagnostics...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- TAB 6: MODEL B AGGRESSIVE LIQUIDITY RESEARCH ENGINE -->
-        <div id="tab-model_d" class="hidden space-y-4">
-            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-                <div><h2 class="text-lg font-bold text-white">Model D — Whale &amp; Order Flow Intelligence</h2><p class="text-xs text-slate-400">Read-only AsterDEX perpetual research. Scores are heuristic, not calibrated probabilities.</p></div>
-                <label class="text-xs text-slate-400">Symbol <input id="modelDSymbol" value="BTCUSDT" class="ml-2 w-28 rounded bg-slate-900 border border-slate-700 px-2 py-2 text-white" /></label>
-            </div>
+        <div id="tab-model_d" class="hidden space-y-4 model-d-terminal">
+            <div class="model-d-hero"><div><div class="model-d-eyebrow">MODEL D / MARKET INTELLIGENCE <span id="modelDHeaderStatus" class="model-d-status" data-state="loading">CHECKING</span></div><h2>Whale &amp; Order Flow Intelligence</h2><p>Read-only paper research across venue-separated order flow, liquidity, and wallet context. Heuristic scores are not calibrated probabilities.</p></div><div class="model-d-hero-controls"><label>RESEARCH SYMBOL<input id="modelDSymbol" value="BTCUSDT" autocomplete="off" /></label><span class="model-d-lock">PAPER ONLY</span><span class="model-d-lock">LIVE LOCKED</span></div></div>
             <div id="modelDState" class="rounded-lg border border-slate-800 bg-slate-900/50 p-4 text-sm text-slate-300">Loading Model D status…</div>
+            <section class="grid grid-cols-1 md:grid-cols-3 gap-3" id="modelDBots" aria-label="Model D paper bots">
+                 <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-400">Paper bot data unavailable.</div>
+             </section>
+            <section aria-label="Operational overview" class="grid grid-cols-2 gap-3 xl:grid-cols-5"><div class="model-d-kpi"><span>Open positions</span><strong id="modelDOpenCount">—</strong></div><div class="model-d-kpi"><span>Closed trades</span><strong id="modelDClosedCount">—</strong></div><div class="model-d-kpi"><span>Realized net PnL</span><strong id="modelDRealizedPnl">—</strong></div><div class="model-d-kpi"><span>Unrealized PnL</span><strong id="modelDUnrealizedPnl">—</strong></div><div class="model-d-kpi"><span>Source health</span><strong id="modelDHealth">—</strong></div></section>
+            <section class="model-d-panel"><div class="model-d-panel-head"><div><h3>Open paper positions</h3><p>Each position remains isolated to its owning bot.</p></div><span id="modelDPositionState" class="model-d-muted">Awaiting data</span></div><div class="model-d-table-wrap"><table class="model-d-table"><thead><tr><th>Bot / symbol</th><th>Side</th><th>Size / notional</th><th>Entry / mark</th><th>Margin</th><th>TP / SL</th><th>Unrealized PnL</th><th>Status</th></tr></thead><tbody id="modelDPositions"></tbody></table></div></section>
+            <section class="model-d-panel"><div class="model-d-panel-head"><div><h3>Paper trade journal</h3><p>Persisted lifecycle records, newest first. Date ranges use inclusive end-of-day semantics.</p></div><span id="modelDJournalState" class="model-d-muted">Awaiting data</span></div><div class="model-d-filters"><label>SYMBOL<input id="modelDJournalSymbol" placeholder="BTCUSDT" maxlength="32"></label><label>DIRECTION<select id="modelDJournalDirection"><option value="">All</option><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select></label><label>BOT<select id="modelDJournalBot"><option value="">All bots</option></select></label><label>LIFECYCLE<select id="modelDJournalStatus"><option value="">All</option><option value="OPEN">OPEN</option><option value="CLOSED">CLOSED</option></select></label><label>ENTRY FROM<input id="modelDJournalFrom" type="date"></label><label>ENTRY TO<input id="modelDJournalTo" type="date"></label><label>EXIT FROM<input id="modelDJournalExitFrom" type="date"></label><label>EXIT TO<input id="modelDJournalExitTo" type="date"></label><button id="modelDJournalClear" type="button" class="model-d-button">Clear filters</button></div><div class="model-d-table-wrap"><table class="model-d-table"><thead><tr><th>Trade / bot</th><th>Symbol / side</th><th>Entry</th><th>Exit</th><th>Size / margin</th><th>TP / SL</th><th>Net PnL</th><th>Lifecycle</th></tr></thead><tbody id="modelDJournal"></tbody></table></div></section>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <section class="rounded-lg border border-slate-800 bg-slate-900/40 p-4"><h3 class="text-sm font-semibold text-white mb-3">Collector &amp; freshness</h3><pre id="modelDSources" class="text-xs whitespace-pre-wrap text-slate-300">No source data yet.</pre></section>
-                <section class="rounded-lg border border-slate-800 bg-slate-900/40 p-4"><h3 class="text-sm font-semibold text-white mb-3">Liquidity intelligence</h3><pre id="modelDLiquidity" class="text-xs whitespace-pre-wrap text-slate-300">UNAVAILABLE until collection is enabled.</pre></section>
+                <section class="model-d-panel"><div class="model-d-panel-head"><div><h3>Market data health</h3><p>Binance intelligence and AsterDEX reference data stay separate.</p></div><span id="modelDSourceState" class="model-d-muted">Awaiting data</span></div><div id="modelDSources" class="model-d-data-list"></div><details class="model-d-details"><summary>Raw source details</summary><pre id="modelDSourcesRaw">No source data yet.</pre></details></section>
+                <section class="model-d-panel"><div class="model-d-panel-head"><div><h3>Liquidity intelligence</h3><p>Structured observations only when returned by the collector.</p></div></div><div id="modelDLiquidity" class="model-d-data-list"></div><details class="model-d-details"><summary>Raw liquidity details</summary><pre id="modelDLiquidityRaw">No liquidity data yet.</pre></details></section>
             </div>
-            <section class="rounded-lg border border-slate-800 bg-slate-900/40 p-4"><h3 class="text-sm font-semibold text-white mb-3">Research ledger</h3><pre id="modelDResearch" class="text-xs whitespace-pre-wrap text-slate-300">No observations yet.</pre></section>
-            <section class="rounded-lg border border-slate-800 bg-slate-900/40 p-4"><h3 class="text-sm font-semibold text-white mb-3">Wallet discovery</h3><pre id="modelDWallets" class="text-xs whitespace-pre-wrap text-slate-300">Wallet scanner disabled by default.</pre></section>
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-2"><section class="model-d-panel"><div class="model-d-panel-head"><div><h3>Research ledger</h3><p>Performance claims require sufficient, traceable observations.</p></div></div><div id="modelDResearch" class="model-d-data-list"></div><details class="model-d-details"><summary>Raw ledger details</summary><pre id="modelDResearchRaw">No observations yet.</pre></details></section><section class="model-d-panel"><div class="model-d-panel-head"><div><h3>Wallet discovery</h3><p>On-chain context is independent evidence, not trader identity.</p></div></div><div id="modelDWallets" class="model-d-data-list"></div><details class="model-d-details"><summary>Raw wallet details</summary><pre id="modelDWalletsRaw">No wallet data yet.</pre></details></section></section>
         </div>
 
         <div id="tab-model_b" class="hidden space-y-6">
@@ -1055,7 +1585,7 @@
                         <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-700">PAPER-ONLY &bull; LIVE-LOCKED</span>
                     </div>
                     <p class="text-xs text-amber-300/80 max-w-3xl leading-relaxed">
-                        Daily Loss Limit ($3.00) and Weekly Loss Breaker ($7.50) restrictions are bypassed for Model B paper trading to diagnose LONG vs SHORT strategy behavior. Target risk ($1.00) and position cap (3 max) remain strictly enforced. Model A and live trading remain 100% frozen.
+                        Daily Loss Limit ($3.00) and Weekly Loss Breaker ($7.50) restrictions are bypassed for Model B paper trading to diagnose LONG vs SHORT strategy behavior. Target risk ($1.00) and position cap (10 max) remain strictly enforced. Model A and live trading remain 100% frozen.
                     </p>
                 </div>
                 <div class="flex items-center gap-3">
@@ -1105,23 +1635,23 @@
                 <div class="grid grid-cols-2 md:grid-cols-6 gap-3 pt-1">
                     <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
                         <div class="text-[11px] text-slate-400">AsterDEX Universe</div>
-                        <div class="text-base font-bold text-white mt-0.5" id="scannerDiscoveredTotal">578 Pairs</div>
-                        <div class="text-[10px] text-slate-500 font-mono" id="scannerBulkScreened">Screened: 628</div>
+                        <div class="text-base font-bold text-white mt-0.5" id="scannerDiscoveredTotal">--</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="scannerBulkScreened">Screened: --</div>
                     </div>
                     <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
                         <div class="text-[11px] text-slate-400">Stage 1 Liquid Pool</div>
-                        <div class="text-base font-bold text-emerald-400 mt-0.5" id="scannerQualifiedPool">136 Liquid</div>
+                        <div class="text-base font-bold text-emerald-400 mt-0.5" id="scannerQualifiedPool">--</div>
                         <div class="text-[10px] text-slate-500 font-mono">Spread &le; 35bps | &ge; $50k</div>
                     </div>
                     <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
                         <div class="text-[11px] text-slate-400">Stage 2 Evaluated</div>
-                        <div class="text-base font-bold text-amber-300 mt-0.5" id="scannerDeepEvaluated">35 / Cycle</div>
+                        <div class="text-base font-bold text-amber-300 mt-0.5" id="scannerDeepEvaluated">-- / Cycle</div>
                         <div class="text-[10px] text-slate-500 font-mono">10 Anchors + 25 Slice</div>
                     </div>
                     <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
                         <div class="text-[11px] text-slate-400">Universe Rotation</div>
-                        <div class="text-base font-bold text-indigo-300 mt-0.5" id="scannerRotationProgress">20.0%</div>
-                        <div class="text-[10px] text-slate-500 font-mono" id="scannerRotationOffset">Offset: 25 / 125</div>
+                        <div class="text-base font-bold text-indigo-300 mt-0.5" id="scannerRotationProgress">0.0%</div>
+                        <div class="text-[10px] text-slate-500 font-mono" id="scannerRotationOffset">Offset: 0 / 0</div>
                     </div>
                     <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
                         <div class="text-[11px] text-slate-400">Kline Fetch Latency</div>
@@ -1139,10 +1669,10 @@
                 <div class="space-y-1 pt-1">
                     <div class="flex justify-between text-[11px] font-mono text-slate-400">
                         <span>Universe Fair Rotation Progress</span>
-                        <span id="scannerProgressBarText">25 / 125 Liquid Contracts Rotated</span>
+                        <span id="scannerProgressBarText">0 / 0 Liquid Contracts Rotated (0.0%)</span>
                     </div>
                     <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div id="scannerProgressBar" class="bg-gradient-to-r from-amber-500 to-indigo-500 h-1.5 rounded-full transition-all duration-500" style="width: 20%;"></div>
+                        <div id="scannerProgressBar" class="bg-gradient-to-r from-amber-500 to-indigo-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%;"></div>
                     </div>
                 </div>
             </div>
@@ -1171,7 +1701,7 @@
                 </div>
                 <div class="card-bg p-4 rounded-xl border border-slate-800">
                     <div class="text-xs text-slate-400 font-medium">Open Positions</div>
-                    <div class="text-xl font-bold text-white mt-1" id="modelBExposureDisplay">0 / 3 Open</div>
+                    <div class="text-xl font-bold text-white mt-1" id="modelBExposureDisplay">0 / 10 Open</div>
                     <div class="text-xs text-indigo-400 mt-1 font-mono" id="modelBDiscoveredCount">-- Markets Discovered</div>
                 </div>
                 <div class="card-bg p-4 rounded-xl border border-slate-800">
@@ -1266,7 +1796,7 @@
                 <div class="card-bg p-3.5 rounded-xl border border-slate-800">
                     <div class="text-[11px] text-slate-400 font-medium">Open Positions</div>
                     <div class="text-lg font-bold text-emerald-400 mt-0.5" id="modelBStatOpenPositions">0 Open</div>
-                    <div class="text-[10px] text-slate-500 font-mono">Active In Flight (3 Max)</div>
+                    <div class="text-[10px] text-slate-500 font-mono">Active In Flight (10 Max)</div>
                 </div>
                 <div class="card-bg p-3.5 rounded-xl border border-slate-800">
                     <div class="text-[11px] text-slate-400 font-medium">Closed Trades</div>
@@ -1384,10 +1914,11 @@
                                 <th class="px-4 py-2.5">Total Fees</th>
                                 <th class="px-4 py-2.5">Net Realized PnL</th>
                                 <th class="px-4 py-2.5">Outcome</th>
+                                <th class="px-4 py-2.5 text-right">Chart &amp; Context</th>
                             </tr>
                         </thead>
                         <tbody id="modelBJournalTableBody" class="divide-y divide-slate-800">
-                            <tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>
+                            <tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1436,7 +1967,7 @@
                     </div>
                     <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
                         <div class="text-[11px] text-slate-400">Concurrent Position Cap</div>
-                        <div class="text-sm font-bold text-white mt-0.5" id="modelBDiagPositionCap">Max 3 (Strict)</div>
+                        <div class="text-sm font-bold text-white mt-0.5" id="modelBDiagPositionCap">Max 10 (Strict)</div>
                         <div class="text-[10px] text-slate-500" id="modelBDiagOpenCount">0 Active in Paper</div>
                     </div>
                     <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
@@ -2221,8 +2752,9 @@
 
         <!-- TAB 8: INTERACTIVE LIQUIDITY SWEEP & RECLAIM CHART -->
         <div id="tab-sweep_chart" class="hidden space-y-5">
+            <div id="chartWorkspace" class="chart-workspace space-y-5">
             <!-- Header & Control Bar -->
-            <div class="card-bg p-4 rounded-xl border border-emerald-800/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div id="chartToolbar" class="card-bg p-4 rounded-xl border border-emerald-800/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
                     <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
                     <div>
@@ -2266,8 +2798,14 @@
                         <button onclick="togglePriceScaleLog()" id="scaleLogBtn" class="px-2 py-1 rounded text-slate-400 hover:text-white transition text-[11px]" title="Toggle Logarithmic / Linear Price Scale">Log</button>
                     </div>
 
+                    <!-- Collapsible Events Panel Toggle Button -->
+                    <button type="button" onclick="toggleChartEventsDrawer()" id="chartEventsDrawerToggleBtn" aria-expanded="true" class="px-2.5 py-1.5 text-xs font-medium rounded bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-700/80 transition flex items-center gap-1.5 shadow-sm" title="Collapse or Expand Sweep & Reclaim Events Panel">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        <span id="chartEventsDrawerToggleText">Events Panel</span>
+                    </button>
+
                     <!-- Fullscreen Button -->
-                    <button onclick="toggleChartFullscreen()" id="chartFullscreenBtn" class="px-2.5 py-1.5 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm" title="Toggle Fullscreen Chart View">
+                    <button type="button" onclick="toggleChartFullscreen()" id="chartFullscreenBtn" class="px-2.5 py-1.5 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm" title="Toggle Fullscreen Chart Workspace (Esc)">
                         <svg id="fullscreenExpandIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
                         <svg id="fullscreenCollapseIcon" class="w-3.5 h-3.5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9L4 4m0 5h5V4M15 9l5-5m0 5h-5V4M9 15l-5 5m0-5h5v5M15 15l5 5m-5 0v-5h5"/></svg>
                         <span id="fullscreenBtnText">Fullscreen</span>
@@ -2282,7 +2820,7 @@
             </div>
 
             <!-- Overlays Control Toolbar & Quick Info -->
-            <div class="card-bg p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+            <div id="chartOverlaysToolbar" class="card-bg p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                 <!-- Overlay Checkbox Toggles -->
                 <div class="flex flex-wrap items-center gap-4">
                     <span class="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Overlays:</span>
@@ -2363,6 +2901,33 @@
                 </div>
             </div>
 
+            <!-- Viewport Density & Range Presets Bar -->
+            <div id="chartViewportDensityBar" class="card-bg px-4 py-2 rounded-xl border border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-slate-400 font-sans font-semibold uppercase tracking-wider text-[10px]">Viewport Range:</span>
+                    <div class="flex items-center bg-slate-900 border border-slate-700/80 rounded-lg p-0.5 text-[11px]">
+                        <button type="button" onclick="setChartViewportPreset('zoomed_in')" id="vpBtn-zoomed_in" class="px-2 py-0.5 rounded text-slate-300 hover:text-white transition" title="Show latest 75 candles">Zoomed-In (75b)</button>
+                        <button type="button" onclick="setChartViewportPreset('default')" id="vpBtn-default" class="px-2 py-0.5 rounded bg-indigo-600 text-white font-bold transition" title="Show latest 120 candles">Standard (120b)</button>
+                        <button type="button" onclick="setChartViewportPreset('multi_week')" id="vpBtn-multi_week" class="px-2 py-0.5 rounded text-slate-300 hover:text-white transition" title="Show multi-week view (~360 candles)">Multi-Week (360b)</button>
+                        <button type="button" onclick="setChartViewportPreset('multi_month')" id="vpBtn-multi_month" class="px-2 py-0.5 rounded text-slate-300 hover:text-white transition" title="Show multi-month view (~1000 candles)">Multi-Month (1000b)</button>
+                        <button type="button" onclick="setChartViewportPreset('full_history')" id="vpBtn-full_history" class="px-2 py-0.5 rounded text-slate-300 hover:text-white transition" title="Show all loaded historical candles">Full History</button>
+                    </div>
+                    <span id="chartZoomModeBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/90 text-indigo-300 border border-indigo-800/70">DETAIL VIEW</span>
+                </div>
+                <div id="chartDensityTelemetryText" class="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+                    <span title="Visible / Loaded / Total DB Available Candles">Candles (Vis/Load/DB): <strong id="densityCandlesStat" class="text-white">--/--/--</strong></span>
+                    <span class="text-slate-700">|</span>
+                    <span title="Rendered / Available Structural Levels">Levels: <strong id="densityLevelsStat" class="text-indigo-300">--/--</strong></span>
+                    <span class="text-slate-700">|</span>
+                    <span title="Rendered / Available Sweep & Reclaim Events">Events (Ren/Avail): <strong id="densityEventsStat" class="text-purple-300">--/--</strong></span>
+                    <span class="text-slate-700">|</span>
+                    <span title="Rendered / Total Markers">Markers: <strong id="densityMarkersStat" class="text-amber-300">--/--</strong></span>
+                    <span class="text-slate-700">|</span>
+                    <span>Right-Axis Labels: <strong id="densityAxisLabelsStat" class="text-emerald-300">--/--</strong></span>
+                    <span id="chartHistoryBoundaryBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">History: --</span>
+                </div>
+            </div>
+
             <!-- Venue Error / Unavailable Warning Banner (Hidden by default) -->
             <div id="chartVenueWarningBanner" class="hidden p-3 rounded-xl bg-rose-950/70 border border-rose-800/80 text-rose-200 text-xs flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
@@ -2375,12 +2940,47 @@
             </div>
 
             <!-- Main Chart & Side Drawer Layout -->
-            <div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
-                <!-- Chart Canvas Container (3 cols on desktop) -->
-                <div class="lg:col-span-3 space-y-3">
+            <div id="chartMainSplitGrid" class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+                <!-- Chart Canvas Container (3 cols on desktop, 4 cols when Events Panel collapsed) -->
+                <div id="chartPrimaryColumn" class="lg:col-span-3 space-y-3">
                     <div id="chartCardContainer" class="card-bg rounded-xl border border-slate-800 p-2 sm:p-3 relative overflow-hidden transition-all duration-300">
-                        <!-- Lightweight Charts Canvas Container -->
-                        <div id="tvLightweightChartContainer" class="w-full h-[520px] rounded-lg"></div>
+                        <!-- TradingView-Style Interactive Drawing Toolbar (Inside Chart Area & Fullscreen Element) -->
+                        <div id="chartDrawingToolbar" class="mb-2 px-2.5 py-1.5 rounded-lg bg-slate-900/95 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono z-20 relative">
+                            <div class="flex flex-wrap items-center gap-1">
+                                <span class="text-slate-400 font-sans font-semibold uppercase tracking-wider text-[10px] mr-1">Tools:</span>
+                                <button type="button" id="drawToolBtn-crosshair" onclick="setActiveDrawingTool('crosshair')" class="px-2 py-1 rounded bg-indigo-600 text-white font-bold transition" title="Crosshair / Select & Edit Drawings (Esc)">&#10010; Crosshair</button>
+                                <button type="button" id="drawToolBtn-trend_line" onclick="setActiveDrawingTool('trend_line')" class="px-2 py-1 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition" title="Trend Line (2 clicks)">&#9585; Trend</button>
+                                <button type="button" id="drawToolBtn-ray" onclick="setActiveDrawingTool('ray')" class="px-2 py-1 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition" title="Horizontal / Angled Ray (2 clicks)">&#8599; Ray</button>
+                                <button type="button" id="drawToolBtn-horizontal_line" onclick="setActiveDrawingTool('horizontal_line')" class="px-2 py-1 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition" title="Horizontal Price Line (1 click)">&#9473; H-Line</button>
+                                <button type="button" id="drawToolBtn-vertical_line" onclick="setActiveDrawingTool('vertical_line')" class="px-2 py-1 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition" title="Vertical Time Line (1 click)">&#9475; V-Line</button>
+                                <button type="button" id="drawToolBtn-rectangle" onclick="setActiveDrawingTool('rectangle')" class="px-2 py-1 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition" title="Supply / Demand Zone Rectangle (2 clicks)">&#9645; Rect</button>
+                                <button type="button" id="drawToolBtn-fib_retracement" onclick="setActiveDrawingTool('fib_retracement')" class="px-2 py-1 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition" title="Fibonacci Retracement (0, 0.236, 0.382, 0.5, 0.618, 0.786, 1)">&#8801; Fib</button>
+                                <button type="button" id="drawToolBtn-long_position" onclick="setActiveDrawingTool('long_position')" class="px-2 py-1 rounded text-emerald-300 hover:bg-slate-800 transition" title="Long Position R:R Measurement (Click Entry, then Target/Stop)">&#9650; Long R:R</button>
+                                <button type="button" id="drawToolBtn-short_position" onclick="setActiveDrawingTool('short_position')" class="px-2 py-1 rounded text-rose-300 hover:bg-slate-800 transition" title="Short Position R:R Measurement (Click Entry, then Target/Stop)">&#9660; Short R:R</button>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1">
+                                <button type="button" id="drawVisibilityToggleBtn" onclick="toggleDrawingsVisibility()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 transition" title="Show / Hide All Drawings">Drawings: ON (<span id="drawingsCountBadge">0</span>)</button>
+                                <button type="button" id="drawUndoBtn" onclick="undoChartDrawing()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Undo Drawing Action">&#8630; Undo</button>
+                                <button type="button" id="drawRedoBtn" onclick="redoChartDrawing()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Redo Drawing Action">&#8631; Redo</button>
+                                <button type="button" id="drawRemoveSelectedBtn" onclick="removeSelectedChartDrawing()" class="px-2 py-1 rounded bg-slate-800 hover:bg-rose-900/80 text-rose-300 border border-slate-700 transition" title="Delete Selected Drawing (Del)">&#10005; Delete</button>
+                                <button type="button" id="drawClearAllBtn" onclick="clearAllChartDrawings()" class="px-2 py-1 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-800/80 transition" title="Clear All Drawings for Symbol/Timeframe">Clear All</button>
+                            </div>
+                        </div>
+
+                        <!-- Chart Wrapper with Lightweight Charts + Synchronized Interactive Drawing Canvas Overlay -->
+                        <div id="chartCanvasStack" class="relative w-full h-[520px] rounded-lg overflow-hidden">
+                            <div id="tvLightweightChartContainer" class="w-full h-full rounded-lg"></div>
+                            <canvas id="chartDrawingCanvasOverlay" class="absolute inset-0 w-full h-full pointer-events-none z-10"></canvas>
+                            <!-- Incremental History Loading Indicator Pill -->
+                            <div id="chartHistoryLoadingPill" class="hidden absolute top-3 left-3 z-20 px-2.5 py-1 rounded-md bg-indigo-950/90 border border-indigo-700 text-indigo-200 text-[11px] font-mono flex items-center gap-1.5 shadow-lg">
+                                <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                                <span id="chartHistoryLoadingText">Loading older history...</span>
+                            </div>
+                            <!-- Floating Reopen Events Drawer Pill (Shown when Events Panel is collapsed) -->
+                            <button type="button" id="chartExpandEventsFloatingBtn" onclick="toggleChartEventsDrawer(false)" class="hidden absolute top-3 right-16 z-20 px-2.5 py-1 rounded-md bg-slate-900/90 hover:bg-indigo-950 text-indigo-200 border border-indigo-700/80 text-[11px] font-mono flex items-center gap-1.5 shadow-lg cursor-pointer transition" title="Show Sweep & Reclaim Events Panel">
+                                <span>&#9776; Show Events</span>
+                            </button>
+                        </div>
 
                         <!-- Floating Exit Fullscreen Button (Appears only during fullscreen) -->
                         <button id="chartExitFullscreenFloatingBtn" onclick="toggleChartFullscreen()" class="hidden absolute top-4 right-4 z-20 px-3 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700 text-xs font-semibold backdrop-blur-md shadow-lg flex items-center gap-1.5 cursor-pointer">
@@ -2396,7 +2996,7 @@
                     </div>
 
                     <!-- Chronological Replay Controller Bar -->
-                    <div class="card-bg p-3.5 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div id="chartReplayBar" class="card-bg p-3.5 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                         <div class="flex items-center gap-2">
                             <button onclick="toggleReplayMode()" id="replayModeBtn" class="px-2.5 py-1.5 rounded-lg font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
                                 <span class="w-2 h-2 rounded-full bg-slate-400" id="replayDot"></span>
@@ -2425,20 +3025,25 @@
                     </div>
                 </div>
 
-                <!-- Event Details & Proof Side Drawer (1 col on desktop) -->
-                <div class="space-y-4">
-                    <div class="card-bg p-4 rounded-xl border border-slate-800 space-y-3">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                            <div class="flex items-center gap-2">
-                                <h3 class="text-xs font-bold uppercase tracking-wider text-white">Sweep &amp; Reclaim Events</h3>
+                <!-- Event Details & Proof Side Drawer (1 col on desktop, collapsible) -->
+                <div id="chartEventsDrawerColumn" class="space-y-4 transition-all duration-200">
+                    <div id="chartEventsPrimaryCard" class="card-bg p-4 rounded-xl border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 gap-2">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-white truncate">Sweep &amp; Reclaim Events</h3>
                                 <span id="chartEventsCountBadge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">0</span>
                             </div>
-                            <select id="eventFilterSelect" onchange="filterChartEvents(event)" class="bg-slate-900 border border-slate-700 rounded text-[11px] text-slate-300 px-1.5 py-0.5">
-                                <option value="ALL">All Events</option>
-                                <option value="RECLAIMED">Reclaimed Only</option>
-                                <option value="CONFIRMED">Confirmed Only</option>
-                                <option value="UNCONFIRMED">Unconfirmed Only</option>
-                            </select>
+                            <div class="flex items-center gap-1.5">
+                                <select id="eventFilterSelect" onchange="filterChartEvents(event)" class="bg-slate-900 border border-slate-700 rounded text-[11px] text-slate-300 px-1.5 py-0.5">
+                                    <option value="ALL">All Events</option>
+                                    <option value="RECLAIMED">Reclaimed Only</option>
+                                    <option value="CONFIRMED">Confirmed Only</option>
+                                    <option value="UNCONFIRMED">Unconfirmed Only</option>
+                                </select>
+                                <button type="button" id="chartCollapseEventsPanelBtn" onclick="toggleChartEventsDrawer(true)" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition" title="Collapse Events Panel to Maximize Chart Width">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Event Items Scrollable List -->
@@ -2460,7 +3065,7 @@
                     </div>
 
                     <!-- Methodological Disclosure Card -->
-                    <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+                    <div id="chartMethodologicalDisclosureCard" class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400 space-y-1">
                         <div class="font-bold text-slate-300 flex items-center gap-1.5">
                             <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                             <span>Anti-Lookahead, Cross-Exchange &amp; Liquidation Disclosure</span>
@@ -2470,6 +3075,7 @@
                         <p><strong class="text-slate-300">3. Estimated Liquidation:</strong> Mathematical probabilistic clusters derived from Open Interest and margin tiers, not exchange stop orders.</p>
                     </div>
                 </div>
+            </div>
             </div>
         </div>
 
@@ -3297,6 +3903,124 @@
         </div>
     </div>
 
+    <!-- Model B & Universal Paper Trade Chart Inspector Modal -->
+    <div id="tradeInspectorModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-sm overflow-y-auto">
+        <div class="relative w-full max-w-6xl card-bg rounded-2xl border border-slate-700 shadow-2xl p-4 sm:p-6 space-y-3 max-h-[96vh] overflow-y-auto">
+            
+            <!-- Modal Header -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="relative flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+                    </span>
+                    <h3 class="text-base font-bold text-white tracking-wide" id="inspectorModalTitle">Paper Trade Chart Inspector</h3>
+                    <div id="inspectorHeaderBadges" class="flex flex-wrap items-center gap-1.5">
+                        <!-- Dynamic Badges -->
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeTradeInspectorModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition" title="Close Chart Inspector">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Trade High-Density Details Cards -->
+            <div id="inspectorDetailsContent">
+                <!-- Injected dynamically via renderInspectorDetails() -->
+            </div>
+
+            <!-- Chart Toolbar (Context Window, Scaling Mode, & Indicator Toggles) -->
+            <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-mono">
+                <!-- Context Window Controls -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-slate-400 text-[11px] mr-0.5">Window:</span>
+                    <button type="button" onclick="setInspectorContextHours(12)" id="inspectorCtxBtn-12" class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-400 hover:text-white border border-slate-700 transition">12H</button>
+                    <button type="button" onclick="setInspectorContextHours(24)" id="inspectorCtxBtn-24" class="px-2 py-0.5 text-xs font-bold rounded bg-blue-600 text-white shadow-sm transition">24H</button>
+                    <button type="button" onclick="setInspectorContextHours(48)" id="inspectorCtxBtn-48" class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-400 hover:text-white border border-slate-700 transition">48H</button>
+                    <button type="button" onclick="setInspectorContextHours(72)" id="inspectorCtxBtn-72" class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-400 hover:text-white border border-slate-700 transition">72H</button>
+                    
+                    <span class="text-slate-700 mx-1">|</span>
+                    
+                    <!-- Scaling & Viewport Controls -->
+                    <button type="button" onclick="setInspectorFitMode('PRICE_ACTION')" id="inspectorFitBtn-PRICE_ACTION" class="px-2.5 py-0.5 text-xs font-bold rounded bg-indigo-600 text-white border border-indigo-500 shadow-sm transition" title="Focus vertical scale on candle price action around entry & mark price">Fit Price Action</button>
+                    <button type="button" onclick="setInspectorFitMode('ALL')" id="inspectorFitBtn-ALL" class="px-2.5 py-0.5 text-xs rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="Expand vertical scale to include distant SL, TP1, and TP2 levels">Fit All</button>
+                    <button type="button" onclick="resetInspectorZoom()" id="inspectorResetZoomBtn" class="px-2 py-0.5 text-xs rounded bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition flex items-center gap-1" title="Restore default horizontal & vertical viewport (or double-click chart)">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Reset Zoom</span>
+                    </button>
+                </div>
+
+                <!-- Indicator Toggles -->
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                        <input type="checkbox" id="inspectorToggleEMA" checked onchange="onInspectorIndicatorToggle()" class="rounded bg-slate-950 border-slate-700 text-blue-600 focus:ring-0">
+                        <span class="text-[11px]">EMAs (20/50/100/200)</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                        <input type="checkbox" id="inspectorToggleStoch" onchange="onInspectorIndicatorToggle()" class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
+                        <span class="text-[11px]">Stochastic (14,3,3)</span>
+                    </label>
+                </div>
+
+                <!-- Risk/Reward Summary Box -->
+                <div id="inspectorRiskRewardStats">
+                    <!-- Populated dynamically via renderRiskRewardBox() -->
+                </div>
+            </div>
+
+            <!-- Chart Warning / Data Availability Notice Banner -->
+            <div id="inspectorChartWarning" class="hidden p-3 rounded-lg text-xs font-mono bg-amber-950/60 border border-amber-800 text-amber-300 flex items-center justify-between">
+                <span id="inspectorChartWarningText"></span>
+            </div>
+
+            <!-- Canvas Container -->
+            <div class="relative w-full rounded-xl border border-slate-800 bg-[#090d16] overflow-hidden select-none">
+                <!-- Loading Overlay -->
+                <div id="inspectorChartLoading" class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs">
+                    <div class="flex items-center gap-2 text-indigo-400 font-mono text-xs font-semibold">
+                        <svg class="w-4 h-4 animate-spin text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Loading historical venue candles...</span>
+                    </div>
+                </div>
+
+                <!-- Off-Screen Level Indicators Strip (Top & Bottom) -->
+                <div id="inspectorOffscreenTop" class="hidden absolute top-2 left-3 z-10 flex flex-wrap items-center gap-1.5 pointer-events-auto"></div>
+                <div id="inspectorOffscreenBottom" class="hidden absolute bottom-8 left-3 z-10 flex flex-wrap items-center gap-1.5 pointer-events-auto"></div>
+
+                <!-- Live Crosshair OHLCV Legend Bar -->
+                <div id="inspectorCrosshairLegend" class="absolute top-2 right-20 z-10 px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800/80 text-[11px] font-mono text-slate-300 pointer-events-none hidden sm:flex items-center gap-2.5">
+                    <span id="inspectorLegendSymbol" class="font-bold text-white">--</span>
+                    <span id="inspectorLegendOHLC" class="text-slate-400">Hover chart for OHLCV</span>
+                </div>
+
+                <div id="inspectorChartCanvas" class="w-full h-[460px]"></div>
+
+                <!-- Stochastic Indicator Sub-Pane -->
+                <div id="inspectorStochPane" class="hidden px-3 py-1.5 bg-[#0b0f1a] border-t border-slate-800 text-[11px] font-mono flex items-center justify-between text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <span class="text-purple-400 font-semibold">Stochastic Oscillator (14, 3, 3):</span>
+                        <span>%K: <strong id="inspectorStochKVal" class="text-white">--</strong></span>
+                        <span>%D: <strong id="inspectorStochDVal" class="text-indigo-400">--</strong></span>
+                    </div>
+                    <div class="text-[10px] text-slate-500">Overbought: &gt;80 &bull; Oversold: &lt;20</div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                <div class="text-[11px] text-slate-500 font-mono flex items-center gap-3">
+                    <span>💡 Scroll to zoom &bull; Drag to pan &bull; Drag price axis to scale &bull; Double-click to reset</span>
+                </div>
+                <button type="button" onclick="closeTradeInspectorModal()" class="px-4 py-1.5 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                    Close Inspector
+                </button>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Model B Position Details Modal -->
     <div id="modelBPositionModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
         <div class="relative w-full max-w-xl card-bg rounded-2xl border border-slate-700 shadow-2xl p-6 space-y-4">
@@ -3383,6 +4107,9 @@
         </div>
     </div>
 
+            </main>
+        </div>
+
     <!-- Toast Notification Container for Price Alerts -->
     <div id="alertToastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
@@ -3399,6 +4126,7 @@
     <script src="/static/js/journal.js"></script>
     <script src="/static/js/backtest.js"></script>
     <script src="/static/js/alerts.js"></script>
+    <script src="/static/js/model-a.js"></script>
     <script src="/static/js/model-b.js"></script>
     <script src="/static/js/model-d.js"></script>
     <script src="/static/js/position_intelligence.js"></script>
@@ -3406,6 +4134,7 @@
     <script src="/static/js/demand_zone.js"></script>
     <script src="/static/js/market_screener.js"></script>
     <script src="/static/js/ai_analyst.js"></script>
+    <script src="/static/js/trade_inspector.js"></script>
     <script src="/static/js/navigation.js"></script>
     <script src="/static/js/app.js"></script>
 </body>

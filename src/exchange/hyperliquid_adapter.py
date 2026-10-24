@@ -4,6 +4,7 @@ Provides public POST /info queries for perpetual universe discovery and L2 order
 Operates strictly in READ-ONLY mode for liquidity telemetry and research.
 """
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import time
 import requests
@@ -11,6 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from src.core.logger import logger
+from src.core.types import Candle
 from src.exchange.normalized import (
     NormalizedInstrument,
     NormalizedOrderBook,
@@ -37,6 +39,7 @@ class HyperliquidAdapter:
             self.session = session
         else:
             self.session = requests.Session()
+            self.session.headers.update({'User-Agent': 'SignalGenerator/1.0', 'Content-Type': 'application/json', 'Accept': 'application/json'})
             retries = Retry(
                 total=3,
                 backoff_factor=0.3,
@@ -116,6 +119,24 @@ class HyperliquidAdapter:
         except Exception as err:
             logger.error(f"Hyperliquid: Failed to discover instruments: {err}")
             return list(self._catalog_cache.values())
+
+    def get_premium_index(self, symbol: str):
+        coin = symbol.removesuffix('USDT')
+        if self._catalog_cache and (symbol not in self._catalog_cache and coin not in self._catalog_cache):
+            return None
+        now_ms = int(time.time() * 1000)
+        try:
+            resp = self.session.post(self.info_url, json={'type': 'allMids'}, timeout=self.timeout_sec)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict):
+                    mid = data.get(coin)
+                    if mid is not None:
+                        px = float(mid)
+                        return {'symbol': symbol, 'mark_price': px, 'index_price': px, 'last_funding_rate': None, 'timestamp_ms': now_ms}
+        except Exception as err:
+            logger.debug(f'Hyperliquid: get_premium_index failed for {symbol}: {err}')
+        return None
 
     def get_order_book(self, symbol: str, limit: Optional[int] = 50) -> Optional[NormalizedOrderBook]:
         """Fetch Level-2 order book depth from Hyperliquid.
@@ -245,4 +266,96 @@ class HyperliquidAdapter:
         except Exception as err:
             logger.warning(f"Hyperliquid: Failed to fetch trades for {symbol}: {err}")
             return []
+
+    def get_klines(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        limit: int = 100,
+        start_time_ms: Optional[int] = None,
+        end_time_ms: Optional[int] = None,
+    ) -> List[Candle]:
+        """Fetch historical candle snapshots from Hyperliquid.
+        
+        Args:
+            symbol: Target perpetual symbol (e.g. 'BTCUSDT' or 'BTC').
+            timeframe: Interval string, e.g. '15m', '1h', '4h', '1d'.
+            limit: Maximum candles to return (capped at 500).
+            start_time_ms: Start timestamp in milliseconds.
+            end_time_ms: End timestamp in milliseconds.
+        """
+        coin = symbol.removesuffix("USDT")
+        if self._catalog_cache and (symbol not in self._catalog_cache and coin not in self._catalog_cache):
+            return []
+
+        # Hyperliquid interval mapping
+        tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
+        interval = tf_map.get(timeframe.lower(), "1h")
+
+        now_ms = int(time.time() * 1000)
+        # Default start_time_ms if not provided based on limit and timeframe
+        if not start_time_ms:
+            tf_sec = 3600
+            if interval == "1m": tf_sec = 60
+            elif interval == "5m": tf_sec = 300
+            elif interval == "15m": tf_sec = 900
+            elif interval == "4h": tf_sec = 14400
+            elif interval == "1d": tf_sec = 86400
+            start_time_ms = max(0, (end_time_ms or now_ms) - (limit * tf_sec * 1000))
+
+        req_body: Dict[str, Any] = {
+            "coin": coin,
+            "interval": interval,
+            "startTime": start_time_ms,
+        }
+        if end_time_ms:
+            req_body["endTime"] = end_time_ms
+
+        payload = {"type": "candleSnapshot", "req": req_body}
+
+        try:
+            resp = self.session.post(self.info_url, json=payload, timeout=self.timeout_sec)
+            if resp.status_code != 200:
+                logger.debug(f"Hyperliquid: candleSnapshot for {symbol} returned status {resp.status_code}")
+                return []
+
+            data = resp.json()
+            if not isinstance(data, list):
+                return []
+
+            candles: List[Candle] = []
+            for item in data[-limit:]:
+                try:
+                    open_time_ms = int(item["t"])
+                    close_time_ms = int(item.get("T", open_time_ms + (tf_sec * 1000) - 1))
+                    open_px = float(item["o"])
+                    high_px = float(item["h"])
+                    low_px = float(item["l"])
+                    close_px = float(item["c"])
+                    vol = float(item.get("v", 0.0))
+                    candles.append(
+                        Candle(
+                            symbol=symbol,
+                            timeframe=interval,
+                            timestamp_ms=open_time_ms,
+                            close_time_ms=close_time_ms,
+                            open=open_px,
+                            high=high_px,
+                            low=low_px,
+                            close=close_px,
+                            volume=vol,
+                            quote_volume=round(vol * close_px, 2),
+                            trades_count=int(item.get("n", 0)),
+                            is_closed=True,
+                        )
+                    )
+                except (ValueError, KeyError, TypeError) as parse_err:
+                    logger.debug(f"Hyperliquid: skipped malformed candle for {symbol}: {parse_err}")
+                    continue
+
+            return candles
+        except Exception as err:
+            logger.warning(f"Hyperliquid: Failed to fetch candles for {symbol}: {err}")
+            return []
+
 

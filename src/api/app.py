@@ -5,6 +5,7 @@ backtest comparisons, and signal journal. Serves the interactive dashboard.
 """
 
 import asyncio
+from dataclasses import asdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import hmac
@@ -21,6 +22,7 @@ from config.settings import ExecutionMode, ModelBConfig, get_default_config
 from src.core.logger import logger
 from src.core.types import Candle, CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
 from src.data.database import DatabaseManager
+from src.research_data.storage import ResearchDataStore
 from src.exchange.aster import AsterDexAdapter
 from src.exchange.aster_v3 import AsterDexV3Adapter
 from src.exchange.account_service import AsterAccountService, AccountConnectionStatus
@@ -31,6 +33,7 @@ from src.scheduler.model_b_runner import ModelBRunner
 from src.risk.model_b_diagnostic import resolve_override_state
 from src.research.model_b_diagnostics import build_report as build_model_b_diagnostic_report
 from src.scheduler.runner import ScannerRunner, rank_candidates
+from src.strategy.generator import SetupGenerator
 from src.backtest.engine import BacktestEngine
 from src.ml.models import ModelRegistry
 from src.execution.events import mask_webhook_url, validate_webhook_url
@@ -101,7 +104,10 @@ from src.model_d import ModelDCollector
 from src.model_d.binance import BinanceModelDCollector
 from src.model_d.features import build_features
 from src.model_d.ledger import ModelDShadowLedger
-from src.model_d.wallets import WalletRegistry
+from src.model_d.bots import BotConfig, PersistentBotStore, default_bots
+from src.model_d.universe import ModelDUniverse
+from src.model_d.scanner import ModelDScanWorker, ModelDExitMonitor
+from src.model_d.wallets import WalletRegistry, JsonRpcProvider, WalletPipelineWorker
 import sqlite3
 
 
@@ -109,6 +115,7 @@ import sqlite3
 # App state containers
 cfg = get_default_config()
 db = DatabaseManager(cfg.db_path)
+research_store = ResearchDataStore(db)
 # Least-privilege initialization: public market-data adapter never loads private API credentials in PAPER/RESEARCH
 exchange = AsterDexAdapter(
     base_url=cfg.exchange.base_url,
@@ -207,10 +214,28 @@ model_d_ledger = ModelDShadowLedger(
     slippage_rate=cfg.exchange.slippage_rate,
 )
 model_d_wallet_registry = WalletRegistry(db)
+model_d_wallet_providers = {
+    int(chain_id): JsonRpcProvider(int(chain_id), url)
+    for chain_id, url in model_d_config.wallet_rpc_urls.items() if url
+}
+model_d_wallet_pipeline = WalletPipelineWorker(
+    model_d_wallet_registry, model_d_wallet_providers,
+    interval_seconds=model_d_config.wallet_scan_interval_seconds,
+    enrichment_enabled=model_d_config.wallet_enrichment_enabled,
+    ranking_enabled=model_d_config.wallet_ranking_enabled,
+    max_workers=model_d_config.wallet_max_concurrency,
+    confirmation_depths=model_d_config.wallet_confirmation_depths,
+)
+model_d_universe = ModelDUniverse(model_d_aster_reference)
+model_d_bot_store = PersistentBotStore(db)
+model_d_bot_store.initialize([BotConfig("MODEL_D_BOT_15", 15.0), BotConfig("MODEL_D_BOT_25", 25.0), BotConfig("MODEL_D_BOT_100", 100.0)])
+model_d_bots = model_d_bot_store.load()
+model_d_scan_worker = ModelDScanWorker(db, model_d_universe, model_d_collector, model_d_config, bots=model_d_bots, bot_store=model_d_bot_store)
+model_d_exit_monitor = ModelDExitMonitor(model_d_collector, model_d_bots, model_d_bot_store, interval_sec=getattr(model_d_config, "scan_interval_sec", 30))
 
 # AsterDEX Position Intelligence & Market Liquidity Context Service
 market_context_service = MarketContextService()
-liquidity_chart_service = LiquidityChartService(adapter=market_context_service.adapter)
+liquidity_chart_service = LiquidityChartService(adapter=market_context_service.adapter, db=db)
 whale_ranking_engine = WhaleRankingEngine(
     exchange_service=model_b_runner.exchange_service,
     whale_detector=market_context_service.whale_detector,
@@ -237,6 +262,10 @@ ai_analyst_service = AIAnalystService(
 )
 
 specs_map: Dict[str, Any] = {}
+metadata_status = "METADATA_UNAVAILABLE"
+metadata_error: Optional[str] = None
+metadata_initialized_utc: Optional[str] = None
+metadata_lock = asyncio.Lock()
 runner: Optional[ScannerRunner] = None
 enabled_symbols: set = set(cfg.enabled_symbols)
 
@@ -246,6 +275,33 @@ stop_event = asyncio.Event()
 bg_task: Optional[asyncio.Task] = None
 BACKGROUND_SCAN_ENABLED: bool = True
 CANDLE_GRACE_PERIOD_SEC: int = 60
+
+
+async def initialize_model_a_metadata() -> bool:
+    """Load and validate Model A exchange metadata exactly once at a time."""
+    global specs_map, metadata_status, metadata_error, metadata_initialized_utc
+    async with metadata_lock:
+        if specs_map:
+            metadata_status = "READY"
+            return True
+        metadata_status = "METADATA_LOADING"
+        metadata_error = None
+        try:
+            loaded = await asyncio.to_thread(exchange.get_exchange_info)
+            required = set(cfg.watchlist)
+            if not isinstance(loaded, dict) or not loaded or not required.issubset(set(loaded)):
+                missing = sorted(required - set(loaded or {}))
+                raise RuntimeError(f"Exchange metadata incomplete; missing symbols: {missing}")
+            specs_map = {symbol: loaded[symbol] for symbol in required}
+            metadata_initialized_utc = datetime.now(timezone.utc).isoformat()
+            metadata_status = "READY"
+            return True
+        except Exception as exc:
+            specs_map = {}
+            metadata_error = str(exc)
+            metadata_status = "METADATA_UNAVAILABLE"
+            logger.warning(f"Model A metadata initialization failed: {exc}")
+            return False
 
 LOCAL_CLIENT_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 ALLOWED_MUTATING_ORIGINS = {
@@ -366,10 +422,10 @@ async def background_scan_worker():
 async def lifespan(app: FastAPI):
     global runner, specs_map, bg_task, stop_event
     logger.info("Initializing scanner API server...")
-    try:
-        specs_map = exchange.get_exchange_info()
-    except Exception as e:
-        logger.warning(f"Could not load live exchange info on startup: {e}")
+    # Load metadata before Model A's worker. Failure is non-fatal to the API
+    # and independent Model B services, but leaves Model A stopped.
+    specs_map = {}
+    await initialize_model_a_metadata()
 
     runner = ScannerRunner(
         exchange=exchange,
@@ -408,8 +464,13 @@ async def lifespan(app: FastAPI):
         logger.info(f"Discord notifications: ENABLED ({masked_url})")
 
     stop_event.clear()
-    bg_task = asyncio.create_task(background_scan_worker())
-    logger.info("Background scanner task started.")
+    metadata_available = bool(specs_map)
+    if metadata_available:
+        bg_task = asyncio.create_task(background_scan_worker())
+        logger.info("Background scanner task started.")
+    else:
+        bg_task = None
+        logger.warning("Public exchange metadata unavailable; Model A background scans remain stopped.")
 
     # Start universal perpetual price alerts market data service
     try:
@@ -430,6 +491,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Failed to start Model B runner: {e}")
 
+    if model_d_scan_worker.state["enabled"]:
+        model_d_scan_worker.start()
+        logger.info("Model D scan worker started.")
+        model_d_exit_monitor.start()
+    wallet_master_enabled = bool(model_d_config.enabled and model_d_config.wallet_tracking_enabled and model_d_config.wallet_scanner_enabled)
+    if wallet_master_enabled:
+        model_d_wallet_pipeline.start()
+
     yield
 
     logger.info("Shutting down scanner API server...")
@@ -448,6 +517,9 @@ async def lifespan(app: FastAPI):
         logger.info("Model B runner stopped.")
     except Exception as e:
         logger.warning(f"Error stopping Model B runner: {e}")
+    model_d_scan_worker.stop()
+    model_d_exit_monitor.stop()
+    model_d_wallet_pipeline.stop()
 
     # Stop price alerts market data service
     try:
@@ -627,13 +699,568 @@ def get_system_status() -> Dict[str, Any]:
             "taker_fee_rate": cfg.paper.taker_fee_rate,
             "discord_monitoring": bool(cfg.paper.discord_webhook_url),
         },
-        "forward_validation": journal.compute_forward_validation_cohort(),
+        "forward_validation": journal.compute_forward_validation_cohort(model_id="MODEL_A"),
         "discord": {
             "enabled": bool(cfg.paper.discord_webhook_url and validate_webhook_url(cfg.paper.discord_webhook_url)),
             "webhook_configured": bool(cfg.paper.discord_webhook_url),
             "webhook_masked": mask_webhook_url(cfg.paper.discord_webhook_url) if cfg.paper.discord_webhook_url else None,
         },
         "last_scan_utc": runner.last_scan_utc if runner else None,
+    }
+
+
+@app.get("/api/model_a/diagnostics/funnel")
+def get_model_a_funnel_diagnostics(since_ms: Optional[int] = Query(None, ge=0)) -> Dict[str, Any]:
+    """Read-only structured Model A funnel and scan-lifecycle reconciliation."""
+    report = db.aggregate_model_a_funnel(since_ms=since_ms)
+    clauses = ["model_id='MODEL_A'", "stage IN ('SCAN_STARTED','SCAN_COMPLETED','SCAN_FAILED')"]
+    params: List[Any] = []
+    if since_ms is not None:
+        clauses.append("timestamp_ms >= ?"); params.append(since_ms)
+    with db.get_connection() as conn:
+        events = [dict(r) for r in conn.execute(
+            f"SELECT candidate_id,stage,timestamp_ms,reason_code,metadata_json FROM paper_lifecycle_events WHERE {' AND '.join(clauses)} ORDER BY timestamp_ms DESC LIMIT 5000", params
+        ).fetchall()]
+    by_scan: Dict[str, Dict[str, Any]] = {}
+    for event in events:
+        item = by_scan.setdefault(event["candidate_id"], {"scan_id": event["candidate_id"], "started": False, "terminal_status": None, "terminal_timestamp_ms": None})
+        if event["stage"] == "SCAN_STARTED": item["started"] = True; item["started_timestamp_ms"] = event["timestamp_ms"]
+        elif event["stage"] in ("SCAN_COMPLETED", "SCAN_FAILED"):
+            item["terminal_status"] = "COMPLETED" if event["stage"] == "SCAN_COMPLETED" else "FAILED"; item["terminal_timestamp_ms"] = event["timestamp_ms"]
+    report["lifecycle_reconciliation"] = {
+        "cycles": list(by_scan.values()),
+        "missing_terminal_count": sum(1 for item in by_scan.values() if item["started"] and not item["terminal_status"]),
+        "denominator": "distinct scan lifecycle candidate_id rows in the bounded event query",
+    }
+    report["denominators"] = {"funnel_rows": "one persisted row per scan_id and symbol", "predicate_counts": "each predicate occurrence across funnel rows", "first_rejection_counts": "one first-rejection value per funnel row"}
+    return report
+
+
+@app.get("/api/model_a/status")
+def get_model_a_status() -> Dict[str, Any]:
+    """Read-only authoritative Model A Engine telemetry, configuration, forward validation, positions, journal, and diagnostics."""
+    now_utc = datetime.now(timezone.utc)
+    now_ms = int(now_utc.timestamp() * 1000)
+    stale_threshold_hours = float(getattr(cfg, "stale_threshold_hours", 3.0))
+
+    # 1. Lifecycle & Funnel Aggregation from SQLite (strictly model_id='MODEL_A')
+    with db.get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT stage, reason_code, COUNT(*) as cnt, MIN(created_at_utc) as min_utc, MAX(created_at_utc) as max_utc, MIN(timestamp_ms) as min_ts, MAX(timestamp_ms) as max_ts "
+            "FROM paper_lifecycle_events WHERE UPPER(model_id) = 'MODEL_A' GROUP BY stage, reason_code ORDER BY cnt DESC"
+        )
+        lifecycle_breakdown = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            "SELECT MIN(created_at_utc) as earliest_setup_utc, MAX(created_at_utc) as latest_setup_utc, "
+            "MIN(timestamp_ms) as earliest_setup_ts, MAX(timestamp_ms) as latest_setup_ts "
+            "FROM setup_candidates WHERE UPPER(model_id) = 'MODEL_A'"
+        )
+        setup_time_bounds = dict(cur.fetchone() or {})
+
+        cur.execute(
+            "SELECT symbol, timeframe, total_candles, earliest_timestamp_ms, latest_timestamp_ms, last_sync_utc "
+            "FROM candle_sync_state ORDER BY symbol ASC, timeframe ASC"
+        )
+        sync_rows = [dict(r) for r in cur.fetchall()]
+
+    scan_started_events = sum(r["cnt"] for r in lifecycle_breakdown if r["stage"] == "SCAN_STARTED")
+    scan_completed_events = sum(r["cnt"] for r in lifecycle_breakdown if r["stage"] == "SCAN_COMPLETED")
+    scan_failed_events = sum(r["cnt"] for r in lifecycle_breakdown if r["stage"] == "SCAN_FAILED")
+
+    last_completed_event_utc = None
+    earliest_event_utc = None
+    for r in lifecycle_breakdown:
+        if r.get("min_utc") and (earliest_event_utc is None or r["min_utc"] < earliest_event_utc):
+            earliest_event_utc = r["min_utc"]
+        if r["stage"] == "SCAN_COMPLETED" and r.get("max_utc"):
+            if last_completed_event_utc is None or r["max_utc"] > last_completed_event_utc:
+                last_completed_event_utc = r["max_utc"]
+
+    cohort_start_utc = setup_time_bounds.get("earliest_setup_utc") or earliest_event_utc
+
+    # Pre-screen rejection counts from lifecycle events
+    rejection_reasons_breakdown: Dict[str, int] = {}
+    for r in lifecycle_breakdown:
+        if r["stage"] == "SETUP_REJECTED":
+            code = str(r.get("reason_code") or "REJECTED")
+            rejection_reasons_breakdown[code] = rejection_reasons_breakdown.get(code, 0) + int(r["cnt"])
+
+    # Also aggregate rejection reasons from setup_candidates (MODEL_A only)
+    model_a_setups = journal.get_latest_setups(limit=5000, model_id="MODEL_A")
+    setups_by_status: Dict[str, int] = {
+        "READY": 0,
+        "VALID": 0,
+        "WATCHLIST": 0,
+        "INFEASIBLE": 0,
+        "INVALIDATED": 0,
+        "STALE": 0,
+        "ERROR": 0,
+    }
+    candidate_rejection_reasons: Dict[str, int] = {}
+    for s in model_a_setups:
+        st = str(s.get("status", "UNKNOWN")).upper()
+        setups_by_status[st] = setups_by_status.get(st, 0) + 1
+        det = s.get("details") or {}
+        rejs = det.get("rejection_reasons") or []
+        for r_txt in rejs:
+            r_str = str(r_txt).strip()
+            if not r_str:
+                continue
+            r_low = r_str.lower()
+            if "exceeds hard risk limit" in r_low or "estimated loss at sl" in r_low:
+                bucket = "HARD_RISK_LIMIT_EXCEEDED ($1.50 SL Ceiling)"
+            elif "exceeds trade risk budget" in r_low or "risk budget" in r_low:
+                bucket = "TRADE_RISK_BUDGET_EXCEEDED ($0.09-$0.25 Budget)"
+            elif "minimum notional" in r_low or "sizing infeasible" in r_low or "infeasible" in r_low:
+                bucket = "SIZING_INFEASIBLE_MIN_NOTIONAL ($5.00 Min)"
+            elif "expired" in r_low or "ttl" in r_low:
+                bucket = "TTL_EXPIRED_12H"
+            elif "candle data age" in r_low or "stale" in r_low:
+                bucket = "STALE_CANDLE_DATA (>3.0h)"
+            elif "invalidation" in r_low:
+                bucket = "STRUCTURAL_INVALIDATION_BREACHED"
+            elif "scanner is stopped" in r_low:
+                bucket = "SCANNER_STOPPED"
+            else:
+                bucket = r_str[:80]
+            candidate_rejection_reasons[bucket] = candidate_rejection_reasons.get(bucket, 0) + 1
+
+    # 2. Candle Freshness & Missing Candles Audit across Watchlist
+    sync_by_sym_tf: Dict[str, Dict[str, Any]] = {}
+    for row in sync_rows:
+        sync_by_sym_tf[f"{row['symbol']}_{row['timeframe']}"] = row
+
+    symbol_data_audit: List[Dict[str, Any]] = []
+    missing_candles_symbols: List[str] = []
+    stale_symbols: List[str] = []
+    max_latest_1h_ts = 0
+    total_1h_candles_cached = 0
+    total_4h_candles_cached = 0
+
+    for sym in cfg.watchlist:
+        s1h = sync_by_sym_tf.get(f"{sym}_1h")
+        s4h = sync_by_sym_tf.get(f"{sym}_4h")
+        cnt_1h = int(s1h["total_candles"]) if s1h and s1h.get("total_candles") is not None else db.get_candle_count(sym, "1h")
+        cnt_4h = int(s4h["total_candles"]) if s4h and s4h.get("total_candles") is not None else db.get_candle_count(sym, "4h")
+        total_1h_candles_cached += cnt_1h
+        total_4h_candles_cached += cnt_4h
+
+        latest_1h_ts = int(s1h["latest_timestamp_ms"]) if s1h and s1h.get("latest_timestamp_ms") else None
+        if latest_1h_ts and latest_1h_ts > max_latest_1h_ts:
+            max_latest_1h_ts = latest_1h_ts
+
+        age_hours = round((now_ms - latest_1h_ts) / (3600.0 * 1000.0), 2) if latest_1h_ts else None
+        is_sym_stale = (age_hours is None) or (age_hours > stale_threshold_hours)
+        has_min_bars = cnt_1h >= 170 and cnt_4h >= 40
+        if not has_min_bars:
+            missing_candles_symbols.append(sym)
+        if is_sym_stale:
+            stale_symbols.append(sym)
+
+        symbol_data_audit.append({
+            "symbol": sym,
+            "enabled": sym in enabled_symbols,
+            "candles_1h": cnt_1h,
+            "candles_4h": cnt_4h,
+            "required_1h_bars": 170,
+            "has_sufficient_bars": has_min_bars,
+            "latest_1h_timestamp_ms": latest_1h_ts,
+            "latest_1h_utc": datetime.fromtimestamp(latest_1h_ts / 1000.0, tz=timezone.utc).isoformat() if latest_1h_ts else None,
+            "last_sync_utc": s1h.get("last_sync_utc") if s1h else None,
+            "candle_age_hours": age_hours,
+            "is_stale": is_sym_stale,
+        })
+
+    overall_candle_age_sec = int((now_ms - max_latest_1h_ts) / 1000) if max_latest_1h_ts > 0 else (runner.candle_age_seconds if runner else None)
+    overall_is_stale = (overall_candle_age_sec is None) or (overall_candle_age_sec > (stale_threshold_hours * 3600))
+
+    # 3. Scanner Status & Health
+    is_worker_active = bool(runner is not None and BACKGROUND_SCAN_ENABLED and not stop_event.is_set() and bg_task is not None and not bg_task.done())
+    if runner is None:
+        engine_state = "FROZEN_DEFERRED"
+        scanner_health = "DEFERRED_NO_RUNNER"
+        process_status = "Frozen Cohort Baseline (Startup exchange metadata deferred; background worker inactive)"
+    elif not is_worker_active:
+        engine_state = "STOPPED"
+        scanner_health = "WORKER_INACTIVE"
+        process_status = "Stopped / Paused"
+    elif runner.last_error:
+        engine_state = "ERROR"
+        scanner_health = "DEGRADED_ERROR"
+        process_status = f"Error: {runner.last_error}"
+    elif overall_is_stale:
+        engine_state = "STALE"
+        scanner_health = "STALE_MARKET_DATA"
+        process_status = "Stale Candle Data (>3.0h)"
+    else:
+        engine_state = runner.scanner_state
+        scanner_health = "HEALTHY"
+        process_status = "Active Background Worker"
+
+    if metadata_status != "READY":
+        scanner_health = metadata_status
+    worker_status = "SCANNING" if is_worker_active and runner and runner.scanner_state == "SCANNING" else ("WORKER_STOPPED" if not is_worker_active else "IDLE")
+    candle_sync_status = "DATA_STALE" if overall_is_stale else ("READY_TO_SCAN" if metadata_status == "READY" else metadata_status)
+
+    last_scan_utc = (runner.last_scan_utc if (runner and runner.last_scan_utc) else last_completed_event_utc)
+    last_successful_scan_utc = (runner.last_successful_scan_utc if (runner and runner.last_successful_scan_utc) else last_completed_event_utc)
+    session_scan_count = int(getattr(runner, "scan_count", 0)) if runner else 0
+
+    # 4. Strategy Configuration (Read-Only Frozen Parameters)
+    gen = runner.generator if (runner and getattr(runner, "generator", None)) else SetupGenerator(
+        swing_left_bars=cfg.strategy.swing_left_bars,
+        swing_right_bars=cfg.strategy.swing_right_bars,
+        atr_period=cfg.strategy.atr_period,
+        sl_buffer_atr_multiple=cfg.strategy.sl_buffer_atr_multiple,
+        min_reward_to_risk=cfg.strategy.min_reward_to_risk,
+        fvg_min_size_ratio=cfg.strategy.fvg_min_size_atr_ratio,
+        sr_cluster_tolerance_pct=cfg.strategy.sr_cluster_tolerance_pct,
+    )
+
+    strategy_config_readonly = {
+        "config_id": f"MODEL_A_FROZEN_v{cfg.version}",
+        "strategy_version": "MODEL_A_FROZEN",
+        "venue": cfg.exchange.name,
+        "venue_base_url": cfg.exchange.base_url,
+        "whitelisted_symbols": list(cfg.watchlist),
+        "enabled_symbols": [s for s in cfg.watchlist if s in enabled_symbols],
+        "timeframes": {
+            "bias_timeframe": cfg.strategy.bias_timeframe,
+            "structure_timeframe": cfg.strategy.execution_timeframe,
+            "execution_timeframe": cfg.strategy.execution_timeframe,
+            "macro_lookback_bars_1h": 170,
+            "dealing_range_bars_1h": 72,
+        },
+        "strategy_parameters": {
+            "swing_left_bars": cfg.strategy.swing_left_bars,
+            "swing_right_bars": cfg.strategy.swing_right_bars,
+            "atr_period": cfg.strategy.atr_period,
+            "sl_buffer_atr_multiple": cfg.strategy.sl_buffer_atr_multiple,
+            "min_reward_to_risk": cfg.strategy.min_reward_to_risk,
+            "fvg_min_size_atr_ratio": cfg.strategy.fvg_min_size_atr_ratio,
+            "sr_cluster_tolerance_pct": cfg.strategy.sr_cluster_tolerance_pct,
+            "premium_threshold_72h": gen.premium_threshold,
+            "discount_threshold_72h": gen.discount_threshold,
+            "min_extension_48h": gen.min_extension_48h,
+            "min_impulse_12h": gen.min_impulse_12h,
+            "short_macro_cap_168h": gen.short_macro_cap_168h,
+            "bull_breakout_pos_72h": gen.bull_breakout_pos_72h,
+            "bull_breakout_ret_24h": gen.bull_breakout_ret_24h,
+            "bull_breakout_ret_48h": gen.bull_breakout_ret_48h,
+            "bull_breakout_ret_168h": gen.bull_breakout_ret_168h,
+            "bull_variance_ratio_min": gen.bull_variance_ratio_min,
+            "stale_threshold_hours": stale_threshold_hours,
+            "pending_expiry_bars_1h": cfg.paper.pending_expiry_bars,
+        },
+        "ml_parameters": {
+            "enabled": cfg.ml.enabled,
+            "role": "INFORMATIVE_RANKING_NON_BLOCKING",
+            "model_type": cfg.ml.model_type,
+            "calibration_method": cfg.ml.calibration_method,
+            "min_confidence_threshold": cfg.ml.min_confidence_threshold,
+            "label_horizon_bars": cfg.ml.label_horizon_bars,
+        },
+        "risk_settings": {
+            "initial_equity_usdt": cfg.risk.initial_equity_usdt,
+            "current_paper_equity_usdt": round(risk_mgr.equity_usdt, 4),
+            "margin_mode": cfg.risk.margin_mode,
+            "max_leverage": cfg.risk.max_leverage,
+            "target_isolated_margin_usdt": cfg.risk.target_isolated_margin_usdt,
+            "target_isolated_margin_max_usdt": cfg.risk.target_isolated_margin_max_usdt,
+            "hard_risk_limit_usdt": cfg.risk.hard_risk_limit_usdt,
+            "nominal_risk_per_trade_usdt": cfg.risk.risk_per_trade_usdt,
+            "effective_trade_risk_usdt": round(risk_mgr.get_effective_trade_risk(now_ms), 4),
+            "daily_loss_limit_usdt": round(cfg.risk.daily_loss_limit_usdt, 4),
+            "weekly_loss_limit_usdt": round(cfg.risk.weekly_loss_limit_usdt, 4),
+            "max_open_positions": cfg.risk.max_open_positions,
+            "max_entries_per_week": cfg.risk.max_entries_per_week,
+            "min_notional_usdt": cfg.risk.min_notional_usdt,
+            "maker_fee_rate": cfg.paper.maker_fee_rate,
+            "taker_fee_rate": cfg.paper.taker_fee_rate,
+            "slippage_rate": cfg.paper.slippage_rate,
+            "conservative_fill_buffer_pct": cfg.paper.conservative_fill_buffer_pct,
+        },
+        "forward_validation_anchor": {
+            "cohort_start_utc": cohort_start_utc,
+            "required_sample_size": 30,
+            "frozen_invariant": "Model A strategy logic, thresholds, and risk parameters are frozen during forward validation.",
+        },
+    }
+
+    # 5. Model A Open Positions & Pending Orders (Strictly model_id == 'MODEL_A')
+    raw_open_trades = journal.get_trades(model_id="MODEL_A", open_only=True, limit=100)
+    open_positions_list: List[Dict[str, Any]] = []
+    for t in raw_open_trades:
+        if str(t.get("model_id", "")).upper() != "MODEL_A":
+            continue
+        sym = str(t.get("symbol", "")).upper()
+        entry_px = float(t.get("entry_price", 0.0))
+        qty = float(t.get("quantity", 0.0))
+        margin = float(t.get("margin_usdt", 0.0))
+        direction_str = str(t.get("direction", "LONG")).upper()
+
+        mark_px = None
+        mark_source = "UNAVAILABLE"
+        if model_b_runner is not None:
+            try:
+                mp = model_b_runner.get_mark_price(sym)
+                if mp is not None and mp > 0:
+                    mark_px = float(mp)
+                    mark_source = "LIVE_TICKER_CACHE"
+            except Exception:
+                pass
+        if mark_px is None:
+            latest_c = db.get_latest_candle(sym, "1h")
+            if latest_c and latest_c.close > 0:
+                mark_px = float(latest_c.close)
+                mark_source = "1H_CLOSED_CANDLE"
+
+        upnl = None
+        roe_pct = None
+        if mark_px is not None and qty > 0:
+            raw_pnl = (mark_px - entry_px) * qty if direction_str == "LONG" else (entry_px - mark_px) * qty
+            fees_so_far = float(t.get("fee_paid", 0.0)) + float(t.get("funding_paid", 0.0))
+            upnl = round(raw_pnl - fees_so_far, 4)
+            roe_pct = round((upnl / margin * 100.0), 2) if margin > 0 else 0.0
+
+        entry_ts = t.get("entry_timestamp_ms")
+        age_sec = max(0, int((now_ms - int(entry_ts)) / 1000)) if entry_ts else None
+        if age_sec is not None:
+            age_display = f"{age_sec / 3600.0:.1f}h" if age_sec >= 3600 else f"{age_sec // 60}m"
+        else:
+            age_display = "--"
+
+        det = {}
+        if t.get("details_json"):
+            try:
+                det = json.loads(t["details_json"])
+            except Exception:
+                det = {}
+
+        open_positions_list.append({
+            "trade_id": t.get("trade_id"),
+            "setup_id": t.get("setup_id"),
+            "symbol": sym,
+            "direction": direction_str,
+            "entry_timestamp_ms": entry_ts,
+            "entry_time_utc": t.get("entry_time_utc"),
+            "entry_price": entry_px,
+            "mark_price": mark_px,
+            "mark_price_source": mark_source,
+            "quantity": qty,
+            "notional_usdt": float(t.get("notional_usdt", 0.0)),
+            "margin_usdt": margin,
+            "leverage": float(t.get("leverage", 10.0)),
+            "stop_loss": float(t.get("stop_loss", 0.0)),
+            "take_profit_1": float(det.get("take_profit_1") or t.get("take_profit") or 0.0),
+            "take_profit_2": float(det["take_profit_2"]) if det.get("take_profit_2") is not None else None,
+            "unrealized_pnl_usdt": upnl,
+            "roe_pct": roe_pct,
+            "age_seconds": age_sec,
+            "age_display": age_display,
+            "entry_category": t.get("entry_category", "Unclassified"),
+            "source_strategy": "MODEL_A (SMC/SnR Frozen)",
+            "model_id": "MODEL_A",
+        })
+
+    model_a_orders = [
+        o for o in journal.get_paper_orders(model_id="MODEL_A")
+        if str(o.get("model_id", "")).upper() == "MODEL_A"
+    ]
+    pending_orders_list = [o for o in model_a_orders if str(o.get("status", "")).upper() in ("PENDING", "CREATED", "SUBMITTED")]
+
+    # 6. Model A Trade Journal & Validation Metrics (Strictly model_id == 'MODEL_A')
+    model_a_trades = [
+        t for t in journal.get_trades(model_id="MODEL_A", limit=1000)
+        if str(t.get("model_id", "")).upper() == "MODEL_A"
+    ]
+    for t in model_a_trades:
+        if t.get("signal_source") == "MODEL_B_SCANNER":
+            t["signal_source"] = "MODEL_A_SCANNER"
+
+    closed_trades = [t for t in model_a_trades if not t.get("is_open", False) and t.get("exit_timestamp_ms") is not None]
+    closed_count = len(closed_trades)
+    min_sample_size = 30
+    is_sample_sufficient = closed_count >= min_sample_size
+
+    wins = [t for t in closed_trades if float(t.get("pnl_net", 0.0)) > 0.0001]
+    losses = [t for t in closed_trades if float(t.get("pnl_net", 0.0)) < -0.0001]
+    breakevens = [t for t in closed_trades if -0.0001 <= float(t.get("pnl_net", 0.0)) <= 0.0001]
+
+    gross_profit = sum(float(t.get("pnl_net", 0.0)) for t in wins)
+    gross_loss_abs = abs(sum(float(t.get("pnl_net", 0.0)) for t in losses))
+    net_realized_pnl = round(sum(float(t.get("pnl_net", 0.0)) for t in closed_trades), 4)
+    total_fees_paid = round(sum(float(t.get("total_fees", 0.0)) for t in closed_trades), 4)
+
+    win_rate_pct = round((len(wins) / closed_count * 100.0), 2) if closed_count > 0 else None
+    expectancy_usdt = round((net_realized_pnl / closed_count), 4) if closed_count > 0 else None
+    profit_factor = round((gross_profit / gross_loss_abs), 2) if gross_loss_abs > 0 else (None if closed_count == 0 else float("inf"))
+    avg_win_usdt = round((gross_profit / len(wins)), 4) if wins else None
+    avg_loss_usdt = round((-gross_loss_abs / len(losses)), 4) if losses else None
+
+    # Max Drawdown across closed Model A trades ordered chronologically
+    max_drawdown_usdt = None
+    if closed_count > 0:
+        chronological = sorted(closed_trades, key=lambda x: int(x.get("exit_timestamp_ms") or x.get("entry_timestamp_ms") or 0))
+        cum_pnl = 0.0
+        peak_pnl = 0.0
+        max_dd = 0.0
+        for ct in chronological:
+            cum_pnl += float(ct.get("pnl_net", 0.0))
+            if cum_pnl > peak_pnl:
+                peak_pnl = cum_pnl
+            dd = peak_pnl - cum_pnl
+            if dd > max_dd:
+                max_dd = dd
+        max_drawdown_usdt = round(max_dd, 4)
+
+    long_closed = [t for t in closed_trades if str(t.get("direction", "")).upper() == "LONG"]
+    short_closed = [t for t in closed_trades if str(t.get("direction", "")).upper() == "SHORT"]
+    long_wins = [t for t in long_closed if float(t.get("pnl_net", 0.0)) > 0.0001]
+    short_wins = [t for t in short_closed if float(t.get("pnl_net", 0.0)) > 0.0001]
+
+    validation_metrics = {
+        "model_id": "MODEL_A",
+        "sample_status": "SUFFICIENT_SAMPLE" if is_sample_sufficient else "INSUFFICIENT_SAMPLE",
+        "is_sample_sufficient": is_sample_sufficient,
+        "required_sample_size": min_sample_size,
+        "completed_trades_count": closed_count,
+        "wins_count": len(wins),
+        "losses_count": len(losses),
+        "breakeven_count": len(breakevens),
+        "win_rate_pct": win_rate_pct,
+        "net_realized_pnl_usdt": net_realized_pnl if closed_count > 0 else 0.0,
+        "total_fees_usdt": total_fees_paid if closed_count > 0 else 0.0,
+        "expectancy_per_trade_usdt": expectancy_usdt,
+        "profit_factor": profit_factor if profit_factor != float("inf") else "INF",
+        "max_drawdown_usdt": max_drawdown_usdt,
+        "avg_win_usdt": avg_win_usdt,
+        "avg_loss_usdt": avg_loss_usdt,
+        "long_breakdown": {
+            "count": len(long_closed),
+            "wins": len(long_wins),
+            "losses": len(long_closed) - len(long_wins),
+            "win_rate_pct": round(len(long_wins) / len(long_closed) * 100.0, 2) if long_closed else None,
+            "net_pnl_usdt": round(sum(float(t.get("pnl_net", 0.0)) for t in long_closed), 4) if long_closed else 0.0,
+        },
+        "short_breakdown": {
+            "count": len(short_closed),
+            "wins": len(short_wins),
+            "losses": len(short_closed) - len(short_wins),
+            "win_rate_pct": round(len(short_wins) / len(short_closed) * 100.0, 2) if short_closed else None,
+            "net_pnl_usdt": round(sum(float(t.get("pnl_net", 0.0)) for t in short_closed), 4) if short_closed else 0.0,
+        },
+    }
+
+    # 7. Forward Validation Cohort & Funnel
+    cohort_data = journal.compute_forward_validation_cohort(min_required_trades=min_sample_size, model_id="MODEL_A")
+    total_pre_screen_rejections = sum(rejection_reasons_breakdown.values())
+    total_candidates_persisted = len(model_a_setups)
+    total_bar_evaluations = total_pre_screen_rejections + total_candidates_persisted
+    valid_ready_setups_count = setups_by_status.get("READY", 0) + setups_by_status.get("VALID", 0)
+    rejected_setups_count = (
+        setups_by_status.get("INFEASIBLE", 0)
+        + setups_by_status.get("INVALIDATED", 0)
+        + setups_by_status.get("STALE", 0)
+        + setups_by_status.get("ERROR", 0)
+    )
+
+    forward_validation_section = {
+        "model_id": "MODEL_A",
+        "cohort_start_utc": cohort_start_utc,
+        "completed_scan_cycles": scan_completed_events,
+        "started_scan_cycles": scan_started_events,
+        "bar_evaluations_logged": total_bar_evaluations,
+        "cached_candles_1h_total": total_1h_candles_cached,
+        "cached_candles_4h_total": total_4h_candles_cached,
+        "required_sample_size": min_sample_size,
+        "is_sample_sufficient": is_sample_sufficient,
+        "validation_status": cohort_data.get("validation_status", "UNPROVEN_NO_COMPLETED_FORWARD_TRADES"),
+        "sample_badge": "SUFFICIENT_SAMPLE" if is_sample_sufficient else "INSUFFICIENT_SAMPLE",
+        "status_explanation": cohort_data.get("status_explanation", ""),
+        "candidate_setups_evaluated": total_candidates_persisted,
+        "valid_ready_setups": valid_ready_setups_count,
+        "watchlist_setups": setups_by_status.get("WATCHLIST", 0),
+        "rejected_setups": rejected_setups_count,
+        "setups_by_status": setups_by_status,
+        "pre_screen_rejection_reasons": rejection_reasons_breakdown,
+        "candidate_rejection_reasons": candidate_rejection_reasons,
+        "paper_orders_created": len(model_a_orders),
+        "paper_orders_pending": len(pending_orders_list),
+        "paper_orders_filled": sum(1 for o in model_a_orders if str(o.get("status", "")).upper() == "FILLED"),
+        "completed_paper_trades": closed_count,
+        "open_paper_positions": len(open_positions_list),
+    }
+
+    # 8. Diagnostics
+    funnel_diag = db.aggregate_model_a_funnel()
+    diagnostics_section = {
+        "scanner_errors": runner.last_error if (runner and runner.last_error) else None,
+        "scan_failed_events_count": scan_failed_events,
+        "is_stale_market_data": overall_is_stale,
+        "candle_age_seconds": overall_candle_age_sec,
+        "candle_age_hours": round(overall_candle_age_sec / 3600.0, 2) if overall_candle_age_sec is not None else None,
+        "stale_threshold_hours": stale_threshold_hours,
+        "stale_symbols_count": len(stale_symbols),
+        "stale_symbols": stale_symbols,
+        "missing_candles_symbols_count": len(missing_candles_symbols),
+        "missing_candles_symbols": missing_candles_symbols,
+        "invalidated_setups_count": setups_by_status.get("INVALIDATED", 0),
+        "stale_setups_count": setups_by_status.get("STALE", 0),
+        "infeasible_setups_count": setups_by_status.get("INFEASIBLE", 0),
+        "pending_orders_count": len(pending_orders_list),
+        "last_scan_utc": last_scan_utc,
+        "last_successful_scan_utc": last_successful_scan_utc,
+        "metadata_available": bool(specs_map),
+        "runner_initialized": runner is not None,
+        "background_worker_active": is_worker_active,
+        "symbol_data_audit": symbol_data_audit,
+        "funnel_diagnostics": funnel_diag,
+    }
+
+    return {
+        "status": "SUCCESS",
+        "model_id": "MODEL_A",
+        "timestamp_utc": now_utc.isoformat(),
+        "strategy_status": {
+            "model_id": "MODEL_A",
+            "name": "Model A — Defensive SMC & SnR Perpetual Engine",
+            "state": engine_state,
+        "scanner_health": scanner_health,
+        "metadata_initialization_status": metadata_status,
+        "metadata_symbol_count": len(specs_map),
+        "metadata_initialized_utc": metadata_initialized_utc,
+        "last_initialization_error": metadata_error,
+        "worker_status": worker_status,
+        "candle_synchronization_status": candle_sync_status,
+        "latest_closed_1h_utc": max((r.get("latest_1h_utc") for r in symbol_data_audit if r.get("latest_1h_utc")), default=None),
+        "latest_closed_4h_utc": max((datetime.fromtimestamp(int(sync_by_sym_tf[f'{s}_4h']['latest_timestamp_ms']) / 1000, tz=timezone.utc).isoformat() for s in cfg.watchlist if sync_by_sym_tf.get(f'{s}_4h') and sync_by_sym_tf[f'{s}_4h'].get('latest_timestamp_ms')), default=None),
+        "per_symbol_freshness": symbol_data_audit,
+        "scanner_readiness": bool(metadata_status == "READY" and not overall_is_stale and not missing_candles_symbols),
+        "last_synchronization_error": getattr(runner, "last_error", None) if runner else None,
+            "process_status": process_status,
+            "mode": cfg.mode.value,
+            "paper_only": True,
+            "live_trading_locked": cfg.live_trading_locked,
+            "background_worker_active": is_worker_active,
+            "runner_initialized": runner is not None,
+            "metadata_available": bool(specs_map),
+            "session_scan_count": session_scan_count,
+            "historical_scan_cycles_completed": scan_completed_events,
+            "last_scan_utc": last_scan_utc,
+            "last_successful_scan_utc": last_successful_scan_utc,
+            "active_config_id": f"MODEL_A_FROZEN_v{cfg.version}",
+        },
+        "strategy_configuration": strategy_config_readonly,
+        "forward_validation": forward_validation_section,
+        "open_positions": open_positions_list,
+        "pending_orders": pending_orders_list,
+        "recent_candidates": model_a_setups[:50],
+        "trade_journal": model_a_trades[:100],
+        "validation_metrics": validation_metrics,
+        "diagnostics": diagnostics_section,
     }
 
 
@@ -831,17 +1458,23 @@ async def market_context_endpoint(
 async def chart_klines_endpoint(
     symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT"),
     timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h, 1d"),
-    limit: int = Query(200, ge=10, le=500, description="Number of candles"),
+    limit: int = Query(500, ge=10, le=5000, description="Number of candles"),
     start_time_ms: Optional[int] = Query(None, description="Start time in ms"),
     end_time_ms: Optional[int] = Query(None, description="End time in ms"),
+    before_time_ms: Optional[int] = Query(None, description="Cursor timestamp in ms (load candles strictly older than this timestamp)"),
+    before: Optional[int] = Query(None, description="Alias for before_time_ms cursor"),
+    venue: Optional[str] = Query(None, description="Venue name: asterdex, hyperliquid, binance"),
 ) -> List[Dict[str, Any]]:
-    """Retrieve OHLCV candles formatted for TradingView Lightweight Charts."""
+    """Retrieve OHLCV candles formatted for TradingView Lightweight Charts with cursor pagination."""
+    effective_before = before_time_ms if before_time_ms is not None else before
     return liquidity_chart_service.get_chart_klines(
         symbol=symbol,
         timeframe=timeframe,
         limit=limit,
         start_time_ms=start_time_ms,
         end_time_ms=end_time_ms,
+        before_time_ms=effective_before,
+        venue=venue,
     )
 
 
@@ -849,22 +1482,87 @@ async def chart_klines_endpoint(
 async def chart_liquidity_layers_endpoint(
     symbol: str = Query(..., description="Perpetual symbol e.g. BTCUSDT"),
     timeframe: str = Query("1h", description="Candle timeframe e.g. 15m, 1h, 4h, 1d"),
-    limit: int = Query(150, ge=20, le=400, description="Number of candles"),
+    limit: int = Query(500, ge=20, le=5000, description="Number of candles"),
+    before_time_ms: Optional[int] = Query(None, description="Cursor timestamp in ms (load candles strictly older than this timestamp)"),
+    before: Optional[int] = Query(None, description="Alias for before_time_ms cursor"),
+    start_time_ms: Optional[int] = Query(None, description="Start time in ms"),
+    end_time_ms: Optional[int] = Query(None, description="End time in ms"),
     as_of_index: Optional[int] = Query(None, description="Historical replay bar index limit"),
     as_of_timestamp_ms: Optional[int] = Query(None, description="Historical replay timestamp cutoff"),
     include_1d_overlay: bool = Query(False, description="Overlay confirmed 1D structural levels on lower timeframes"),
     venue_source: str = Query("combined", description="Venue filter: combined, asterdex, binance, bybit"),
 ) -> Dict[str, Any]:
     """Retrieve complete liquidity layers: structural levels, sweep/reclaim events, order-book depth, and liquidation estimates."""
+    effective_before = before_time_ms if before_time_ms is not None else before
     return liquidity_chart_service.get_liquidity_layers(
         symbol=symbol,
         timeframe=timeframe,
         limit=limit,
+        before_time_ms=effective_before,
+        start_time_ms=start_time_ms,
+        end_time_ms=end_time_ms,
         as_of_index=as_of_index,
         as_of_timestamp_ms=as_of_timestamp_ms,
         include_1d_overlay=include_1d_overlay,
         venue_source=venue_source,
     )
+
+
+class ChartDrawingUpsertRequest(BaseModel):
+    drawing_id: str
+    user_profile: str = "default"
+    symbol: str
+    timeframe: str
+    tool_type: str
+    points: List[Dict[str, Any]] = []
+    style: Dict[str, Any] = {}
+    is_visible: bool = True
+    created_at_utc: Optional[str] = None
+
+
+@app.get("/api/chart/drawings")
+async def get_chart_drawings_endpoint(
+    symbol: str = Query(..., description="Symbol e.g. BTCUSDT"),
+    timeframe: str = Query("1h", description="Timeframe e.g. 15m, 1h, 4h, 1d"),
+    user_profile: str = Query("default", description="User profile key"),
+) -> Dict[str, Any]:
+    """Retrieve persisted chart drawings from SQLite for (user_profile, symbol, timeframe)."""
+    drawings = db.get_chart_drawings(symbol=symbol, timeframe=timeframe, user_profile=user_profile)
+    return {
+        "symbol": symbol.strip().upper().replace(".P", ""),
+        "timeframe": timeframe.strip().lower(),
+        "user_profile": user_profile,
+        "drawings": drawings,
+        "count": len(drawings),
+    }
+
+
+@app.post("/api/chart/drawings")
+async def save_chart_drawing_endpoint(req: ChartDrawingUpsertRequest) -> Dict[str, Any]:
+    """Create or update a chart drawing in SQLite."""
+    saved = db.save_chart_drawing(req.model_dump())
+    return {"status": "SAVED", "drawing": saved}
+
+
+@app.delete("/api/chart/drawings/{drawing_id}")
+async def delete_chart_drawing_endpoint(
+    drawing_id: str,
+    user_profile: str = Query("default", description="User profile key"),
+) -> Dict[str, Any]:
+    """Delete a single chart drawing from SQLite."""
+    deleted = db.delete_chart_drawing(drawing_id=drawing_id, user_profile=user_profile)
+    return {"status": "DELETED" if deleted else "NOT_FOUND", "drawing_id": drawing_id, "deleted": deleted}
+
+
+@app.delete("/api/chart/drawings")
+async def clear_chart_drawings_endpoint(
+    symbol: str = Query(..., description="Symbol e.g. BTCUSDT"),
+    timeframe: str = Query("1h", description="Timeframe e.g. 15m, 1h, 4h, 1d"),
+    user_profile: str = Query("default", description="User profile key"),
+) -> Dict[str, Any]:
+    """Delete all chart drawings for (user_profile, symbol, timeframe) from SQLite."""
+    deleted_count = db.clear_chart_drawings(symbol=symbol, timeframe=timeframe, user_profile=user_profile)
+    return {"status": "CLEARED", "deleted_count": deleted_count}
 
 
 @app.get("/api/chart/cross_book")
@@ -934,6 +1632,19 @@ async def test_discord_webhook() -> Dict[str, Any]:
 async def start_scanner() -> Dict[str, Any]:
     """Start or resume background scanner loop."""
     global BACKGROUND_SCAN_ENABLED, stop_event, bg_task
+    if runner is None:
+        return {"status": "ERROR", "message": "Model A runner is not initialized.", "scanner_state": "STOPPED"}
+    if not await initialize_model_a_metadata():
+        BACKGROUND_SCAN_ENABLED = False
+        stop_event.set()
+        runner.scanner_state = "STOPPED"
+        return {
+            "status": "ERROR",
+            "message": "Model A metadata unavailable; scanner remains stopped.",
+            "scanner_state": "STOPPED",
+            "metadata_status": metadata_status,
+            "error": metadata_error,
+        }
     BACKGROUND_SCAN_ENABLED = True
     stop_event.clear()
     if bg_task is None or bg_task.done():
@@ -1025,7 +1736,7 @@ def get_setups(
         raw_candidates = list(runner.last_results)
     else:
         # Fallback to journal ONLY if runner has never completed a scan in this session (or include_historical=True)
-        db_setups = journal.get_latest_setups(limit=50)
+        db_setups = journal.get_latest_setups(limit=50, model_id="MODEL_A")
         for s in db_setups:
             det = s.get("details") or {}
             ra_dict = det.get("risk_assessment")
@@ -1262,6 +1973,9 @@ async def trigger_scan() -> Dict[str, Any]:
     if runner is None:
         raise HTTPException(status_code=500, detail="Scanner runner not initialized.")
 
+    if not specs_map:
+        return {"status": "UNAVAILABLE", "message": "Public exchange metadata unavailable; scan was not started.", "setups": [], "count": 0, "valid_count": 0, "ready_count": 0}
+
     if scan_lock.locked():
         return {
             "status": "ALREADY_RUNNING",
@@ -1306,7 +2020,7 @@ def get_journal(
         "setups": setups,
         "trades": trades,
         "metrics": metrics,
-        "forward_validation": journal.compute_forward_validation_cohort(),
+        "forward_validation": journal.compute_forward_validation_cohort(model_id=m_id or "MODEL_A"),
     }
 
 
@@ -1359,7 +2073,7 @@ def get_trades(
 
     orders = journal.get_paper_orders(symbol=symbol, model_id=target_model_id)
     lifecycle_events = journal.get_lifecycle_events(symbol=symbol, limit=limit, model_id=target_model_id)
-    forward_cohort = journal.compute_forward_validation_cohort()
+    forward_cohort = journal.compute_forward_validation_cohort(model_id=target_model_id or "MODEL_A")
     return {
         "model_id": target_model_id or "ALL",
         "count": len(trades),
@@ -1669,14 +2383,42 @@ def get_model_b_status():
     return model_b_runner.get_status()
 
 
+def _wallet_pipeline_status() -> str:
+    """Return lifecycle state separately from provider validation state."""
+    if not model_d_config.enabled or not model_d_config.wallet_tracking_enabled or not model_d_config.wallet_scanner_enabled:
+        return "DISABLED"
+    health = str(model_d_wallet_pipeline.state.get("health", "NOT_STARTED"))
+    if health in {"NOT_STARTED", "RUNNING", "IDLE", "UNAVAILABLE", "ERROR"}:
+        return health
+    return "ERROR"
+
+
+def _wallet_provider_status() -> Dict[str, Any]:
+    chain_state = model_d_wallet_pipeline.state.get("chains", {})
+    result: Dict[str, Any] = {}
+    for chain_id, url in model_d_config.wallet_rpc_urls.items():
+        key = str(chain_id)
+        if not url:
+            result[key] = {"status": "UNAVAILABLE", "reason": "missing_url"}
+        elif key in chain_state:
+            result[key] = dict(chain_state[key])
+        else:
+            result[key] = {"status": "NOT_STARTED", "reason": "provider_not_validated"}
+    return result
+
+
 @app.get("/api/model_d/status")
 def get_model_d_status(symbol: Optional[str] = Query(None, max_length=32)) -> Dict[str, Any]:
     """Read-only Model D health and source freshness."""
+    wallet_status = _wallet_pipeline_status()
     payload: Dict[str, Any] = {
         "model_id": "MODEL_D", "enabled": model_d_config.enabled,
         "paper_only": True, "live_trading_locked": bool(cfg.live_trading_locked),
         "collector_enabled": model_d_config.collector_enabled,
-        "wallet_tracking": "UNAVAILABLE", "sources": {}, "symbol": None,
+        "scan_worker": model_d_scan_worker.state,
+        "exit_monitor": model_d_exit_monitor.state,
+        "wallet_tracking": wallet_status, "wallet_pipeline": model_d_wallet_pipeline.state,
+        "sources": {}, "symbol": None,
     }
     if symbol and model_d_config.collector_enabled:
         data = model_d_collector.collect_symbol(symbol)
@@ -1685,6 +2427,49 @@ def get_model_d_status(symbol: Optional[str] = Query(None, max_length=32)) -> Di
     else:
         payload["sources"] = {k: v.to_dict() for k, v in model_d_collector.health.items()}
     return payload
+
+
+@app.get("/api/model_d/universe")
+def get_model_d_universe(refresh: bool = Query(False)) -> Dict[str, Any]:
+    if refresh or not model_d_universe.instruments:
+        model_d_universe.refresh(force=refresh)
+    return model_d_universe.status()
+
+
+@app.get("/api/model_d/scan/status")
+def get_model_d_scan_status() -> Dict[str, Any]:
+    return {"model_id": "MODEL_D", "scan_worker": model_d_scan_worker.state, "exit_monitor": model_d_exit_monitor.state}
+
+
+@app.get("/api/model_d/scan/observations")
+def get_model_d_scan_observations(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
+    rows = model_d_scan_worker.recent(limit)
+    return {"model_id": "MODEL_D", "items": rows, "count": len(rows), "limit": limit}
+
+
+@app.get("/api/model_d/signals/latest")
+def get_model_d_latest_signals(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
+    with db.get_connection() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM model_d_signal_decisions ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()]
+    return {"model_id": "MODEL_D", "items": rows, "count": len(rows), "limit": limit}
+
+
+@app.get("/api/model_d/bots")
+def get_model_d_bots() -> Dict[str, Any]:
+    return {"model_id": "MODEL_D", "paper_only": True, "bots": [bot.summary() for bot in model_d_bots.values()]}
+
+
+@app.get("/api/model_d/positions")
+def get_model_d_positions(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> Dict[str, Any]:
+    positions = [asdict(p) for bot in model_d_bots.values() for p in bot.positions.values()]
+    return {"model_id": "MODEL_D", "paper_only": True, "items": positions[offset:offset + limit], "count": len(positions), "limit": limit, "offset": offset}
+
+
+@app.get("/api/model_d/journal")
+def get_model_d_journal(limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0), bot_id: Optional[str] = None, symbol: Optional[str] = Query(None, min_length=3, max_length=32), direction: Optional[str] = Query(None, pattern="^(LONG|SHORT)$"), lifecycle_status: Optional[str] = Query(None, pattern="^(OPEN|CLOSED)$"), entry_from: Optional[str] = None, entry_to: Optional[str] = None, exit_from: Optional[str] = None, exit_to: Optional[str] = None) -> Dict[str, Any]:
+    def end_of_day(value): return f"{value}T23:59:59.999999" if value and len(value) == 10 else value
+    items, count = model_d_bot_store.filtered_journal(limit, offset, bot_id, symbol, direction, lifecycle_status, entry_from, end_of_day(entry_to), exit_from, end_of_day(exit_to))
+    return {"model_id": "MODEL_D", "paper_only": True, "items": items, "count": count, "limit": limit, "offset": offset}
 
 
 @app.get("/api/model_d/signals")
@@ -1716,10 +2501,18 @@ def get_model_d_report() -> Dict[str, Any]:
 @app.get("/api/model_d/wallets/status")
 def get_model_d_wallet_status() -> Dict[str, Any]:
     counts = model_d_wallet_registry.count_by_chain()
-    return {"model_id": "MODEL_D", "enabled": model_d_config.wallet_scanner_enabled,
+    lifecycle_status = _wallet_pipeline_status()
+    provider_status = _wallet_provider_status()
+    wallet_master_enabled = lifecycle_status != "DISABLED"
+    return {"model_id": "MODEL_D", "enabled": wallet_master_enabled,
             "target": model_d_config.wallet_discovery_target, "counts_by_chain": counts,
-            "unique_candidates": sum(counts.values()), "wallet_tracking": "UNAVAILABLE" if not model_d_config.wallet_scanner_enabled else "CONFIGURED",
-            "source_status": "UNAVAILABLE" if not any(model_d_config.wallet_rpc_urls.values()) else "CONFIGURED"}
+            "unique_candidates": sum(counts.values()), "wallet_tracking": lifecycle_status,
+            "worker_status": lifecycle_status, "source_status": provider_status,
+            "configured_chains": sorted(model_d_config.wallet_rpc_urls.keys()),
+            "provider_chains": sorted(model_d_wallet_providers.keys()),
+            "worker": model_d_wallet_pipeline.state,
+            "enrichment_enabled": model_d_config.wallet_enrichment_enabled,
+            "ranking_enabled": model_d_config.wallet_ranking_enabled}
 
 
 @app.get("/api/model_d/wallets")
@@ -1781,6 +2574,7 @@ def get_model_b_scanner_telemetry(limit: int = Query(10, ge=1, le=50)):
 @app.post("/api/model_b/scan")
 async def trigger_model_b_scan():
     """Trigger an immediate 1H scan cycle across universal perpetual markets for Model B."""
+    # Model B uses its own MultiExchangeService and does not depend on Model A specs_map
     candidates = await asyncio.to_thread(model_b_runner.run_scan_cycle)
     ready_count = sum(1 for c in candidates if c.status == CandidateStatus.READY)
     return {
@@ -2691,11 +3485,27 @@ async def get_ai_analysis_by_id(analysis_id: str):
     }
 
 
+@app.get("/api/research/data/sources")
+async def research_sources_endpoint() -> Dict[str, Any]:
+    with db.get_connection() as conn:
+        return {"sources": [dict(row) for row in conn.execute("SELECT * FROM research_sources ORDER BY source_id").fetchall()]}
+
+
+@app.get("/api/research/data/datasets")
+async def research_datasets_endpoint() -> Dict[str, Any]:
+    with db.get_connection() as conn:
+        return {"datasets": [dict(row) for row in conn.execute("SELECT * FROM research_datasets ORDER BY dataset_id").fetchall()]}
+
+
+@app.get("/api/research/data/{dataset_id}")
+async def research_data_endpoint(dataset_id: str, symbol: Optional[str] = Query(None), limit: int = Query(500, ge=1, le=5000)) -> Dict[str, Any]:
+    rows = research_store.list_observations(dataset_id, symbol=symbol, limit=limit)
+    sync = research_store.get_sync_state(dataset_id)
+    status = (sync or {}).get("sync_status") or ("MISSING" if not rows else "AVAILABLE")
+    return {"dataset_id": dataset_id, "observations": rows, "status": status, "sync": sync}
 
 
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("src.api.app:app", host=cfg.host, port=cfg.port, reload=False)
-
-

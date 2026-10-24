@@ -335,8 +335,21 @@ class JournalRepository:
                 trade_outcome = "BREAKEVEN"
 
             # Filter by outcome if requested
-            if outcome and outcome.upper() != "ALL" and trade_outcome != outcome.upper():
-                continue
+            if outcome and outcome.upper() != "ALL":
+                out_req = outcome.upper().strip()
+                if out_req == "SHORT_LOSS":
+                    if not (str(d.get("direction", "")).upper() == "SHORT" and trade_outcome == "LOSS"):
+                        continue
+                elif trade_outcome != out_req:
+                    continue
+
+            # Parse details_json for extra fields (mae_pct, mfe_pct, signal_source, entry_reason)
+            details = {}
+            if d.get("details_json"):
+                try:
+                    details = json.loads(d["details_json"])
+                except Exception:
+                    details = {}
 
             entry_ts = d.get("entry_timestamp_ms")
             exit_ts = d.get("exit_timestamp_ms")
@@ -354,7 +367,12 @@ class JournalRepository:
             d["duration_seconds"] = duration_sec
             d["duration_display"] = duration_str
             d["total_fees"] = round(fee_p + funding_p + slip_p, 4)
-            d["entry_category"] = d.get("entry_category") or "Unclassified"
+            d["entry_category"] = d.get("entry_category") or details.get("entry_category") or "Unclassified"
+            d["signal_source"] = d.get("signal_source") or details.get("signal_source") or details.get("source") or d.get("data_source") or "MODEL_B_SCANNER"
+            d["entry_reason"] = d.get("entry_reason") or details.get("entry_reason") or details.get("setup_reason") or d.get("entry_category") or "Quantitative Setup"
+            d["exit_reason"] = d.get("exit_reason") or details.get("exit_reason") or ("Position Open" if trade_outcome == "OPEN" else "Completed")
+            d["mae_pct"] = float(d.get("mae_pct") or details.get("mae_pct") or 0.0)
+            d["mfe_pct"] = float(d.get("mfe_pct") or details.get("mfe_pct") or 0.0)
             d["entry_time_utc"] = (
                 datetime.fromtimestamp(entry_ts / 1000.0, tz=timezone.utc).isoformat()
                 if entry_ts

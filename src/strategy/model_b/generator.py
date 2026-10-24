@@ -27,6 +27,7 @@ from src.exchange.service import MultiExchangeService
 from src.liquidity.collector import LiquidityCollector
 from src.liquidity.wall_hunter import LiquidityWallHunter
 from src.strategy.model_b.evaluator import evaluate_liquidity_setup
+from src.strategy.model_b.risk_controls import closed_context, short_gate, enforce_stop_floor
 from config.settings import ModelBConfig
 
 
@@ -157,6 +158,7 @@ class ModelBStrategyGenerator:
         now_ms: Optional[int] = None,
         order_book: Optional[NormalizedOrderBook] = None,
         listing_time_ms: Optional[int] = None,
+        candles_4h: Optional[List[Candle]] = None,
     ) -> Optional[SetupCandidate]:
         """Evaluate a single symbol's 1H candles, L2 depth, resting walls, and catalysts."""
         if not self.liquidity_collector:
@@ -250,8 +252,18 @@ class ModelBStrategyGenerator:
         if not signal:
             return None
 
+        context = closed_context(candles, candles_4h, getattr(self.config, "atr_period", 14), now_ms=current_ts)
+        regime_rejection = None
+        if signal.direction == Direction.SHORT and getattr(self.config, "short_regime_gate_enabled", False):
+            bullish_catalyst = bool(catalyst_bias_info and catalyst_bias_info.get("bias") == "BULLISH")
+            allowed, regime_rejection = short_gate(context, snapshot.cvd_1h, snapshot.imbalance_25bps, self.config.min_imbalance_ratio, bullish_catalyst)
+        if context is None and getattr(self.config, "short_regime_gate_enabled", False) and signal.direction == Direction.SHORT:
+            regime_rejection = regime_rejection or "short_htf_context_unavailable"
+
         # 7. Catalyst Conflict Gate (opposing confirmed news vetoes setup)
         rejection_reasons: List[str] = []
+        if regime_rejection:
+            rejection_reasons.append(regime_rejection)
         is_vetoed = False
         if catalyst_bias_info is not None:
             c_bias = catalyst_bias_info.get("bias")
@@ -270,6 +282,10 @@ class ModelBStrategyGenerator:
             self.engine_telemetry["news_catalyst"]["vetoed"] += 1
 
         # 8. Sizing and risk assessment
+        if context and context.get("atr_1h") is not None:
+            signal.stop_loss = enforce_stop_floor(signal.entry_price, signal.stop_loss, signal.direction, context["atr_1h"], self.config.min_stop_distance_pct, self.config.min_stop_atr_multiple)
+        else:
+            signal.stop_loss = enforce_stop_floor(signal.entry_price, signal.stop_loss, signal.direction, None, self.config.min_stop_distance_pct, 0.0)
         assessment = self.size_position(
             entry_price=signal.entry_price,
             stop_loss=signal.stop_loss,
@@ -309,7 +325,7 @@ class ModelBStrategyGenerator:
                 )
 
         aggregated_conf = round(min(0.95, max(0.50, conf)), 2)
-        is_feasible = assessment.is_feasible and not is_vetoed
+        is_feasible = assessment.is_feasible and not is_vetoed and not rejection_reasons
         status = CandidateStatus.READY if is_feasible else CandidateStatus.INFEASIBLE
         # Anchor candidate timestamp and logical setup ID to triggering candle timestamp
         anchor_candle_ms = getattr(signal, "timestamp_ms", None) or current_ts
@@ -322,8 +338,8 @@ class ModelBStrategyGenerator:
             symbol=symbol,
             timestamp_ms=ts_ms,
             direction=signal.direction,
-            bias_4h=MarketBias.BULLISH if signal.direction == Direction.LONG else MarketBias.BEARISH,
-            structure_1h=StructureState.BULLISH if signal.direction == Direction.LONG else StructureState.BEARISH,
+            bias_4h=(context["bias_4h"] if context else MarketBias.NEUTRAL),
+            structure_1h=(context["structure_1h"] if context else StructureState.SIDEWAYS),
             entry_price=signal.entry_price,
             stop_loss=signal.stop_loss,
             take_profit_1=signal.take_profit_1,
@@ -337,8 +353,8 @@ class ModelBStrategyGenerator:
             supporting_reasons=supporting_reasons,
             opposing_reasons=rejection_reasons,
             risk_assessment=assessment,
-            ml_probability=aggregated_conf,
-            calibration_status="CALIBRATED",
+            ml_probability=None,
+            calibration_status="RULE_BASED_UNCALIBRATED",
             status=status,
             rejection_reasons=rejection_reasons,
             entry_category=EntryCategory.REVERSAL,
@@ -352,6 +368,7 @@ class ModelBStrategyGenerator:
                 "imbalance_25bps": snapshot.imbalance_25bps,
                 "cvd_1h": snapshot.cvd_1h,
                 "absorption_score": snapshot.absorption_score,
+                "indicator_context": context or {"status": "UNAVAILABLE"},
                 "exchange": snapshot.exchange_name,
                 "engine_evidence": {
                     "wall_hunter": wall_evidence,

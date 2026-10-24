@@ -29,10 +29,33 @@
             loadJournal();
         }
 
+        function formatJakartaTime(isoOrMs) {
+            if (!isoOrMs) return '--';
+            try {
+                const d = typeof isoOrMs === 'number' ? new Date(isoOrMs) : new Date(isoOrMs);
+                if (isNaN(d.getTime())) return '--';
+                const parts = new Intl.DateTimeFormat('id-ID', {
+                    timeZone: 'Asia/Jakarta',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }).formatToParts(d);
+                const map = {};
+                parts.forEach(p => map[p.type] = p.value);
+                return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute} WIB`;
+            } catch (e) {
+                return String(isoOrMs);
+            }
+        }
+
         function setJournalOutcomeFilter(outcome) {
             journalOutcomeFilter = outcome;
             if (typeof resetPaginationPage === "function") resetPaginationPage("journal");
-            ['ALL', 'WIN', 'LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
+            ['ALL', 'WIN', 'LOSS', 'SHORT_LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
                 const btn = document.getElementById(`jOutcome-${o}`);
                 if (btn) {
                     if (o === outcome) btn.classList.add('filter-btn-active');
@@ -74,7 +97,7 @@
             journalPeriodFilter = 'all';
             journalSearchQuery = '';
 
-            ['ALL', 'WIN', 'LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
+            ['ALL', 'WIN', 'LOSS', 'SHORT_LOSS', 'BREAKEVEN', 'OPEN'].forEach(o => {
                 const btn = document.getElementById(`jOutcome-${o}`);
                 if (btn) {
                     if (o === 'ALL') btn.classList.add('filter-btn-active');
@@ -263,8 +286,8 @@
                     const netColor = netPnlVal > 0.0001 ? 'text-emerald-400' : (netPnlVal < -0.0001 ? 'text-rose-400' : 'text-slate-300');
                     const grossColor = grossPnlVal > 0.0001 ? 'text-emerald-400' : (grossPnlVal < -0.0001 ? 'text-rose-400' : 'text-slate-300');
 
-                    const entryTime = t.entry_time_utc ? t.entry_time_utc.substring(5, 16).replace('T', ' ') + ' UTC' : '--';
-                    const exitTime = t.exit_time_utc ? t.exit_time_utc.substring(5, 16).replace('T', ' ') + ' UTC' : (t.is_open ? '<span class="text-blue-400">In Progress</span>' : '--');
+                    const entryTimeWib = formatJakartaTime(t.entry_timestamp_ms || t.entry_time_utc);
+                    const exitTimeWib = t.exit_timestamp_ms || t.exit_time_utc ? formatJakartaTime(t.exit_timestamp_ms || t.exit_time_utc) : (t.is_open ? '<span class="text-blue-400">In Progress</span>' : '--');
 
                     const tradeId = t.trade_id || '--';
                     const tradeIdShort = tradeId.length > 20 ? tradeId.substring(0, 20) + '...' : tradeId;
@@ -282,11 +305,17 @@
                         modelSub = '<div class="text-[9px] text-amber-400/80">Aggressive Liquidity</div>';
                     }
 
+                    const maeDisplay = t.mae_pct ? (t.mae_pct > 0 ? `-${t.mae_pct.toFixed(2)}%` : `${t.mae_pct.toFixed(2)}%`) : '--';
+                    const mfeDisplay = t.mfe_pct ? (t.mfe_pct > 0 ? `+${t.mfe_pct.toFixed(2)}%` : `${t.mfe_pct.toFixed(2)}%`) : '--';
+                    const signalSrc = t.signal_source || 'MODEL_B_SCANNER';
+                    const entryRsn = t.entry_reason || cat;
+
                     return `
                         <tr class="hover:bg-slate-800/40 text-xs font-mono transition">
                             <td class="px-3 py-3">
                                 <div class="font-bold text-white">${tradeIdShort}</div>
                                 ${setupIdShort}
+                                <div class="text-[10px] text-indigo-400/80 mt-0.5 font-sans">${signalSrc}</div>
                             </td>
                             <td class="px-3 py-3">
                                 ${modelBadge}
@@ -304,21 +333,24 @@
                                     <span>${catIcon}</span>
                                     <span class="font-semibold">${cat}</span>
                                 </div>
+                                <div class="text-[10px] text-slate-400 truncate max-w-[120px]" title="${entryRsn}">${entryRsn}</div>
                             </td>
                             <td class="px-3 py-3">
                                 <div class="text-white font-semibold">${fmtP(t.entry_price)}</div>
-                                <div class="text-[10px] text-slate-400">${entryTime}</div>
+                                <div class="text-[10px] text-slate-400">${entryTimeWib}</div>
                             </td>
                             <td class="px-3 py-3">
                                 <div class="font-semibold ${t.exit_price ? 'text-white' : 'text-slate-500'}">${t.exit_price ? fmtP(t.exit_price) : '--'}</div>
-                                <div class="text-[10px] text-slate-400">${exitTime}</div>
+                                <div class="text-[10px] text-slate-400">${exitTimeWib}</div>
                             </td>
                             <td class="px-3 py-3 text-[11px]">
                                 <div>SL: <span class="text-rose-400">${fmtP(t.stop_loss)}</span></div>
                                 <div>TP: <span class="text-emerald-400">${fmtP(t.take_profit)}</span></div>
                             </td>
                             <td class="px-3 py-3 text-slate-300">
-                                ${t.duration_display || '--'}
+                                <div>${t.duration_display || '--'}</div>
+                                <div class="text-[10px] text-slate-400 mt-0.5 font-sans">MFE: <span class="text-emerald-400">${mfeDisplay}</span></div>
+                                <div class="text-[10px] text-slate-400 font-sans">MAE: <span class="text-rose-400">${maeDisplay}</span></div>
                             </td>
                             <td class="px-3 py-3 font-semibold ${grossColor}">
                                 ${grossPnlVal >= 0 ? '+$' : '-$'}${Math.abs(grossPnlVal).toFixed(3)}
@@ -333,6 +365,12 @@
                             <td class="px-3 py-3 text-slate-400 text-[11px]">
                                 <span class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">${t.exit_reason || (t.is_open ? 'Position Active' : '--')}</span>
                             </td>
+                            <td class="px-3 py-3 text-right">
+                                <button onclick="inspectMainJournalChart('${t.trade_id}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 ml-auto shadow-sm" title="Inspect Candlestick Chart Context">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                    <span>Chart</span>
+                                </button>
+                            </td>
                         </tr>
                     `;
                 }).join('');
@@ -343,3 +381,13 @@
                 });
             }
         }
+function inspectMainJournalChart(tradeId) {
+    const trade = (lastJournalTrades || []).find(t => t.trade_id === tradeId);
+    if (!trade) {
+        if (typeof showNotice === 'function') showNotice(`Trade ${tradeId} not found in journal cache.`, 'info');
+        return;
+    }
+    if (typeof openTradeInspectorModal === 'function') {
+        openTradeInspectorModal(trade);
+    }
+}

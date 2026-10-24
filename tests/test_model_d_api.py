@@ -1,6 +1,27 @@
+import pytest
 from fastapi.testclient import TestClient
 
-from src.api.app import app
+from src.api.app import app, model_d_config
+
+
+@pytest.fixture(autouse=True)
+def isolated_model_d_contract_config():
+    """Keep API contract tests independent of a developer's .env file."""
+    original = {
+        "enabled": model_d_config.enabled,
+        "collector_enabled": model_d_config.collector_enabled,
+        "wallet_tracking_enabled": model_d_config.wallet_tracking_enabled,
+        "wallet_scanner_enabled": model_d_config.wallet_scanner_enabled,
+    }
+    model_d_config.enabled = False
+    model_d_config.collector_enabled = False
+    model_d_config.wallet_tracking_enabled = False
+    model_d_config.wallet_scanner_enabled = False
+    try:
+        yield
+    finally:
+        for name, value in original.items():
+            setattr(model_d_config, name, value)
 
 
 def client():
@@ -17,7 +38,7 @@ def test_status_contract_and_safety_fields():
     assert data['model_id'] == 'MODEL_D'
     assert isinstance(data['sources'], dict)
     assert data['paper_only'] is True and data['live_trading_locked'] is True
-    assert data['wallet_tracking'] == 'UNAVAILABLE'
+    assert data['wallet_tracking'] == 'DISABLED'
 
 
 def test_signals_contract_empty_state_and_pagination_validation():

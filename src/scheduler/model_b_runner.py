@@ -28,6 +28,7 @@ from src.liquidity.wall_hunter import LiquidityWallHunter
 from src.risk.model_b_risk import ModelBRiskManager
 from src.scheduler.scanner_telemetry import ScannerTelemetryTracker
 from src.strategy.model_b.generator import ModelBStrategyGenerator
+from src.strategy.model_b.risk_controls import cooldown_clear
 from src.research import ModelBShadowEvaluator
 from config.settings import ModelBConfig, PaperExecutionConfig
 
@@ -307,12 +308,14 @@ class ModelBRunner:
             def _eval_single(inst: NormalizedInstrument) -> Tuple[NormalizedInstrument, List[Candle], Optional[SetupCandidate], float]:
                 sym = inst.symbol
                 candles: List[Candle] = []
+                candles_4h: List[Candle] = []
                 kline_lat_ms = 0.0
 
                 if self.exchange:
                     t_kline = time.time()
                     try:
                         candles = self.exchange.get_klines(sym, "1h", limit=50)
+                        candles = [c for c in candles if getattr(c, "is_closed", True)]
                         kline_lat_ms = (time.time() - t_kline) * 1000.0
                     except Exception as k_err:
                         kline_lat_ms = (time.time() - t_kline) * 1000.0
@@ -320,6 +323,16 @@ class ModelBRunner:
 
                 if not candles and self.db:
                     candles = self.db.get_candles(sym, "1h", limit=50)
+                    candles = [c for c in candles if getattr(c, "is_closed", True)]
+                if self.exchange:
+                    try:
+                        candles_4h = self.exchange.get_klines(sym, "4h", limit=50)
+                        candles_4h = [c for c in candles_4h if getattr(c, "is_closed", True)]
+                    except Exception as htf_err:
+                        logger.debug(f"ModelBRunner: Failed to fetch 4H candles for {sym}: {htf_err}")
+                if not candles_4h and self.db:
+                    candles_4h = self.db.get_candles(sym, "4h", limit=50)
+                    candles_4h = [c for c in candles_4h if getattr(c, "is_closed", True)]
 
                 cand = None
                 if len(candles) >= 20:
@@ -329,6 +342,7 @@ class ModelBRunner:
                             candles=candles,
                             instrument=inst,
                             now_ms=current_ms,
+                            candles_4h=candles_4h,
                         )
                     except Exception as gen_err:
                         logger.debug(f"ModelBRunner: Generator evaluation failed for {sym}: {gen_err}")
@@ -429,6 +443,14 @@ class ModelBRunner:
             # Submit deduplicated READY candidates to Model B Paper Engine
             for cand in dedup_candidates.values():
                 if cand.status == CandidateStatus.READY:
+                    if cand.direction == Direction.SHORT and getattr(self.config, "short_regime_gate_enabled", False):
+                        indicator_context = (cand.ai_analysis or {}).get("indicator_context", {})
+                        allowed, cooldown_reason = cooldown_clear(self.journal, cand.symbol, cand.direction, current_ms, getattr(self.config, "short_cooldown_minutes", 240), cand.entry_price, indicator_context.get("atr_1h"), getattr(self.config, "short_reentry_min_displacement_atr", 0.5))
+                        if not allowed:
+                            cand.status = CandidateStatus.REJECTED
+                            cand.rejection_reasons.append(cooldown_reason)
+                            self.journal.save_setup(cand)
+                            continue
                     # Skip resubmission if candidate is already in flight, filled, or closed
                     if cand.execution_status in (ExecutionStatus.SUBMITTED, ExecutionStatus.FILLED, ExecutionStatus.CLOSED):
                         continue
@@ -645,44 +667,124 @@ class ModelBRunner:
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=3.0)
 
+    def get_mark_price(self, symbol: str) -> Tuple[Optional[float], Optional[int], str]:
+        """Retrieve fresh mark price across all supported multi-exchange adapters.
+        
+        Returns:
+            (mark_price, timestamp_ms, freshness_status)
+            where freshness_status is one of 'FRESH', 'STALE', or 'MISSING'.
+        """
+        now_ms = int(time.time() * 1000)
+        
+        # 1. Query AsterAdapter via MultiExchangeService
+        if hasattr(self, 'exchange_service') and self.exchange_service and self.exchange_service.aster:
+            try:
+                p_index = self.exchange_service.aster.get_premium_index(symbol)
+                if p_index and float(p_index.get('mark_price', 0.0)) > 0:
+                    px = float(p_index['mark_price'])
+                    ts = int(p_index.get('timestamp_ms') or now_ms)
+                    age_sec = (now_ms - ts) / 1000.0 if ts else 0.0
+                    status = 'FRESH' if age_sec <= 60.0 else 'STALE'
+                    return px, ts, status
+            except Exception as ex_err:
+                logger.debug(f'ModelBRunner: aster get_premium_index failed for {symbol}: {ex_err}')
+
+        # 2. Query direct exchange adapter if available
+        if self.exchange and hasattr(self.exchange, 'get_premium_index'):
+            try:
+                p_index = self.exchange.get_premium_index(symbol)
+                if p_index and float(p_index.get('mark_price', 0.0)) > 0:
+                    px = float(p_index['mark_price'])
+                    ts = int(p_index.get('timestamp_ms') or now_ms)
+                    age_sec = (now_ms - ts) / 1000.0 if ts else 0.0
+                    status = 'FRESH' if age_sec <= 60.0 else 'STALE'
+                    return px, ts, status
+            except Exception as ex_err:
+                logger.debug(f'ModelBRunner: direct exchange get_premium_index failed for {symbol}: {ex_err}')
+
+        # 3. Query BinancePerpAdapter via MultiExchangeService
+        if hasattr(self, 'exchange_service') and self.exchange_service and self.exchange_service.binance:
+            try:
+                p_index = self.exchange_service.binance.get_premium_index(symbol)
+                if p_index and float(p_index.get('mark_price', 0.0)) > 0:
+                    px = float(p_index['mark_price'])
+                    ts = int(p_index.get('timestamp_ms') or now_ms)
+                    age_sec = (now_ms - ts) / 1000.0 if ts else 0.0
+                    status = 'FRESH' if age_sec <= 60.0 else 'STALE'
+                    return px, ts, status
+            except Exception as ex_err:
+                logger.debug(f'ModelBRunner: binance get_premium_index failed for {symbol}: {ex_err}')
+
+        # 4. Query HyperliquidAdapter via MultiExchangeService
+        if hasattr(self, 'exchange_service') and self.exchange_service and self.exchange_service.hyperliquid:
+            try:
+                p_index = self.exchange_service.hyperliquid.get_premium_index(symbol)
+                if p_index and float(p_index.get('mark_price', 0.0)) > 0:
+                    px = float(p_index['mark_price'])
+                    ts = int(p_index.get('timestamp_ms') or now_ms)
+                    age_sec = (now_ms - ts) / 1000.0 if ts else 0.0
+                    status = 'FRESH' if age_sec <= 60.0 else 'STALE'
+                    return px, ts, status
+            except Exception as ex_err:
+                logger.debug(f'ModelBRunner: hyperliquid get_premium_index failed for {symbol}: {ex_err}')
+
+        # 5. Fallback to latest local DB candle
+        if self.db:
+            try:
+                candles = self.db.get_candles(symbol, '1h', limit=1)
+                if candles and candles[-1].close > 0:
+                    px = float(candles[-1].close)
+                    ts = int(candles[-1].timestamp_ms)
+                    age_sec = (now_ms - ts) / 1000.0
+                    status = 'FRESH' if age_sec <= 3600.0 else 'STALE'
+                    return px, ts, status
+            except Exception:
+                pass
+
+        return None, None, 'MISSING'
+
     def get_enriched_open_positions(self) -> List[Dict[str, Any]]:
         """Return open paper positions enriched with live mark prices, UPnL, ROE, and exchange-style fields."""
         enriched: List[Dict[str, Any]] = []
+        now_ms = int(time.time() * 1000)
+
         for pos in self.paper_engine.open_positions.values():
             sym = pos.symbol
-            mark_p = pos.entry_price  # fallback
-            if self.exchange and hasattr(self.exchange, "get_premium_index"):
-                try:
-                    p_index = self.exchange.get_premium_index(sym)
-                    if p_index and float(p_index.get("mark_price", 0.0)) > 0:
-                        mark_p = float(p_index["mark_price"])
-                except Exception as ex_err:
-                    logger.debug(f"ModelBRunner: Failed to fetch live mark price for {sym}: {ex_err}")
+            mark_p, mark_ts, mark_status = self.get_mark_price(sym)
 
-            if mark_p == pos.entry_price and self.db:
-                try:
-                    candles = self.db.get_candles(sym, "1h", limit=1)
-                    if candles:
-                        mark_p = candles[-1].close
-                except Exception:
-                    pass
+            # Contract side check
+            is_long = (pos.direction.value if hasattr(pos.direction, 'value') else str(pos.direction)).upper() == 'LONG'
 
-            is_long = (pos.direction.value if hasattr(pos.direction, "value") else str(pos.direction)).upper() == "LONG"
-            if is_long:
-                gross_upnl = (mark_p - pos.entry_price) * pos.quantity
-            else:
-                gross_upnl = (pos.entry_price - mark_p) * pos.quantity
-
-            est_exit_fee = (pos.quantity * mark_p) * 0.0005
-            net_upnl = gross_upnl - pos.entry_fee - est_exit_fee - (pos.funding_paid or 0.0)
-
+            # Authoritative Linear Perpetual PnL calculation
+            # LONG:  quantity * (mark_price - entry_price)
+            # SHORT: quantity * (entry_price - mark_price)
+            # When mark price is missing, unrealized PnL is undefined (None)
             margin = pos.margin_usdt or (pos.notional_usdt / (pos.leverage or 10.0))
-            roe_pct = (net_upnl / margin * 100.0) if margin > 0 else 0.0
-            roi_pct = (net_upnl / pos.notional_usdt * 100.0) if pos.notional_usdt > 0 else 0.0
+            if mark_p is not None:
+                if is_long:
+                    gross_upnl = (mark_p - pos.entry_price) * pos.quantity
+                else:
+                    gross_upnl = (pos.entry_price - mark_p) * pos.quantity
+
+                est_exit_fee = (pos.quantity * mark_p) * 0.0005
+                net_upnl = gross_upnl - pos.entry_fee - est_exit_fee - (pos.funding_paid or 0.0)
+                roe_pct = (net_upnl / margin * 100.0) if margin > 0 else 0.0
+                roi_pct = (net_upnl / pos.notional_usdt * 100.0) if pos.notional_usdt > 0 else 0.0
+            else:
+                gross_upnl = None
+                est_exit_fee = None
+                net_upnl = None
+                roe_pct = None
+                roi_pct = None
 
             entry_iso = (
                 datetime.fromtimestamp(pos.entry_timestamp_ms / 1000.0, tz=timezone.utc).isoformat()
                 if pos.entry_timestamp_ms
+                else None
+            )
+            mark_iso = (
+                datetime.fromtimestamp(mark_ts / 1000.0, tz=timezone.utc).isoformat()
+                if mark_ts
                 else None
             )
 
@@ -691,32 +793,35 @@ class ModelBRunner:
 
             p_dict = pos.to_dict()
             p_dict.update({
-                "side": "LONG" if is_long else "SHORT",
-                "mode": "SIMULATED (10x)",
-                "margin_mode": "SIMULATED_ISOLATED",
-                "margin_mode_display": f"SIMULATED ({int(pos.leverage or 10)}x)",
-                "position_amt": pos.quantity,
-                "notional_usdt": round(pos.notional_usdt, 4),
-                "entry_price": pos.entry_price,
-                "mark_price": mark_p,
-                "allocated_margin_usdt": round(margin, 4),
-                "allocated_margin_label": f"${margin:.2f}",
-                "take_profit_price": pos.take_profit_1 or pos.take_profit,
-                "take_profit_label": tp_display,
-                "stop_loss_price": pos.stop_loss,
-                "stop_loss_label": sl_display,
-                "protection_status": "PROTECTED",
-                "liquidation_price": None,
-                "liquidation_label": "NOT MODELED",
-                "unrealized_pnl_gross": round(gross_upnl, 4),
-                "unrealized_pnl_usdt": round(net_upnl, 4),
-                "unrealized_pnl_net_usdt": round(net_upnl, 4),
-                "roe_pct": round(roe_pct, 2),
-                "roi_pct": round(roi_pct, 2),
-                "entry_time_utc": entry_iso,
-                "entry_fee_paid": round(pos.entry_fee, 4),
-                "estimated_exit_fee": round(est_exit_fee, 4),
-                "is_simulated": True,
+                'side': 'LONG' if is_long else 'SHORT',
+                'mode': 'SIMULATED (10x)',
+                'margin_mode': 'SIMULATED_ISOLATED',
+                'margin_mode_display': f'SIMULATED ({int(pos.leverage or 10)}x)',
+                'position_amt': pos.quantity,
+                'notional_usdt': round(pos.notional_usdt, 4),
+                'entry_price': pos.entry_price,
+                'mark_price': round(mark_p, 8) if mark_p is not None else None,
+                'mark_price_timestamp_ms': mark_ts,
+                'mark_price_time_utc': mark_iso,
+                'mark_price_status': mark_status,
+                'allocated_margin_usdt': round(margin, 4),
+                'allocated_margin_label': f"${margin:.2f}",
+                'take_profit_price': pos.take_profit_1 or pos.take_profit,
+                'take_profit_label': tp_display,
+                'stop_loss_price': pos.stop_loss,
+                'stop_loss_label': sl_display,
+                'protection_status': 'PROTECTED',
+                'liquidation_price': None,
+                'liquidation_label': 'NOT MODELED',
+                'unrealized_pnl_gross': round(gross_upnl, 4) if gross_upnl is not None else None,
+                'unrealized_pnl_usdt': round(net_upnl, 4) if net_upnl is not None else None,
+                'unrealized_pnl_net_usdt': round(net_upnl, 4) if net_upnl is not None else None,
+                'roe_pct': round(roe_pct, 2) if roe_pct is not None else None,
+                'roi_pct': round(roi_pct, 2) if roi_pct is not None else None,
+                'entry_time_utc': entry_iso,
+                'entry_fee_paid': round(pos.entry_fee, 4),
+                'estimated_exit_fee': round(est_exit_fee, 4) if est_exit_fee is not None else None,
+                'is_simulated': True,
             })
             enriched.append(p_dict)
         return enriched

@@ -149,7 +149,7 @@ class ModelBConfig(BaseModel):
     target_trade_risk_usdt: float = Field(default=1.00, gt=0.0, description="Target dollar risk per trade")
     daily_loss_limit_usdt: float = Field(default=3.00, gt=0.0, description="Daily circuit breaker loss limit")
     weekly_loss_limit_usdt: float = Field(default=7.50, gt=0.0, description="Weekly circuit breaker loss limit")
-    max_open_positions: int = Field(default=3, ge=1, le=10, description="Max concurrent open paper positions")
+    max_open_positions: int = Field(default=10, ge=1, le=10, description="Max concurrent open paper positions (Model B paper testing)")
     max_leverage: int = Field(default=10, ge=1, le=20, description="Max leverage allowed")
     max_margin_usdt: float = Field(default=15.00, gt=0.0, description="Max isolated margin allowed per position")
     min_risk_reward: float = Field(default=1.5, gt=0.0, description="Minimum net reward-to-risk ratio")
@@ -167,6 +167,11 @@ class ModelBConfig(BaseModel):
     anchor_symbol_count: int = Field(default=10, ge=1, le=20, description="Number of top-volume anchor symbols evaluated every cycle")
     diagnostic_breaker_override: bool = Field(default=False, description="TEMPORARY Model B paper-only diagnostic: bypass daily/weekly loss breaker entry blocks. Baseline limits are NOT altered. Env: MODEL_B_DIAGNOSTIC_BREAKER_OVERRIDE")
     entry_kill_switch: bool = Field(default=False, description="Immediately blocks all new Model B paper entries. Env: MODEL_B_ENTRY_KILL_SWITCH")
+    short_regime_gate_enabled: bool = Field(default=False, description="Require actual closed-bar HTF/EMA/CVD alignment for SHORT paper entries")
+    min_stop_distance_pct: float = Field(default=0.015, ge=0.0, le=0.10)
+    min_stop_atr_multiple: float = Field(default=1.25, ge=0.0, le=10.0)
+    short_cooldown_minutes: int = Field(default=240, ge=0, le=10080)
+    short_reentry_min_displacement_atr: float = Field(default=0.5, ge=0.0, le=10.0)
     scan_interval_sec: int = Field(default=60, ge=5, le=3600, description="Evaluation loop cadence")
     enabled_venues: List[str] = Field(
         default_factory=lambda: ["asterdex", "binance", "hyperliquid"],
@@ -235,6 +240,7 @@ class ModelDConfig(BaseModel):
     wallet_max_concurrency: int = Field(default=2, ge=1, le=20)
     wallet_scan_interval_seconds: int = Field(default=3600, ge=60)
     wallet_rpc_urls: Dict[int, Optional[str]] = Field(default_factory=lambda: {1: None, 56: None, 42161: None, 8453: None})
+    wallet_confirmation_depths: Dict[int, int] = Field(default_factory=lambda: {1: 12, 56: 15, 42161: 20, 8453: 20})
 
 
 class AppConfig(BaseModel):

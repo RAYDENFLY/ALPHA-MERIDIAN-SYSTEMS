@@ -38,6 +38,7 @@ __pycache__/
 *$py.class
 *.so
 .pytest_cache/
+.pytest-*/
 .mypy_cache/
 .ruff_cache/
 .coverage

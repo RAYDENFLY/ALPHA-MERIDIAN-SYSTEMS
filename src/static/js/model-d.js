@@ -1,42 +1,19 @@
 let modelDPollTimer = null;
 let modelDRequestInFlight = false;
-
-function stopModelDAutoRefresh() {
-    if (modelDPollTimer) { clearInterval(modelDPollTimer); modelDPollTimer = null; }
-}
-
-async function loadModelD() {
-    stopModelDAutoRefresh();
-    await refreshModelD();
-    modelDPollTimer = setInterval(() => { if (!document.hidden) refreshModelD(); }, 15000);
-}
-
-async function refreshModelD() {
-    if (modelDRequestInFlight) return;
-    modelDRequestInFlight = true;
-    const state = document.getElementById('modelDState');
-    const symbol = (document.getElementById('modelDSymbol')?.value || 'BTCUSDT').trim().toUpperCase();
-    try {
-        const [statusRes, liquidityRes, reportRes, walletsRes] = await Promise.all([
-            fetch(`/api/model_d/status?symbol=${encodeURIComponent(symbol)}`),
-            fetch(`/api/model_d/liquidity?symbol=${encodeURIComponent(symbol)}`),
-            fetch('/api/model_d/diagnostic/report'),
-            fetch('/api/model_d/wallets/status')
-        ]);
-        if (!statusRes.ok || !liquidityRes.ok || !reportRes.ok || !walletsRes.ok) throw new Error('Model D endpoint unavailable');
-        const [status, liquidity, report, wallets] = await Promise.all([statusRes.json(), liquidityRes.json(), reportRes.json(), walletsRes.json()]);
-        if (state) state.textContent = `Model D: ${status.enabled ? 'ENABLED' : 'DISABLED'} · paper-only: ${status.paper_only} · live lock: ${status.live_trading_locked} · wallet tracking: ${status.wallet_tracking}`;
-        const sources = document.getElementById('modelDSources');
-        if (sources) sources.textContent = JSON.stringify(status.sources || {}, null, 2);
-        const liq = document.getElementById('modelDLiquidity');
-        if (liq) liq.textContent = JSON.stringify(liquidity, null, 2);
-        const research = document.getElementById('modelDResearch');
-        if (research) research.textContent = JSON.stringify(report, null, 2);
-        const walletEl = document.getElementById('modelDWallets');
-        if (walletEl) walletEl.textContent = JSON.stringify(wallets, null, 2);
-    } catch (err) {
-        if (state) state.textContent = `Model D ERROR: ${err.message}`;
-    } finally { modelDRequestInFlight = false; }
-}
-
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopModelDAutoRefresh(); else if (document.getElementById('tab-model_d') && !document.getElementById('tab-model_d').classList.contains('hidden')) loadModelD(); });
+const mdEsc = v => String(v ?? 'N/A').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const mdValue = v => v === null || v === undefined || v === '' ? 'N/A' : mdEsc(v);
+const mdMoney = v => v === null || v === undefined || v === '' ? 'N/A' : `${Number(v).toFixed(4)} USDT`;
+const mdState = (v, fallback='UNAVAILABLE') => String(v || fallback).toUpperCase();
+function stopModelDAutoRefresh(){if(modelDPollTimer){clearInterval(modelDPollTimer);modelDPollTimer=null;}}
+function mdRows(data, empty='No data available.'){if(!data||!Object.keys(data).length)return `<div class="model-d-muted">${empty}</div>`;return Object.entries(data).filter(([,v])=>v!==null&&v!==undefined&&typeof v!=='object').map(([k,v])=>`<div class="model-d-data-row"><span>${mdEsc(k.replaceAll('_',' '))}</span><strong>${mdValue(v)}</strong></div>`).join('');}
+function mdRaw(id,data){const e=document.getElementById(id);if(e)e.textContent=JSON.stringify(data||{},null,2);}
+function mdStatus(id,state,text=state){const e=document.getElementById(id);if(e){e.dataset.state=String(state).toLowerCase();e.textContent=text;}}
+function journalQuery(){const p=new URLSearchParams({limit:'100'});[['bot_id','modelDJournalBot'],['symbol','modelDJournalSymbol'],['direction','modelDJournalDirection'],['lifecycle_status','modelDJournalStatus'],['entry_from','modelDJournalFrom'],['entry_to','modelDJournalTo'],['exit_from','modelDJournalExitFrom'],['exit_to','modelDJournalExitTo']].forEach(([k,id])=>{const v=document.getElementById(id)?.value?.trim();if(v)p.set(k,k==='symbol'?v.toUpperCase():v);});return p;}
+function renderBots(data){const e=document.getElementById('modelDBots'),bots=data?.bots||[];if(!bots.length){e.innerHTML='<div class="model-d-panel text-xs text-slate-400 md:col-span-3">Bot state is UNAVAILABLE; no backend records returned.</div>';return;}e.innerHTML=bots.map(b=>`<article class="model-d-panel"><div class="flex items-start justify-between gap-2"><span class="font-mono text-[10px] uppercase tracking-wide text-indigo-300">${mdEsc(b.bot_id)}</span><span class="model-d-status">${mdEsc(mdState(b.state,'PAPER'))}</span></div><div class="mt-3 font-mono text-xl text-white">${b.equity_usdt==null?'N/A':Number(b.equity_usdt).toFixed(2)+' USDT'}</div><div class="mt-3 grid grid-cols-3 gap-2 text-[10px] font-mono"><span class="text-slate-500">OPEN<strong class="mt-1 block text-slate-200">${mdValue(b.open_positions)}</strong></span><span class="text-slate-500">REALIZED<strong class="mt-1 block text-slate-200">${mdMoney(b.realized_pnl)}</strong></span><span class="text-slate-500">INITIAL<strong class="mt-1 block text-slate-200">${mdMoney(b.initial_equity_usdt)}</strong></span></div></article>`).join('');}
+function renderPositions(data){const e=document.getElementById('modelDPositions'),rows=data?.items||[];document.getElementById('modelDPositionState').textContent=rows.length?`${rows.length} open`:'EMPTY';if(!rows.length){e.innerHTML='<tr><td colspan="8" class="py-8 text-center text-slate-500">No open paper positions.</td></tr>';return;}e.innerHTML=rows.map(p=>`<tr><td><strong class="text-white">${mdEsc(p.bot_id)}</strong><br><span class="font-mono text-indigo-300">${mdEsc(p.symbol)}</span></td><td>${mdValue(p.direction)}</td><td>${mdValue(p.quantity)}<br><span class="text-slate-500">${mdMoney(p.notional_usdt)}</span></td><td>${mdValue(p.entry_price)}<br><span class="text-slate-500">mark ${mdValue(p.mark_price)}</span></td><td>${mdMoney(p.margin_usdt)}</td><td>TP ${mdValue(p.take_profit_price)}<br>SL ${mdValue(p.stop_loss_price)}</td><td>${mdMoney(p.unrealized_pnl)}</td><td>${mdValue(p.status)}</td></tr>`).join('');}
+function renderJournal(data){const e=document.getElementById('modelDJournal'),rows=data?.items||[];document.getElementById('modelDJournalState').textContent=rows.length?`${rows.length} records`:'EMPTY';if(!rows.length){e.innerHTML='<tr><td colspan="8" class="py-8 text-center text-slate-500">No matching lifecycle records.</td></tr>';return;}e.innerHTML=rows.map(r=>`<tr><td><strong class="text-white">${mdEsc(r.position_id||r.trade_id)}</strong><br><span class="text-slate-500">${mdEsc(r.bot_id)}</span></td><td><span class="font-mono text-indigo-300">${mdEsc(r.symbol)}</span><br>${mdValue(r.direction)}</td><td>${mdValue(r.entry_timestamp||r.event_timestamp)}<br>${mdValue(r.entry_price)}</td><td>${mdValue(r.exit_timestamp)}<br>${mdValue(r.exit_price)}</td><td>${mdValue(r.quantity)}<br>${mdMoney(r.margin_usdt)}</td><td>TP ${mdValue(r.take_profit_price)}<br>SL ${mdValue(r.stop_loss_price)}</td><td>${mdMoney(r.net_realized_pnl??r.realized_pnl)}</td><td>${mdValue(r.lifecycle_status||r.event_type)}</td></tr>`).join('');}
+async function refreshModelD(){if(modelDRequestInFlight)return;modelDRequestInFlight=true;const symbol=(document.getElementById('modelDSymbol')?.value||'BTCUSDT').trim().toUpperCase(),state=document.getElementById('modelDState');try{const q=journalQuery(),rs=await Promise.all([fetch(`/api/model_d/status?symbol=${encodeURIComponent(symbol)}`),fetch(`/api/model_d/liquidity?symbol=${encodeURIComponent(symbol)}`),fetch('/api/model_d/diagnostic/report'),fetch('/api/model_d/wallets/status'),fetch('/api/model_d/bots'),fetch('/api/model_d/positions'),fetch(`/api/model_d/journal?${q}`)]);if(rs.some(r=>!r.ok))throw Error('One or more Model D endpoints returned an error');const [status,liq,report,wallets,bots,positions,journal]=await Promise.all(rs.map(r=>r.json()));const s=mdState(status.enabled?'ENABLED':status.scan_worker?.enabled?'LIVE':'DISABLED');state.textContent=`${s} · paper-only: ${status.paper_only?'YES':'NO'} · live lock: ${status.live_trading_locked?'YES':'NO'} · wallet tracking: ${mdState(status.wallet_tracking)}`;mdStatus('modelDHeaderStatus',s,s);renderBots(bots);renderPositions(positions);renderJournal(journal);document.getElementById('modelDOpenCount').textContent=(positions.items||[]).length;document.getElementById('modelDClosedCount').textContent=journal.count??'N/A';document.getElementById('modelDHealth').textContent=mdState(status.scan_worker?.health||status.sources?.status);document.getElementById('modelDRealizedPnl').textContent=mdMoney(bots.realized_pnl);document.getElementById('modelDUnrealizedPnl').textContent=mdMoney(bots.unrealized_pnl);document.getElementById('modelDSources').innerHTML=mdRows(status.sources,'No source health returned.');document.getElementById('modelDSourceState').textContent=mdState(status.sources?.status);document.getElementById('modelDLiquidity').innerHTML=mdRows(liq,'UNAVAILABLE — collection is disabled or no observation exists.');document.getElementById('modelDResearch').innerHTML=mdRows(report,'No research observations yet.');document.getElementById('modelDWallets').innerHTML=mdRows(wallets,'Wallet scanner is disabled or unavailable.');mdRaw('modelDSourcesRaw',status.sources);mdRaw('modelDLiquidityRaw',liq);mdRaw('modelDResearchRaw',report);mdRaw('modelDWalletsRaw',wallets);const select=document.getElementById('modelDJournalBot');if(select&&select.options.length===1)(bots.bots||[]).forEach(b=>select.add(new Option(b.bot_id,b.bot_id)));}catch(err){state.textContent=`ERROR · ${err.message}`;mdStatus('modelDHeaderStatus','error','ERROR');}finally{modelDRequestInFlight=false;}}
+async function loadModelD(){stopModelDAutoRefresh();await refreshModelD();modelDPollTimer=setInterval(()=>{if(!document.hidden&&!document.getElementById('tab-model_d')?.classList.contains('hidden'))refreshModelD();},15000);}
+document.getElementById('modelDJournalClear')?.addEventListener('click',()=>{['modelDJournalSymbol','modelDJournalDirection','modelDJournalBot','modelDJournalStatus','modelDJournalFrom','modelDJournalTo','modelDJournalExitFrom','modelDJournalExitTo'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});refreshModelD();});
+['modelDJournalSymbol','modelDJournalDirection','modelDJournalBot','modelDJournalStatus','modelDJournalFrom','modelDJournalTo','modelDJournalExitFrom','modelDJournalExitTo'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>refreshModelD()));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopModelDAutoRefresh();else if(document.getElementById('tab-model_d')&&!document.getElementById('tab-model_d').classList.contains('hidden'))loadModelD();});

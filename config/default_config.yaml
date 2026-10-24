@@ -87,7 +87,7 @@ model_b:
   target_trade_risk_usdt: 1.00
   daily_loss_limit_usdt: 3.00
   weekly_loss_limit_usdt: 7.50
-  max_open_positions: 3
+  max_open_positions: 10
   max_leverage: 10
   min_risk_reward: 1.5
   max_spread_bps: 15.0

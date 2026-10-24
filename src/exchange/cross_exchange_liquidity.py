@@ -141,6 +141,8 @@ class CrossExchangeLiquidityAggregator:
         # Persistent wall tracking keyed by (symbol, side, bucket_price_str)
         self._persistent_walls: Dict[str, PersistentRestingWall] = {}
         self._last_purge_ms: int = int(time.time() * 1000)
+        # Retain latest valid order books per venue (from the most recent aggregate_liquidity_heatmap call)
+        self.last_raw_books: Dict[str, Dict[str, Optional[NormalizedOrderBook]]] = {}
         self._heatmap_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
     def fetch_all_order_books(self, symbol: str, limit: int = 50) -> Dict[str, Tuple[Optional[NormalizedOrderBook], float]]:
@@ -194,7 +196,20 @@ class CrossExchangeLiquidityAggregator:
             if (now_sec - cached_t) < 3.0:
                 return cached_data
 
-        raw_books = self.fetch_all_order_books(clean_symbol, limit=limit)
+        requested = venue_filter.lower().strip()
+        if requested in ("asterdex", "binance", "bybit"):
+            # Do not contact unrelated exchanges for an explicitly selected venue.
+            started = time.time()
+            adapter = {"asterdex": self.aster_adapter, "binance": self.binance_adapter, "bybit": self.bybit_adapter}[requested]
+            try:
+                raw_books = {requested: (adapter.get_order_book(clean_symbol, limit=limit), (time.time() - started) * 1000.0)}
+            except Exception as err:
+                logger.warning(f"CrossExchange: {requested} fetch error for {clean_symbol}: {err}")
+                raw_books = {requested: (None, (time.time() - started) * 1000.0)}
+        else:
+            raw_books = self.fetch_all_order_books(clean_symbol, limit=limit)
+
+        self.last_raw_books[clean_symbol] = {k: v[0] for k, v in raw_books.items()}
 
         # Build Venue Summaries with freshness indicators
         venue_summaries: Dict[str, VenueOrderBookSnapshot] = {}

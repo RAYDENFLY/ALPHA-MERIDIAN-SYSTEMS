@@ -173,6 +173,29 @@ class ScannerRunner:
         self.active_setups_by_symbol: Dict[str, SetupCandidate] = {}
         self.active_setups_by_id: Dict[str, SetupCandidate] = {}
 
+    def _record_model_a_funnel(self, scan_id: str, scan_started_at: str, symbol: str,
+                               candle: Optional[Any] = None, freshness: str = "NOT_EVALUATED",
+                               history: str = "NOT_EVALUATED", data_quality: str = "NOT_EVALUATED",
+                               predicates: Optional[Dict[str, str]] = None,
+                               values: Optional[Dict[str, Any]] = None,
+                               final_status: str = "NOT_EVALUATED", first_rejection: Optional[str] = None,
+                               exception_detail: Optional[str] = None) -> None:
+        """Best-effort observability only; never raises into strategy evaluation."""
+        try:
+            self.db.save_model_a_funnel({
+                "scan_id": scan_id, "symbol": symbol, "scan_started_at_utc": scan_started_at,
+                "scan_completed_at_utc": datetime.now(timezone.utc).isoformat(),
+                "market_candle_timestamp_ms": getattr(candle, "timestamp_ms", None),
+                "market_candle_close_time_ms": getattr(candle, "close_time_ms", None),
+                "freshness_status": freshness, "history_status": history,
+                "data_quality_status": data_quality, "predicates": predicates or {},
+                "values": values or {}, "strategy_version": "MODEL_A_FROZEN",
+                "final_status": final_status, "first_rejection_reason": first_rejection,
+                "exception_detail": exception_detail,
+            })
+        except Exception as exc:
+            logger.debug(f"Model A funnel persistence skipped for {symbol}: {exc}")
+
     def _get_required_ml_probability(self, candidate: SetupCandidate) -> float:
         """Compute setup-specific break-even probability threshold (or explicit override)."""
         if self.min_ml_confidence is not None:
@@ -287,7 +310,8 @@ class ScannerRunner:
         """Execute a full scan cycle across symbols."""
         now_ms = int(time.time() * 1000)
         cycle_id = f"SCAN_{now_ms}"
-        self.last_scan_utc = datetime.now(timezone.utc).isoformat()
+        scan_started_at = datetime.now(timezone.utc).isoformat()
+        self.last_scan_utc = scan_started_at
         self.scanner_state = "RUNNING"
         self.last_scan_status = "RUNNING"
         self.last_symbols_attempted = list(symbols)
@@ -341,11 +365,16 @@ class ScannerRunner:
             max_candle_time_ms = 0
 
             for sym in symbols:
+                latest_c1 = None
                 try:
                     c1_list = self.db.get_candles(sym, "1h")
                     c4_list = self.db.get_candles(sym, "4h")
 
                     if len(c1_list) < 40:
+                        self._record_model_a_funnel(
+                            cycle_id, scan_started_at, sym, history="FAIL", data_quality="FAIL",
+                            predicates={"data_quality": "FAIL", "history_sufficiency": "FAIL", "equilibrium_zone": "NOT_EVALUATED", "smc_confluence": "NOT_EVALUATED", "reward_risk": "NOT_EVALUATED"}, values={"candle_count_1h": len(c1_list)},
+                            final_status="INSUFFICIENT_DATA", first_rejection="INSUFFICIENT_DATA")
                         if hasattr(self.journal, "save_lifecycle_event"):
                             try:
                                 self.journal.save_lifecycle_event(
@@ -388,6 +417,13 @@ class ScannerRunner:
                             reason_code = "NO_SMC_CONFLUENCE"
                             reason_detail = "No SMC/SnR structural setup found in dealing range and order blocks."
                             event_metadata = {"candle_time_ms": latest_c1.timestamp_ms}
+
+                        pos = event_metadata.get("pos_72")
+                        in_equilibrium = isinstance(pos, (int, float)) and self.generator.discount_threshold < pos < self.generator.premium_threshold
+                        eq_state = "FAIL" if in_equilibrium else ("PASS" if pos is not None else "NOT_EVALUATED")
+                        smc_state = "NOT_EVALUATED" if eq_state == "FAIL" else ("FAIL" if reason_code == "NO_SMC_CONFLUENCE" else "PASS")
+                        rr_state = "FAIL" if reason_code == "INSUFFICIENT_RISK_REWARD" else "NOT_EVALUATED"
+                        self._record_model_a_funnel(cycle_id, scan_started_at, sym, latest_c1, "STALE" if is_stale_data else "LIVE", "PASS", "PASS", {"data_quality": "PASS", "history_sufficiency": "PASS", "equilibrium_zone": eq_state, "smc_confluence": smc_state, "reward_risk": rr_state}, event_metadata, "NO_SETUP", reason_code)
 
                         if hasattr(self.journal, "save_lifecycle_event"):
                             try:
@@ -433,6 +469,7 @@ class ScannerRunner:
                             )
                         except Exception as lc_err:
                             logger.debug(f"Lifecycle event log skipped: {lc_err}")
+
 
                     # Fetch recent funding rate
                     rates = self.db.get_funding_rates(sym)
@@ -650,6 +687,7 @@ class ScannerRunner:
                             self.active_setups_by_id.pop(existing.candidate_id, None)
                         self.active_setups_by_symbol[sym] = candidate
                         self.active_setups_by_id[candidate.candidate_id] = candidate
+                    self._record_model_a_funnel(cycle_id, scan_started_at, sym, latest_c1, "STALE" if is_stale_data else "LIVE", "PASS", "PASS", {"data_quality": "PASS", "history_sufficiency": "PASS", "equilibrium_zone": "PASS", "smc_confluence": "PASS", "reward_risk": "PASS"}, {"entry_price": candidate.entry_price, "stop_loss": candidate.stop_loss, "take_profit_1": candidate.take_profit_1, "gross_rr": candidate.gross_reward_to_risk, "net_rr": candidate.net_reward_to_risk}, candidate.status.value, candidate.rejection_reasons[0] if candidate.rejection_reasons else None)
                     current_cycle_candidates.append(candidate)
 
                 except Exception as e:
@@ -684,6 +722,7 @@ class ScannerRunner:
                         self.active_setups_by_symbol[sym] = err_cand
                         self.active_setups_by_id[err_cand.candidate_id] = err_cand
                     current_cycle_candidates.append(err_cand)
+                    self._record_model_a_funnel(cycle_id, scan_started_at, sym, latest_c1, "ERROR", "NOT_EVALUATED", "ERROR", {"data_quality": "ERROR", "history_sufficiency": "NOT_EVALUATED", "equilibrium_zone": "NOT_EVALUATED", "smc_confluence": "NOT_EVALUATED", "reward_risk": "NOT_EVALUATED"}, {}, "ERROR", "EVALUATION_ERROR", str(e))
 
             # Update candle freshness tracking
             if max_candle_time_ms > 0:

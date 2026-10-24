@@ -421,8 +421,19 @@
                     const fvBadge = document.getElementById('forwardValidationBadge');
                     const fvNote = document.getElementById('forwardValidationNote');
                     if (fvBadge) {
-                        fvBadge.innerText = fv.validation_status || 'UNPROVEN_NO_COMPLETED_FORWARD_TRADES';
-                        fvBadge.className = `px-2.5 py-0.5 text-xs font-bold rounded ${
+                        const fullStatus = fv.validation_status || 'UNPROVEN_NO_COMPLETED_FORWARD_TRADES';
+                        const compactStatus = {
+                            'UNPROVEN_NO_COMPLETED_FORWARD_TRADES': 'UNPROVEN',
+                            'PRELIMINARY_POSITIVE_NOT_VALIDATED': 'PRELIMINARY',
+                            'NEGATIVE_NET_EXPECTANCY': 'NEGATIVE',
+                            'INSUFFICIENT_SAMPLE': 'INSUFFICIENT',
+                            'UNAVAILABLE': 'UNAVAILABLE'
+                        }[fullStatus] || fullStatus;
+                        fvBadge.innerText = compactStatus;
+                        fvBadge.title = fullStatus;
+                        fvBadge.setAttribute('aria-label', `Forward validation status: ${fullStatus}`);
+                        fvBadge.dataset.fullStatus = fullStatus;
+                        fvBadge.className = `px-1.5 py-0.5 text-[9px] leading-tight font-bold rounded font-mono whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px] ${
                             fv.validation_status === 'PRELIMINARY_POSITIVE_NOT_VALIDATED' ? 'badge-blue' :
                             fv.validation_status === 'NEGATIVE_NET_EXPECTANCY' ? 'badge-red' :
                             'badge-yellow'

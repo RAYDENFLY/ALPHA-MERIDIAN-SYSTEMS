@@ -8,10 +8,16 @@ for the interactive chart dashboard.
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
+import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from src.data.downloader import HistoricalDownloader
+from src.data.sync import CandleSynchronizer
+from src.data.validator import CandleValidator, TIMEFRAME_MS
 
 from src.core.types import Candle
+from src.data.database import DatabaseManager
 from src.exchange.aster_adapter import AsterAdapter
 from src.exchange.cross_exchange_liquidity import CrossExchangeLiquidityAggregator
 from src.exchange.normalized import NormalizedOrderBook
@@ -36,20 +42,177 @@ class LiquidityChartService:
         self,
         adapter: Optional[AsterAdapter] = None,
         cross_aggregator: Optional[CrossExchangeLiquidityAggregator] = None,
+        binance_adapter: Optional[Any] = None,
+        hyperliquid_adapter: Optional[Any] = None,
+        db: Optional[DatabaseManager] = None,
     ):
         self.adapter = adapter or AsterAdapter()
+        from src.exchange.binance_adapter import BinanceFuturesAdapter
+        from src.exchange.hyperliquid_adapter import HyperliquidAdapter
+        self.binance_adapter = binance_adapter or BinanceFuturesAdapter()
+        self.hyperliquid_adapter = hyperliquid_adapter or HyperliquidAdapter()
         self.tracker = SweepReclaimTracker()
         self.wall_hunter = LiquidityWallHunter(wall_multiple_threshold=2.5, min_persistence_sec=10.0)
         self.cross_aggregator = cross_aggregator or CrossExchangeLiquidityAggregator(aster_adapter=self.adapter)
         self._d1_cache: Dict[str, Dict[str, Any]] = {}
+        self.db = db
+        self._sync_locks_guard = threading.Lock()
+        self._sync_locks: Dict[str, threading.Lock] = {}
+        self._last_sync_check_ts: Dict[str, float] = {}
+        self._exhausted_earliest_ts: Dict[str, int] = {}
 
-    def _get_cached_1d_candles(self, symbol: str, limit: int = 150) -> List[Candle]:
-        """Fetch and cache 1D daily candles to minimize repeated upstream requests."""
+    DEFAULT_TARGET_HISTORY_DAYS: Dict[str, int] = {
+        "1d": 1465,   # ~4.01 years (1,465 daily bars)
+        "4h": 730,    # 2 years
+        "1h": 365,    # 1 year
+        "15m": 60,    # 60 days
+    }
+
+    def _get_symbol_tf_lock(self, key: str) -> threading.Lock:
+        with self._sync_locks_guard:
+            lock = self._sync_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._sync_locks[key] = lock
+            return lock
+
+    def ensure_local_history(
+        self,
+        symbol: str,
+        timeframe: str,
+        target_start_ms: Optional[int] = None,
+        now_ms: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Ensure SQLite has backfilled historical candles back to target_start_ms and synced recent closed bars."""
+        clean_symbol = symbol.strip().upper().replace(".P", "")
+        tf = timeframe.strip().lower()
+        current_ms = now_ms or int(time.time() * 1000)
+        step_ms = TIMEFRAME_MS.get(tf, 3600 * 1000)
+        default_days = self.DEFAULT_TARGET_HISTORY_DAYS.get(tf, 365)
+        desired_start_ms = target_start_ms if target_start_ms is not None else (current_ms - default_days * 86400 * 1000)
+
+        if not self.db:
+            return {"synced": False, "reason": "no_db"}
+
+        sync_initial = self.db.get_sync_state(clean_symbol, tf)
+        if hasattr(self.adapter, "_mock_name"):
+            return {
+                "synced": False,
+                "reason": "mock_adapter",
+                "earliest_timestamp_ms": sync_initial["earliest_timestamp_ms"] if sync_initial else None,
+                "latest_timestamp_ms": sync_initial["latest_timestamp_ms"] if sync_initial else None,
+                "total_candles": int(sync_initial["total_candles"]) if sync_initial and sync_initial.get("total_candles") else 0,
+            }
+
+        key = f"{clean_symbol}|{tf}"
+        lock = self._get_symbol_tf_lock(key)
+        with lock:
+            sync = self.db.get_sync_state(clean_symbol, tf)
+            earliest_db = sync["earliest_timestamp_ms"] if sync else None
+            latest_db = sync["latest_timestamp_ms"] if sync else None
+            total_db = int(sync["total_candles"]) if sync and sync.get("total_candles") else 0
+
+            # Avoid hammering exchange if we already checked within the last 45s and no deeper cursor is requested
+            now_sec = time.time()
+            last_check = self._last_sync_check_ts.get(key, 0.0)
+            exhausted_ts = self._exhausted_earliest_ts.get(key)
+
+            need_initial = (earliest_db is None or total_db == 0)
+            need_backward = (
+                not need_initial
+                and earliest_db is not None
+                and earliest_db > (desired_start_ms + step_ms * 2)
+                and (exhausted_ts is None or desired_start_ms < exhausted_ts and earliest_db > exhausted_ts)
+            )
+            need_forward = (
+                not need_initial
+                and latest_db is not None
+                and (current_ms - latest_db) >= (step_ms * 2)
+                and (now_sec - last_check >= 45.0)
+            )
+
+            inserted_total = 0
+            if need_initial or need_backward:
+                downloader = HistoricalDownloader(
+                    exchange=self.adapter,
+                    db=self.db,
+                    batch_size=1000,
+                    request_delay_sec=0.02,
+                )
+                days_needed = max(1, int((current_ms - desired_start_ms) // (86400 * 1000)) + 2)
+                prev_earliest = earliest_db
+                try:
+                    inserted_total += downloader.download_symbol_timeframe(
+                        symbol=clean_symbol,
+                        timeframe=tf,
+                        days_back=days_needed,
+                        end_time_ms=current_ms,
+                    )
+                except Exception as dl_err:
+                    logger.warning(f"LiquidityChartService: Historical backfill warning for {clean_symbol} {tf}: {dl_err}")
+
+                sync_after = self.db.get_sync_state(clean_symbol, tf)
+                new_earliest = sync_after["earliest_timestamp_ms"] if sync_after else None
+                if new_earliest is not None and (prev_earliest is not None and new_earliest >= prev_earliest):
+                    # Exchange has no older candles prior to new_earliest
+                    self._exhausted_earliest_ts[key] = new_earliest
+                elif new_earliest is not None and new_earliest > (desired_start_ms + step_ms * 5):
+                    # Reached exchange inception boundary
+                    self._exhausted_earliest_ts[key] = new_earliest
+                self._last_sync_check_ts[key] = now_sec
+
+            elif need_forward:
+                synchronizer = CandleSynchronizer(exchange=self.adapter, db=self.db)
+                try:
+                    synced_bars = synchronizer.sync_symbol(clean_symbol, tf, now_ms=current_ms, max_pages=5)
+                    inserted_total += len(synced_bars)
+                except Exception as sync_err:
+                    logger.warning(f"LiquidityChartService: Incremental sync warning for {clean_symbol} {tf}: {sync_err}")
+                self._last_sync_check_ts[key] = now_sec
+
+            final_sync = self.db.get_sync_state(clean_symbol, tf)
+            return {
+                "synced": True,
+                "inserted": inserted_total,
+                "earliest_timestamp_ms": final_sync["earliest_timestamp_ms"] if final_sync else None,
+                "latest_timestamp_ms": final_sync["latest_timestamp_ms"] if final_sync else None,
+                "total_candles": int(final_sync["total_candles"]) if final_sync and final_sync.get("total_candles") else 0,
+            }
+
+    def _get_local_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: Optional[int] = None,
+        start_time_ms: Optional[int] = None,
+        end_time_ms: Optional[int] = None,
+        before_time_ms: Optional[int] = None,
+    ) -> List[Candle]:
+        if not self.db:
+            return []
+        capped_limit = min(max(int(limit), 1), 5000) if limit is not None else None
+        return self.db.get_candles(
+            symbol,
+            timeframe,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            before_time_ms=before_time_ms,
+            limit=capped_limit,
+        )
+
+    def _get_cached_1d_candles(self, symbol: str, limit: int = 500) -> List[Candle]:
+        """Fetch and cache 1D daily candles (preferring SQLite local store) to minimize repeated upstream requests."""
         now = time.time()
         cached = self._d1_cache.get(symbol)
         if cached and (now - cached.get("ts", 0.0) < 60.0):
             return cached["candles"]
-        candles = self.adapter.get_klines(symbol=symbol, timeframe="1d", limit=limit)
+        candles = self._get_local_candles(symbol, "1d", limit=limit)
+        if not candles:
+            candles = self.adapter.get_klines(symbol=symbol, timeframe="1d", limit=min(limit, 1000))
+            if candles and self.db and not hasattr(self.adapter, "_mock_name"):
+                closed = CandleValidator.filter_closed_candles(candles, now_ms=int(now * 1000))
+                if closed:
+                    self.db.insert_candles(closed)
         self._d1_cache[symbol] = {"ts": now, "candles": candles}
         return candles
 
@@ -57,19 +220,65 @@ class LiquidityChartService:
         self,
         symbol: str,
         timeframe: str = "1h",
-        limit: int = 200,
+        limit: int = 500,
         start_time_ms: Optional[int] = None,
         end_time_ms: Optional[int] = None,
+        before_time_ms: Optional[int] = None,
+        venue: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Fetch and format OHLCV candles suitable for TradingView Lightweight Charts."""
+        """Fetch and format OHLCV candles suitable for TradingView Lightweight Charts across AsterDEX, Binance, and Hyperliquid."""
         clean_symbol = symbol.strip().upper().replace(".P", "")
-        raw_candles = self.adapter.get_klines(
-            symbol=clean_symbol,
-            timeframe=timeframe,
-            limit=min(limit, 500),
-            start_time_ms=start_time_ms,
-            end_time_ms=end_time_ms,
-        )
+        tf = timeframe.strip().lower()
+        target_venue = (venue or "asterdex").strip().lower()
+        raw_candles: List[Candle] = []
+
+        if target_venue in ("asterdex", "local", "combined", ""):
+            step_ms = TIMEFRAME_MS.get(tf, 3600 * 1000)
+            target_start = start_time_ms
+            if before_time_ms is not None and target_start is None:
+                target_start = before_time_ms - (max(limit, 500) * step_ms)
+            self.ensure_local_history(clean_symbol, tf, target_start_ms=target_start)
+            raw_candles = self._get_local_candles(
+                clean_symbol,
+                tf,
+                limit=limit,
+                start_time_ms=start_time_ms,
+                end_time_ms=end_time_ms,
+                before_time_ms=before_time_ms,
+            )
+
+        if target_venue in ("hyperliquid", "hl"):
+            if hasattr(self, "hyperliquid_adapter") and self.hyperliquid_adapter:
+                raw_candles = self.hyperliquid_adapter.get_klines(
+                    symbol=clean_symbol,
+                    timeframe=tf,
+                    limit=min(limit, 1000),
+                    start_time_ms=start_time_ms,
+                    end_time_ms=before_time_ms - 1 if before_time_ms is not None else end_time_ms,
+                )
+        elif target_venue in ("binance", "binance_futures"):
+            if hasattr(self, "binance_adapter") and self.binance_adapter:
+                raw_candles = self.binance_adapter.get_klines(
+                    symbol=clean_symbol,
+                    timeframe=tf,
+                    limit=min(limit, 1000),
+                    start_time_ms=start_time_ms,
+                    end_time_ms=before_time_ms - 1 if before_time_ms is not None else end_time_ms,
+                )
+
+        # Fallback to primary AsterAdapter if venue yielded no candles and not paginating past earliest boundary
+        if not raw_candles and before_time_ms is None:
+            raw_candles = self.adapter.get_klines(
+                symbol=clean_symbol,
+                timeframe=tf,
+                limit=min(limit, 1000),
+                start_time_ms=start_time_ms,
+                end_time_ms=end_time_ms,
+            )
+            if raw_candles and self.db and not hasattr(self.adapter, "_mock_name"):
+                closed = CandleValidator.filter_closed_candles(raw_candles, now_ms=int(time.time() * 1000))
+                if closed:
+                    self.db.insert_candles(closed)
 
         formatted: List[Dict[str, Any]] = []
         for c in raw_candles:
@@ -92,18 +301,42 @@ class LiquidityChartService:
         self,
         symbol: str,
         timeframe: str = "1h",
-        limit: int = 150,
+        limit: int = 500,
+        before_time_ms: Optional[int] = None,
+        start_time_ms: Optional[int] = None,
+        end_time_ms: Optional[int] = None,
         as_of_index: Optional[int] = None,
         as_of_timestamp_ms: Optional[int] = None,
         include_1d_overlay: bool = False,
         venue_source: str = "combined",
     ) -> Dict[str, Any]:
-        """Generate complete chart data with independent overlays, event markers, and replay support."""
+        """Generate complete chart data with independent overlays, event markers, cursor pagination, and replay support."""
         clean_symbol = symbol.strip().upper().replace(".P", "")
+        tf = timeframe.strip().lower()
         now_ms = int(time.time() * 1000)
+        step_ms = TIMEFRAME_MS.get(tf, 3600 * 1000)
 
-        # 1. Retrieve Historical Candlesticks
-        candles = self.adapter.get_klines(symbol=clean_symbol, timeframe=timeframe, limit=min(limit, 400))
+        # 1. Ensure local SQLite history is synchronized (4+ years for 1D, 2Y for 4H, 1Y for 1H)
+        desired_start = start_time_ms
+        if before_time_ms is not None and desired_start is None:
+            desired_start = before_time_ms - (max(limit, 500) * step_ms)
+        sync_info = self.ensure_local_history(clean_symbol, tf, target_start_ms=desired_start, now_ms=now_ms)
+
+        candles = self._get_local_candles(
+            clean_symbol,
+            tf,
+            limit=limit,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            before_time_ms=before_time_ms,
+        )
+        if not candles and before_time_ms is None:
+            candles = self.adapter.get_klines(symbol=clean_symbol, timeframe=tf, limit=min(limit, 1000))
+            if candles and self.db and not hasattr(self.adapter, "_mock_name"):
+                closed = CandleValidator.filter_closed_candles(candles, now_ms=now_ms)
+                if closed:
+                    self.db.insert_candles(closed)
+                    sync_info = self.ensure_local_history(clean_symbol, tf, target_start_ms=desired_start, now_ms=now_ms)
         if not candles:
             return {
                 "symbol": clean_symbol,
@@ -143,6 +376,18 @@ class LiquidityChartService:
                 },
                 "liquidation_overlay": {"clusters": []},
                 "replay_metadata": {"is_replay": False, "as_of_index": None, "total_bars": 0},
+                "history_metadata": {
+                    "symbol": clean_symbol,
+                    "timeframe": tf,
+                    "loaded_count": 0,
+                    "oldest_loaded_timestamp_ms": None,
+                    "newest_loaded_timestamp_ms": None,
+                    "db_earliest_timestamp_ms": sync_info.get("earliest_timestamp_ms"),
+                    "db_latest_timestamp_ms": sync_info.get("latest_timestamp_ms"),
+                    "db_total_candles": sync_info.get("total_candles", 0),
+                    "has_more_before": False,
+                    "next_before_time_ms": None,
+                },
             }
 
         # Resolve replay index if timestamp provided
@@ -276,13 +521,44 @@ class LiquidityChartService:
             "order_book_age_seconds": ob_age_sec,
         }
 
+        db_earliest_ms = sync_info.get("earliest_timestamp_ms")
+        db_latest_ms = sync_info.get("latest_timestamp_ms")
+        db_total_bars = int(sync_info.get("total_candles") or total_bars)
+        oldest_loaded_ms = chart_candles[0].timestamp_ms if chart_candles else None
+        newest_loaded_ms = chart_candles[-1].timestamp_ms if chart_candles else None
+        has_more_before = bool(
+            oldest_loaded_ms is not None
+            and db_earliest_ms is not None
+            and oldest_loaded_ms > db_earliest_ms
+        )
+
         replay_metadata = {
             "is_replay": effective_as_of_index is not None,
             "as_of_index": effective_as_of_index,
             "total_bars": total_bars,
-            "earliest_timestamp_ms": candles[0].timestamp_ms if candles else None,
-            "latest_timestamp_ms": candles[-1].timestamp_ms if candles else None,
+            "db_total_bars": db_total_bars,
+            "earliest_timestamp_ms": oldest_loaded_ms,
+            "latest_timestamp_ms": newest_loaded_ms,
+            "db_earliest_timestamp_ms": db_earliest_ms,
+            "db_latest_timestamp_ms": db_latest_ms,
             "current_bar_timestamp_ms": latest_candle.timestamp_ms if latest_candle else None,
+        }
+
+        history_metadata = {
+            "symbol": clean_symbol,
+            "timeframe": tf,
+            "loaded_count": len(chart_candles),
+            "oldest_loaded_timestamp_ms": oldest_loaded_ms,
+            "oldest_loaded_utc": chart_candles[0].datetime_utc.isoformat() if chart_candles else None,
+            "newest_loaded_timestamp_ms": newest_loaded_ms,
+            "newest_loaded_utc": chart_candles[-1].datetime_utc.isoformat() if chart_candles else None,
+            "db_earliest_timestamp_ms": db_earliest_ms,
+            "db_earliest_utc": datetime.fromtimestamp(db_earliest_ms / 1000.0, tz=timezone.utc).isoformat() if db_earliest_ms else None,
+            "db_latest_timestamp_ms": db_latest_ms,
+            "db_latest_utc": datetime.fromtimestamp(db_latest_ms / 1000.0, tz=timezone.utc).isoformat() if db_latest_ms else None,
+            "db_total_candles": db_total_bars,
+            "has_more_before": has_more_before,
+            "next_before_time_ms": oldest_loaded_ms if has_more_before else None,
         }
 
         return {
@@ -297,6 +573,7 @@ class LiquidityChartService:
             "order_book_overlay": order_book_overlay,
             "liquidation_overlay": liquidation_overlay,
             "replay_metadata": replay_metadata,
+            "history_metadata": history_metadata,
         }
 
     def _build_chart_markers(self, events: List[SweepReclaimEvent]) -> List[Dict[str, Any]]:
@@ -390,16 +667,23 @@ class LiquidityChartService:
         venue_name = venue_display_names.get(venue, venue.upper())
         status = "AVAILABLE"
         error_message = None
+        error_code = None
+        venue_diagnostics: Dict[str, Any] = {}
+        reused_books = getattr(self.cross_aggregator, "last_raw_books", {}).get(clean_symbol, {})
 
         if venue == "combined":
-            # Combined: fetch all healthy exchange order books and cross-correlate walls
+            # Combined: reuse books already fetched by aggregate_liquidity_heatmap (or fetch if not in cache)
             for vname, adapter in [
                 ("asterdex", self.adapter),
                 ("binance", self.cross_aggregator.binance_adapter),
                 ("bybit", self.cross_aggregator.bybit_adapter),
             ]:
                 try:
-                    bk = adapter.get_order_book(clean_symbol, limit=50)
+                    bk = reused_books.get(vname) if vname in reused_books else adapter.get_order_book(clean_symbol, limit=50)
+                    if hasattr(adapter, "get_symbol_depth_status"):
+                        venue_diagnostics[vname] = adapter.get_symbol_depth_status(clean_symbol)
+                    elif hasattr(adapter, "last_depth_status") and adapter.last_depth_status:
+                        venue_diagnostics[vname] = dict(adapter.last_depth_status)
                     if bk and bk.bids and bk.asks:
                         healthy_books[vname] = bk
                         contributing_venues.append(vname)
@@ -492,21 +776,41 @@ class LiquidityChartService:
                 ts_ms = now_ms
             else:
                 try:
-                    target_book = ad.get_order_book(clean_symbol, limit=50)
+                    target_book = reused_books.get(venue) if venue in reused_books else ad.get_order_book(clean_symbol, limit=50)
                 except Exception as e:
                     target_book = None
                     error_message = f"{venue_name} connection error: {e}"
+                    error_code = "NETWORK_ERROR"
+
+                diag = (
+                    ad.get_symbol_depth_status(clean_symbol)
+                    if hasattr(ad, "get_symbol_depth_status")
+                    else (dict(ad.last_depth_status) if hasattr(ad, "last_depth_status") and ad.last_depth_status else {})
+                )
+                venue_diagnostics[venue] = diag
 
                 if not target_book or not target_book.bids or not target_book.asks:
-                    status = "UNAVAILABLE"
+                    diag_status = str(diag.get("status") or "").upper()
+                    error_code = diag.get("error_code") or diag_status or "UNAVAILABLE"
+                    if diag_status in ("IP_BANNED", "RATE_LIMITED", "TIMEOUT", "INVALID_SYMBOL", "MALFORMED_RESPONSE", "EMPTY_ORDER_BOOK", "HTTP_ERROR", "CIRCUIT_OPEN"):
+                        status = diag_status
+                    else:
+                        status = "UNAVAILABLE"
                     if not error_message:
-                        error_message = f"{venue_name} order book unavailable for {clean_symbol} (contract not listed or feed offline)"
+                        if diag.get("message"):
+                            error_message = str(diag["message"])
+                        else:
+                            error_message = f"{venue_name} order book unavailable for {clean_symbol} ({error_code})"
                     mid = 0.0
                     spread = 0.0
                     total_bid_notional = 0.0
                     total_ask_notional = 0.0
                     ts_ms = now_ms
                 else:
+                    if diag.get("is_stale") or str(diag.get("status") or "").upper() == "STALE":
+                        status = "STALE"
+                        error_code = diag.get("error_code")
+                        error_message = diag.get("message")
                     contributing_venues = [venue]
                     mid = target_book.mid_price
                     spread = target_book.spread_bps
@@ -552,7 +856,9 @@ class LiquidityChartService:
 
         return {
             "status": status,
+            "error_code": error_code,
             "error_message": error_message,
+            "venue_diagnostics": venue_diagnostics,
             "venue_filter": venue,
             "venue_name": venue_name,
             "mid_price": round(mid, 4) if mid > 0 else None,

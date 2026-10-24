@@ -166,6 +166,28 @@ CREATE TABLE IF NOT EXISTS paper_lifecycle_events (
 CREATE INDEX IF NOT EXISTS idx_lifecycle_cand_time
 ON paper_lifecycle_events (candidate_id, timestamp_ms);
 
+CREATE TABLE IF NOT EXISTS model_a_scan_funnel (
+    scan_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    scan_started_at_utc TEXT NOT NULL,
+    scan_completed_at_utc TEXT,
+    market_candle_timestamp_ms INTEGER,
+    market_candle_close_time_ms INTEGER,
+    freshness_status TEXT NOT NULL,
+    history_status TEXT NOT NULL,
+    data_quality_status TEXT NOT NULL,
+    predicates_json TEXT NOT NULL DEFAULT '{}',
+    values_json TEXT NOT NULL DEFAULT '{}',
+    strategy_version TEXT NOT NULL DEFAULT 'MODEL_A_FROZEN',
+    final_status TEXT NOT NULL,
+    first_rejection_reason TEXT,
+    exception_detail TEXT,
+    PRIMARY KEY (scan_id, symbol)
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_a_funnel_time
+ON model_a_scan_funnel (scan_started_at_utc, symbol);
+
 CREATE TABLE IF NOT EXISTS order_book_snapshots (
     snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
     venue TEXT NOT NULL,
@@ -214,6 +236,84 @@ ON whale_events (symbol, timestamp_ms);
 
 CREATE INDEX IF NOT EXISTS idx_whale_type_state 
 ON whale_events (event_type, lifecycle_state);
+
+CREATE TABLE IF NOT EXISTS chart_drawings (
+    drawing_id TEXT PRIMARY KEY,
+    user_profile TEXT NOT NULL DEFAULT 'default',
+    symbol TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    tool_type TEXT NOT NULL,
+    points_json TEXT NOT NULL DEFAULT '[]',
+    style_json TEXT NOT NULL DEFAULT '{}',
+    is_visible INTEGER NOT NULL DEFAULT 1,
+    created_at_utc TEXT NOT NULL,
+    updated_at_utc TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chart_drawings_lookup
+ON chart_drawings (user_profile, symbol, timeframe);
+
+CREATE TABLE IF NOT EXISTS research_sources (
+    source_id TEXT PRIMARY KEY,
+    source_name TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    requires_api_key INTEGER NOT NULL DEFAULT 0,
+    requires_login INTEGER NOT NULL DEFAULT 0,
+    license_notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS research_datasets (
+    dataset_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES research_sources(source_id),
+    dataset_name TEXT NOT NULL,
+    dataset_description TEXT NOT NULL DEFAULT '',
+    update_frequency TEXT NOT NULL,
+    historical_coverage_start TEXT,
+    historical_coverage_end TEXT,
+    unit TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS research_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT NOT NULL,
+    dataset_id TEXT NOT NULL,
+    market_id TEXT NOT NULL DEFAULT '',
+    symbol TEXT NOT NULL DEFAULT '',
+    observation_timestamp TEXT NOT NULL,
+    publication_timestamp TEXT,
+    reporting_period TEXT,
+    value REAL,
+    unit TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    freshness_state TEXT NOT NULL,
+    quality_state TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(dataset_id, market_id, symbol, observation_timestamp, payload_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_research_obs_dataset_time ON research_observations(dataset_id, observation_timestamp);
+CREATE INDEX IF NOT EXISTS idx_research_obs_symbol_time ON research_observations(symbol, observation_timestamp);
+
+CREATE TABLE IF NOT EXISTS research_sync_state (
+    source_id TEXT NOT NULL,
+    dataset_id TEXT NOT NULL,
+    last_attempt_at TEXT,
+    last_success_at TEXT,
+    last_observation_timestamp TEXT,
+    last_publication_timestamp TEXT,
+    last_error TEXT,
+    records_inserted INTEGER NOT NULL DEFAULT 0,
+    records_updated INTEGER NOT NULL DEFAULT 0,
+    records_rejected INTEGER NOT NULL DEFAULT 0,
+    sync_status TEXT NOT NULL DEFAULT 'NEVER_RUN',
+    PRIMARY KEY(source_id, dataset_id)
+);
 """
 
 
@@ -238,6 +338,16 @@ class DatabaseManager:
     def _run_migrations(self, conn: sqlite3.Connection) -> None:
         """Apply non-destructive column additions to existing tables."""
         cur = conn.cursor()
+
+        cur.execute("PRAGMA table_info(research_sync_state);")
+        research_sync_columns = {row["name"] for row in cur.fetchall()}
+        for name, definition in [
+            ("requested_start", "TEXT"), ("requested_end", "TEXT"),
+            ("completed_through", "TEXT"), ("observation_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("error_category", "TEXT"),
+        ]:
+            if name not in research_sync_columns:
+                cur.execute(f"ALTER TABLE research_sync_state ADD COLUMN {name} {definition};")
 
         # trade_journal migrations
         cur.execute("PRAGMA table_info(trade_journal);")
@@ -287,6 +397,14 @@ class DatabaseManager:
         if "model_id" not in ple_columns:
             cur.execute("ALTER TABLE paper_lifecycle_events ADD COLUMN model_id TEXT NOT NULL DEFAULT 'MODEL_A';")
 
+        cur.execute("PRAGMA table_info(model_a_scan_funnel);")
+        funnel_columns = {row["name"] for row in cur.fetchall()}
+        if funnel_columns:
+            if "values_json" not in funnel_columns:
+                cur.execute("ALTER TABLE model_a_scan_funnel ADD COLUMN values_json TEXT NOT NULL DEFAULT '{}';")
+            if "strategy_version" not in funnel_columns:
+                cur.execute("ALTER TABLE model_a_scan_funnel ADD COLUMN strategy_version TEXT NOT NULL DEFAULT 'MODEL_A_FROZEN';")
+
         # Create compound indexes for multi-model queries
         cur.execute("CREATE INDEX IF NOT EXISTS idx_setups_model_sym ON setup_candidates(model_id, symbol, timestamp_ms);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_journal_model_time ON trade_journal(model_id, entry_timestamp_ms);")
@@ -299,6 +417,49 @@ class DatabaseManager:
             conn.executescript(SCHEMA_SQL)
             self._run_migrations(conn)
             conn.commit()
+
+    def save_model_a_funnel(self, record: Dict[str, Any]) -> None:
+        """Persist one non-decision diagnostic row for a Model A symbol evaluation."""
+        with self.get_connection() as conn:
+            conn.execute("""INSERT OR REPLACE INTO model_a_scan_funnel
+                (scan_id,symbol,scan_started_at_utc,scan_completed_at_utc,
+                 market_candle_timestamp_ms,market_candle_close_time_ms,
+                 freshness_status,history_status,data_quality_status,predicates_json,values_json,strategy_version,
+                 final_status,first_rejection_reason,exception_detail)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                record["scan_id"], record["symbol"], record["scan_started_at_utc"],
+                record.get("scan_completed_at_utc"), record.get("market_candle_timestamp_ms"),
+                record.get("market_candle_close_time_ms"), record.get("freshness_status", "NOT_EVALUATED"),
+                record.get("history_status", "NOT_EVALUATED"), record.get("data_quality_status", "NOT_EVALUATED"),
+                json.dumps(record.get("predicates", {}), sort_keys=True), json.dumps(record.get("values", {}), sort_keys=True),
+                record.get("strategy_version", "MODEL_A_FROZEN"), record.get("final_status", "NOT_EVALUATED"),
+                record.get("first_rejection_reason"), record.get("exception_detail")))
+            conn.commit()
+
+    def aggregate_model_a_funnel(self, since_ms: Optional[int] = None) -> Dict[str, Any]:
+        """Aggregate diagnostic rows with explicit row-based denominators."""
+        clauses = ["1=1"]; params: List[Any] = []
+        if since_ms is not None: clauses.append("market_candle_timestamp_ms >= ?"); params.append(since_ms)
+        where = " AND ".join(clauses)
+        with self.get_connection() as conn:
+            rows = [dict(r) for r in conn.execute(f"SELECT * FROM model_a_scan_funnel WHERE {where} ORDER BY scan_started_at_utc, symbol", params)]
+        scans: Dict[str, Dict[str, Any]] = {}
+        symbols: Dict[str, Dict[str, int]] = {}
+        reasons: Dict[str, int] = {}
+        predicates: Dict[str, Dict[str, int]] = {}
+        for row in rows:
+            scan = scans.setdefault(row["scan_id"], {"symbols": 0, "completed": 0, "incomplete": 0})
+            scan["symbols"] += 1; scan["completed"] += bool(row["scan_completed_at_utc"]); scan["incomplete"] += not bool(row["scan_completed_at_utc"])
+            symbol = symbols.setdefault(row["symbol"], {"evaluations": 0, "ready": 0, "published": 0})
+            symbol["evaluations"] += 1; symbol["ready"] += row["final_status"] == "READY"
+            if row["first_rejection_reason"]: reasons[row["first_rejection_reason"]] = reasons.get(row["first_rejection_reason"], 0) + 1
+            for name, value in json.loads(row["predicates_json"] or "{}").items():
+                bucket = predicates.setdefault(name, {"PASS": 0, "FAIL": 0, "NOT_EVALUATED": 0})
+                bucket[value] = bucket.get(value, 0) + 1
+        return {"rows": len(rows), "scan_cycles": scans, "scan_cycle_count": len(scans), "symbols": symbols,
+                "first_rejection_counts": reasons, "predicate_counts": predicates,
+                "ready_count": sum(v["ready"] for v in symbols.values()), "published_count": 0,
+                "missing_symbol_completions": sum(v["incomplete"] for v in scans.values())}
 
 
     def insert_candles(self, candles: List[Candle]) -> int:
@@ -376,9 +537,10 @@ class DatabaseManager:
         timeframe: str,
         start_time_ms: Optional[int] = None,
         end_time_ms: Optional[int] = None,
+        before_time_ms: Optional[int] = None,
         limit: Optional[int] = None,
     ) -> List[Candle]:
-        """Fetch chronologically ordered candles from database."""
+        """Fetch chronologically ordered candles from database, supporting cursor pagination via before_time_ms."""
         conditions = ["symbol = ?", "timeframe = ?"]
         params: List[Any] = [symbol, timeframe]
 
@@ -388,6 +550,9 @@ class DatabaseManager:
         if end_time_ms is not None:
             conditions.append("timestamp_ms <= ?")
             params.append(end_time_ms)
+        if before_time_ms is not None:
+            conditions.append("timestamp_ms < ?")
+            params.append(before_time_ms)
 
         where_clause = " AND ".join(conditions)
         if limit is not None:
@@ -732,5 +897,141 @@ class DatabaseManager:
                 return [dict(r) for r in cur.fetchall()]
         except Exception as err:
             logger.error(f"DatabaseManager: Failed to get unresolved whale events: {err}")
-            return []
-
+            return []
+
+    def save_chart_drawing(self, drawing: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist or update a chart drawing in SQLite."""
+        now_utc = datetime.now(timezone.utc).isoformat()
+        drawing_id = str(drawing["drawing_id"])
+        user_profile = str(drawing.get("user_profile") or "default").strip()
+        symbol = str(drawing["symbol"]).strip().upper().replace(".P", "")
+        timeframe = str(drawing["timeframe"]).strip().lower()
+        tool_type = str(drawing["tool_type"]).strip()
+        points = drawing.get("points") if isinstance(drawing.get("points"), list) else []
+        style = drawing.get("style") if isinstance(drawing.get("style"), dict) else {}
+        is_visible = 1 if drawing.get("is_visible", True) else 0
+        created_at = str(drawing.get("created_at_utc") or now_utc)
+
+        query = """
+        INSERT INTO chart_drawings (
+            drawing_id, user_profile, symbol, timeframe, tool_type,
+            points_json, style_json, is_visible, created_at_utc, updated_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(drawing_id) DO UPDATE SET
+            user_profile = excluded.user_profile,
+            symbol = excluded.symbol,
+            timeframe = excluded.timeframe,
+            tool_type = excluded.tool_type,
+            points_json = excluded.points_json,
+            style_json = excluded.style_json,
+            is_visible = excluded.is_visible,
+            updated_at_utc = excluded.updated_at_utc;
+        """
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                query,
+                (
+                    drawing_id,
+                    user_profile,
+                    symbol,
+                    timeframe,
+                    tool_type,
+                    json.dumps(points),
+                    json.dumps(style),
+                    is_visible,
+                    created_at,
+                    now_utc,
+                ),
+            )
+            conn.commit()
+        return {
+            "drawing_id": drawing_id,
+            "user_profile": user_profile,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "tool_type": tool_type,
+            "points": points,
+            "style": style,
+            "is_visible": bool(is_visible),
+            "created_at_utc": created_at,
+            "updated_at_utc": now_utc,
+        }
+
+    def get_chart_drawings(
+        self,
+        symbol: str,
+        timeframe: str,
+        user_profile: str = "default",
+    ) -> List[Dict[str, Any]]:
+        """Retrieve all persisted chart drawings for (user_profile, symbol, timeframe)."""
+        clean_sym = symbol.strip().upper().replace(".P", "")
+        clean_tf = timeframe.strip().lower()
+        clean_prof = (user_profile or "default").strip()
+        query = """
+        SELECT drawing_id, user_profile, symbol, timeframe, tool_type,
+               points_json, style_json, is_visible, created_at_utc, updated_at_utc
+        FROM chart_drawings
+        WHERE user_profile = ? AND symbol = ? AND timeframe = ?
+        ORDER BY created_at_utc ASC;
+        """
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(query, (clean_prof, clean_sym, clean_tf))
+            rows = cur.fetchall()
+            results: List[Dict[str, Any]] = []
+            for r in rows:
+                try:
+                    pts = json.loads(r["points_json"] or "[]")
+                except Exception:
+                    pts = []
+                try:
+                    st = json.loads(r["style_json"] or "{}")
+                except Exception:
+                    st = {}
+                results.append(
+                    {
+                        "drawing_id": r["drawing_id"],
+                        "user_profile": r["user_profile"],
+                        "symbol": r["symbol"],
+                        "timeframe": r["timeframe"],
+                        "tool_type": r["tool_type"],
+                        "points": pts,
+                        "style": st,
+                        "is_visible": bool(r["is_visible"]),
+                        "created_at_utc": r["created_at_utc"],
+                        "updated_at_utc": r["updated_at_utc"],
+                    }
+                )
+            return results
+
+    def delete_chart_drawing(
+        self,
+        drawing_id: str,
+        user_profile: str = "default",
+    ) -> bool:
+        """Delete a single persisted chart drawing by drawing_id."""
+        query = "DELETE FROM chart_drawings WHERE drawing_id = ? AND user_profile = ?;"
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(query, (drawing_id, (user_profile or "default").strip()))
+            conn.commit()
+            return cur.rowcount > 0
+
+    def clear_chart_drawings(
+        self,
+        symbol: str,
+        timeframe: str,
+        user_profile: str = "default",
+    ) -> int:
+        """Delete all persisted chart drawings for (user_profile, symbol, timeframe)."""
+        clean_sym = symbol.strip().upper().replace(".P", "")
+        clean_tf = timeframe.strip().lower()
+        clean_prof = (user_profile or "default").strip()
+        query = "DELETE FROM chart_drawings WHERE user_profile = ? AND symbol = ? AND timeframe = ?;"
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(query, (clean_prof, clean_sym, clean_tf))
+            conn.commit()
+            return cur.rowcount
+

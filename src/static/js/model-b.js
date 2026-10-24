@@ -101,7 +101,7 @@
                 }
 
                 const expEl = document.getElementById('modelBExposureDisplay');
-                if (expEl) expEl.innerText = `${data.risk_limits.open_positions_count || 0} / ${data.risk_limits.max_open_positions || 3} Open`;
+                if (expEl) expEl.innerText = `${data.risk_limits.open_positions_count || 0} / ${data.risk_limits.max_open_positions || 10} Open`;
 
                 const pendEl = document.getElementById('modelBPendingOrdersDisplay');
                 if (pendEl) pendEl.innerText = `${data.risk_limits.pending_orders_count || 0} Pending`;
@@ -127,6 +127,9 @@
 
                 // Render Universal AsterDEX Scanner Engine Telemetry
                 const perf = data.scanner_performance;
+                const isRunning = Boolean(data.is_running);
+                const scanCount = Number(data.scan_count || 0);
+
                 if (perf) {
                     const cov = perf.coverage || {};
                     const rot = perf.rotation || {};
@@ -144,16 +147,16 @@
                     if (hitEl) hitEl.innerText = `Cache: ${Number(perf.cache?.hit_rate_pct || 0).toFixed(0)}%`;
 
                     const discEl2 = document.getElementById('scannerDiscoveredTotal');
-                    if (discEl2) discEl2.innerText = `${cov.discovered_asterdex || 578} Pairs`;
+                    if (discEl2) discEl2.innerText = `${cov.discovered_asterdex ?? (data.discovered_markets_count || '--')} Pairs`;
 
                     const bulkEl = document.getElementById('scannerBulkScreened');
-                    if (bulkEl) bulkEl.innerText = `Screened: ${cov.bulk_screened || cov.screened || 0}`;
+                    if (bulkEl) bulkEl.innerText = `Screened: ${cov.bulk_screened ?? cov.screened ?? 0}`;
 
                     const qualEl = document.getElementById('scannerQualifiedPool');
-                    if (qualEl) qualEl.innerText = `${cov.screened || 0} Liquid`;
+                    if (qualEl) qualEl.innerText = `${cov.screened ?? 0} Liquid`;
 
                     const deepEl = document.getElementById('scannerDeepEvaluated');
-                    if (deepEl) deepEl.innerText = `${cov.deep_evaluated || cov.evaluated || 0} / Cycle`;
+                    if (deepEl) deepEl.innerText = `${cov.deep_evaluated ?? cov.evaluated ?? 0} / Cycle`;
 
                     const rotProgEl = document.getElementById('scannerRotationProgress');
                     if (rotProgEl) rotProgEl.innerText = `${Number(rot.progress_pct || 0).toFixed(1)}%`;
@@ -162,10 +165,10 @@
                     if (rotOffEl) rotOffEl.innerText = `Offset: ${rot.offset || 0} / ${rot.pool_size || 0}`;
 
                     const p95El = document.getElementById('scannerP95Latency');
-                    if (p95El) p95El.innerText = `p95: ${Number(lat.p95_ms || 0).toFixed(0)} ms`;
+                    if (p95El) p95El.innerText = `p95: ${lat.p95_ms !== undefined && lat.p95_ms !== null ? Number(lat.p95_ms).toFixed(0) + ' ms' : '-- ms'}`;
 
                     const medEl = document.getElementById('scannerMedianLatency');
-                    if (medEl) medEl.innerText = `med: ${Number(lat.median_ms || 0).toFixed(0)} ms`;
+                    if (medEl) medEl.innerText = `med: ${lat.median_ms !== undefined && lat.median_ms !== null ? Number(lat.median_ms).toFixed(0) + ' ms' : '-- ms'}`;
 
                     const candYieldEl = document.getElementById('scannerCandidateYield');
                     if (candYieldEl) candYieldEl.innerText = `${cand.found || 0} Formulated`;
@@ -178,6 +181,53 @@
 
                     const progText = document.getElementById('scannerProgressBarText');
                     if (progText) progText.innerText = `${rot.offset || 0} / ${rot.pool_size || 0} Liquid Contracts Rotated (${Number(rot.progress_pct || 0).toFixed(1)}%)`;
+                } else {
+                    // Explicit IDLE / INITIALIZING / UNREADY display; never display synthetic progress
+                    const idleLabel = isRunning ? (scanCount > 0 ? 'SYNCHRONIZING' : 'INITIALIZING') : 'IDLE / STOPPED';
+                    const cycleIdEl = document.getElementById('scannerCycleId');
+                    if (cycleIdEl) cycleIdEl.innerText = `Cycle: -- (${idleLabel})`;
+
+                    const durEl = document.getElementById('scannerDuration');
+                    if (durEl) durEl.innerText = 'Scan: -- ms';
+
+                    const hitEl = document.getElementById('scannerCacheHit');
+                    if (hitEl) hitEl.innerText = 'Cache: --%';
+
+                    const discEl2 = document.getElementById('scannerDiscoveredTotal');
+                    if (discEl2) discEl2.innerText = data.discovered_markets_count ? `${data.discovered_markets_count} Pairs` : '--';
+
+                    const bulkEl = document.getElementById('scannerBulkScreened');
+                    if (bulkEl) bulkEl.innerText = 'Screened: --';
+
+                    const qualEl = document.getElementById('scannerQualifiedPool');
+                    if (qualEl) qualEl.innerText = '--';
+
+                    const deepEl = document.getElementById('scannerDeepEvaluated');
+                    if (deepEl) deepEl.innerText = '-- / Cycle';
+
+                    const rotProgEl = document.getElementById('scannerRotationProgress');
+                    if (rotProgEl) rotProgEl.innerText = '0.0%';
+
+                    const rotOffEl = document.getElementById('scannerRotationOffset');
+                    if (rotOffEl) rotOffEl.innerText = 'Offset: 0 / 0';
+
+                    const p95El = document.getElementById('scannerP95Latency');
+                    if (p95El) p95El.innerText = 'p95: -- ms';
+
+                    const medEl = document.getElementById('scannerMedianLatency');
+                    if (medEl) medEl.innerText = 'med: -- ms';
+
+                    const candYieldEl = document.getElementById('scannerCandidateYield');
+                    if (candYieldEl) candYieldEl.innerText = '0 Formulated';
+
+                    const readyYieldEl = document.getElementById('scannerReadyYield');
+                    if (readyYieldEl) readyYieldEl.innerText = '0 READY';
+
+                    const progBar = document.getElementById('scannerProgressBar');
+                    if (progBar) progBar.style.width = '0%';
+
+                    const progText = document.getElementById('scannerProgressBarText');
+                    if (progText) progText.innerText = `0 / 0 Liquid Contracts Rotated (${idleLabel})`;
                 }
 
             } catch (err) {
@@ -393,9 +443,11 @@
                         : 'bg-rose-950 text-rose-400 border border-rose-800';
 
                     const baseCoin = (p.symbol || '').replace(/USDT$/i, '');
-                    const upnl = Number(p.unrealized_pnl_net_usdt !== undefined ? p.unrealized_pnl_net_usdt : (p.unrealized_pnl_usdt || 0));
+                    const rawUpnl = p.unrealized_pnl_net_usdt !== undefined ? p.unrealized_pnl_net_usdt : p.unrealized_pnl_usdt;
+                    const hasUpnl = rawUpnl !== null && rawUpnl !== undefined;
+                    const upnl = hasUpnl ? Number(rawUpnl) : 0;
                     const isUpnlPositive = upnl >= 0;
-                    const upnlClass = isUpnlPositive ? 'text-emerald-400' : 'text-rose-400';
+                    const upnlClass = !hasUpnl ? 'text-slate-400' : (isUpnlPositive ? 'text-emerald-400' : 'text-rose-400');
                     const upnlSign = isUpnlPositive ? '+' : '';
 
                     // Mode formatting
@@ -436,7 +488,11 @@
                             </td>
                             <td class="py-3 px-4">
                                 <div class="text-slate-200 font-medium">$${formatPrice(p.entry_price)}</div>
-                                <div class="text-[11px] text-slate-400 font-normal">Mark: $${formatPrice(p.mark_price)}</div>
+                                <div class="text-[11px] text-slate-300 font-normal flex items-center gap-1.5 mt-0.5">
+                                    <span>Mark: $${p.mark_price !== null && p.mark_price !== undefined ? formatPrice(p.mark_price) : '--'}</span>
+                                    ${p.mark_price_status ? `<span class="px-1 py-0.2 text-[9px] font-bold rounded ${p.mark_price_status === 'FRESH' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/80' : p.mark_price_status === 'STALE' ? 'bg-amber-950 text-amber-400 border border-amber-800/80' : 'bg-rose-950 text-rose-400 border border-rose-800/80'}">${p.mark_price_status}</span>` : ''}
+                                </div>
+                                ${p.mark_price_time_utc ? `<div class="text-[9px] text-slate-500 font-mono">${new Date(p.mark_price_time_utc).toLocaleTimeString()}</div>` : ''}
                             </td>
                             <td class="py-3 px-4">
                                 <div class="text-slate-200 font-semibold">${allocMarginDisplay}</div>
@@ -450,15 +506,20 @@
                                 <div>${liqDisplay}</div>
                             </td>
                             <td class="py-3 px-4 text-right">
-                                <div class="font-bold ${upnlClass}">${upnlSign}$${upnl.toFixed(4)} USDT</div>
-                                <div class="text-[11px] ${upnlClass} font-semibold">${upnlSign}${Number(p.roe_pct || 0).toFixed(2)}% <span class="text-[10px] text-slate-400 font-normal">ROE</span></div>
+                                <div class="font-bold ${upnlClass}">${hasUpnl ? `${upnlSign}$${upnl.toFixed(4)} USDT` : '--'}</div>
+                                <div class="text-[11px] ${upnlClass} font-semibold">${hasUpnl && p.roe_pct !== null && p.roe_pct !== undefined ? `${upnlSign}${Number(p.roe_pct).toFixed(2)}% <span class="text-[10px] text-slate-400 font-normal">ROE</span>` : '<span class="text-slate-500 font-normal">ROE --</span>'}</div>
                                 <div class="text-[10px] text-slate-500 font-normal">Net fees &amp; funding</div>
                             </td>
                             <td class="py-3 px-4 text-right">
-                                <button onclick="inspectModelBPosition('${escapeHtml(p.symbol)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1 ml-auto shadow-sm">
-                                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    <span>Details</span>
-                                </button>
+                                <div class="flex items-center justify-end gap-1.5">
+                                    <button onclick="inspectPositionChart('${escapeHtml(p.symbol)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 shadow-sm" title="Inspect Interactive Setup Chart">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                        <span>Chart</span>
+                                    </button>
+                                    <button onclick="inspectModelBPosition('${escapeHtml(p.symbol)}')" class="px-2 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 shadow-sm" title="View Numerical Metrics">
+                                        <span>Details</span>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -512,7 +573,11 @@
                         <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
                             <span class="text-slate-500 block text-[10px] uppercase">Entry / Mark Price</span>
                             <span class="text-white font-semibold">$${formatPrice(pos.entry_price)}</span>
-                            <span class="text-slate-400 block text-[10px]">Live Mark: $${formatPrice(pos.mark_price)}</span>
+                            <div class="text-slate-300 flex items-center gap-1.5 text-[10px] mt-0.5">
+                                <span>Live Mark: $${pos.mark_price !== null && pos.mark_price !== undefined ? formatPrice(pos.mark_price) : '--'}</span>
+                                ${pos.mark_price_status ? `<span class="px-1 py-0.2 text-[9px] font-bold rounded ${pos.mark_price_status === 'FRESH' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}">${pos.mark_price_status}</span>` : ''}
+                            </div>
+                            ${pos.mark_price_time_utc ? `<span class="text-slate-500 block text-[9px] font-mono">${pos.mark_price_time_utc}</span>` : ''}
                         </div>
                         <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
                             <span class="text-slate-500 block text-[10px] uppercase">Entry Fee Paid</span>
@@ -661,6 +726,7 @@
                 if (!tbody) return;
 
                 const trades = data.trades || [];
+                modelBCachedJournalTrades = trades;
                 const pElJournal = document.getElementById('modelBJournalPaginationContainer');
                 if (trades.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>';
@@ -696,6 +762,12 @@
                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold ${t.outcome === 'WIN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' : (t.outcome === 'LOSS' ? 'bg-rose-950 text-rose-300 border border-rose-600' : 'bg-slate-800 text-slate-300')}">
                                     ${t.outcome || (t.is_open ? 'OPEN' : 'CLOSED')}
                                 </span>
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <button onclick="inspectModelBJournalChart('${escapeHtml(t.trade_id)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 ml-auto shadow-sm" title="Inspect Historical Entry & Exit Chart">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                    <span>Chart</span>
+                                </button>
                             </td>
                         </tr>
                     `;
@@ -1762,5 +1834,28 @@
                 }
             } catch (err) {
                 console.error('Failed to fetch Model B diagnostic report:', err);
+            }
+        }
+
+        function inspectPositionChart(symbol) {
+            const pos = modelBCachedPositions.find(p => p.symbol === symbol);
+            if (!pos) {
+                showNotice(`Position data for ${symbol} not found.`, 'info');
+                return;
+            }
+            if (typeof openTradeInspectorModal === 'function') {
+                openTradeInspectorModal(pos);
+            }
+        }
+
+        let modelBCachedJournalTrades = [];
+        function inspectModelBJournalChart(tradeId) {
+            const trade = modelBCachedJournalTrades.find(t => t.trade_id === tradeId);
+            if (!trade) {
+                showNotice(`Journal trade ${tradeId} not found.`, 'info');
+                return;
+            }
+            if (typeof openTradeInspectorModal === 'function') {
+                openTradeInspectorModal(trade);
             }
         }

@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 from config.settings import ModelDConfig
 from src.exchange.aster_adapter import AsterAdapter
 from src.model_d.types import DataAvailability, SourceHealth
+from src.model_d.candles import validate_closed_candles
 
 
 class ModelDCollector:
@@ -55,6 +56,21 @@ class ModelDCollector:
             except Exception as exc:
                 result[name] = None
                 result["sources"][name] = self._health(name, None, str(exc), result["exchange"], symbol).to_dict()
+        # Candle context is a first-class source. Adapters without klines are
+        # explicitly unavailable; never substitute the reference venue.
+        try:
+            getter = getattr(self.adapter, "get_klines", None)
+            raw_candles = getter(symbol, timeframe=self.config.decision_timeframe, limit=100) if getter else []
+            candles, candle_status = validate_closed_candles(raw_candles, minimum=8)
+            result["candles"] = candles
+            latest_close = max((c.close_time_ms for c in candles), default=None)
+            error = None if candle_status == "OK" else candle_status
+            result["sources"]["candles"] = self._health("candles", latest_close, error, result["exchange"], symbol).to_dict()
+            result["sources"]["candles"]["status"] = "LIVE" if candle_status == "OK" else candle_status
+            result["sources"]["candles"]["timeframe"] = self.config.decision_timeframe
+        except Exception as exc:
+            result["candles"] = []
+            result["sources"]["candles"] = self._health("candles", None, str(exc), result["exchange"], symbol).to_dict()
         # No chain endpoint or attribution source is configured in this repository.
         result["wallet_activity"] = None
         result["sources"]["wallet_activity"] = self._health("wallet_activity", venue="on_chain", symbol=symbol).to_dict()

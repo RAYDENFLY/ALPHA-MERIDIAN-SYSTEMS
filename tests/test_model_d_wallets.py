@@ -1,5 +1,5 @@
 import pytest
-from src.model_d.wallets import WalletCandidate, WalletDiscoveryWorker, WalletRegistry, JsonRpcProvider, candidates_from_transfer_logs, merge_candidates, normalize_address, rank_candidate, wallet_id
+from src.model_d.wallets import WalletCandidate, WalletDiscoveryWorker, WalletPipelineWorker, WalletRegistry, JsonRpcProvider, TRANSFER_TOPIC, candidates_from_transfer_logs, merge_candidates, normalize_address, rank_candidate, wallet_id
 from src.data.database import DatabaseManager
 
 
@@ -48,4 +48,88 @@ def test_checkpoint_persists_and_worker_resumes():
     first = worker.scan_once(1); second = worker.scan_once(1)
     assert (first['from_block'], first['to_block']) == (91, 100)
     assert second['from_block'] == 101 and second['to_block'] == 100
+    assert registry.checkpoint(1, 'public_rpc')['last_block'] == 100
+
+
+def test_pipeline_validates_persists_and_ranks(tmp_path):
+    class PipelineProvider:
+        def verify_chain(self): return True
+        def latest_block(self): return 100
+        def logs(self, start, end, contract=None):
+            return [{'topics': [TRANSFER_TOPIC, '0x' + '0' * 24 + '1' * 40, '0x' + '0' * 24 + '2' * 40], 'transactionHash': '0xabc', 'logIndex': '0'}]
+        def native_balance(self, address): return '0x10'
+    registry = WalletRegistry(DatabaseManager(tmp_path / 'pipeline.db'))
+    worker = WalletPipelineWorker(registry, {1: PipelineProvider()}, interval_seconds=60)
+    result = worker.run_once()
+    assert result['status'] == 'OK'
+    assert result['discovered'] == 2
+    assert result['enriched'] == 2
+    assert result['ranked'] == 2
+    assert registry.count_by_chain()[1] == 2
+    assert registry.checkpoint(1, 'public_rpc')['last_block'] == 100
+
+
+def test_pipeline_rejects_chain_mismatch_without_checkpoint(tmp_path):
+    class BadProvider:
+        def verify_chain(self): return False
+        def latest_block(self): return 100
+    registry = WalletRegistry(DatabaseManager(tmp_path / 'pipeline.db'))
+    worker = WalletPipelineWorker(registry, {1: BadProvider()}, interval_seconds=60)
+    result = worker.run_once()
+    assert result['status'] == 'ERROR'
+    assert result['discovered'] == 0
+    assert result['chains']['1']['status'] == 'CHAIN_ID_MISMATCH'
+    assert registry.checkpoint(1, 'public_rpc') is None
+
+
+def test_partial_chain_failure_isolated_and_restart_is_idempotent(tmp_path):
+    class GoodProvider:
+        def verify_chain(self): return True
+        def latest_block(self): return 100
+        def logs(self, start, end, contract=None):
+            return [{'topics': [TRANSFER_TOPIC, '0x' + '0' * 24 + '3' * 40, '0x' + '0' * 24 + '4' * 40], 'transactionHash': '0xgood', 'logIndex': '0'}]
+        def native_balance(self, address): return '0x10'
+
+    class FailingProvider:
+        def verify_chain(self): return True
+        def latest_block(self): return 200
+        def logs(self, start, end, contract=None): raise RuntimeError('chain A unavailable')
+
+    registry = WalletRegistry(DatabaseManager(tmp_path / 'partial.db'))
+    registry.save_checkpoint(1, 'public_rpc', 50, block_hash='0xold')
+    worker = WalletPipelineWorker(registry, {1: FailingProvider(), 56: GoodProvider()}, interval_seconds=60)
+    first = worker.run_once()
+    assert first['status'] == 'OK'
+    assert first['chains']['1']['last_scan_status'] == 'ERROR'
+    assert first['chains']['56']['last_scan_status'] == 'OK'
+    assert registry.checkpoint(1, 'public_rpc')['last_block'] == 50
+    assert registry.checkpoint(56, 'public_rpc')['last_block'] == 100
+    assert registry.count_by_chain()[56] == 2
+
+    second = worker.run_once()
+    assert second['status'] == 'OK'
+    assert registry.checkpoint(1, 'public_rpc')['last_block'] == 50
+    assert registry.checkpoint(56, 'public_rpc')['last_block'] == 100
+    assert registry.count_by_chain()[56] == 2
+
+
+def test_confirmation_depth_records_hash_and_rewinds_on_reorg(tmp_path):
+    class ReorgProvider:
+        def __init__(self): self.hashes = {n: f'0x{n:064x}' for n in range(90, 101)}; self.reorg = False
+        def latest_block(self): return 102
+        def block_hash(self, number):
+            return '0x' + ('f' * 64) if self.reorg and number == 100 else self.hashes.get(number)
+        def logs(self, start, end, contract=None): return []
+
+    provider = ReorgProvider()
+    registry = WalletRegistry(DatabaseManager(tmp_path / 'reorg.db'))
+    worker = WalletDiscoveryWorker(registry, {1: provider}, block_window=10, confirmation_depth=2)
+    first = worker.scan_once(1)
+    assert first['to_block'] == 100
+    checkpoint = registry.checkpoint(1, 'public_rpc')
+    assert checkpoint['last_block'] == 100
+    assert checkpoint['last_block_hash'] == provider.hashes[100]
+    provider.reorg = True
+    second = worker.scan_once(1)
+    assert second['from_block'] == 99
     assert registry.checkpoint(1, 'public_rpc')['last_block'] == 100

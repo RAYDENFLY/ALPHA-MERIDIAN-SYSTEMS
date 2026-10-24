@@ -70,12 +70,15 @@ class MultiExchangeService:
                     logger.error(f"MultiExchangeService: Discovery failed for {ex}: {err}")
                     results[ex] = []
 
-        # Update cache
-        self._instruments_cache = {
-            ex: {inst.symbol: inst for inst in insts}
-            for ex, insts in results.items()
-        }
-        self._last_discovery_time = now
+        # Update cache (preserve prior valid cache for any venue that returned empty due to transient error)
+        updated_cache = dict(self._instruments_cache)
+        for ex, insts in results.items():
+            if insts or ex not in updated_cache:
+                updated_cache[ex] = {inst.symbol: inst for inst in insts}
+        self._instruments_cache = updated_cache
+        # Only advance full discovery TTL if all primary venues returned non-empty results
+        if all(len(v) > 0 for v in results.values()):
+            self._last_discovery_time = now
         total_discovered = sum(len(v) for v in results.values())
         logger.info(
             f"MultiExchangeService: Discovered {total_discovered} instruments across "
@@ -110,8 +113,9 @@ class MultiExchangeService:
             if not self._instruments_cache or sym_clean in self._instruments_cache.get("asterdex", {}):
                 tasks[executor.submit(self.aster.get_order_book, symbol)] = "asterdex"
 
-            # Binance query
-            if not self._instruments_cache or sym_clean in self._instruments_cache.get("binance", {}):
+            # Binance query: check local or shared Binance catalog to avoid querying unlisted AsterDEX-only symbols
+            binance_insts = self._instruments_cache.get("binance") or getattr(self.binance, "_shared_catalog_cache", {})
+            if not binance_insts or sym_clean in binance_insts:
                 tasks[executor.submit(self.binance.get_order_book, symbol)] = "binance"
 
             # Hyperliquid query
@@ -152,7 +156,8 @@ class MultiExchangeService:
             if not self._instruments_cache or sym_clean in self._instruments_cache.get("asterdex", {}):
                 tasks[executor.submit(self.aster.get_recent_trades, symbol, limit)] = "asterdex"
 
-            if not self._instruments_cache or sym_clean in self._instruments_cache.get("binance", {}):
+            binance_insts = self._instruments_cache.get("binance") or getattr(self.binance, "_shared_catalog_cache", {})
+            if not binance_insts or sym_clean in binance_insts:
                 tasks[executor.submit(self.binance.get_recent_trades, symbol, limit)] = "binance"
 
             hl_cache = self._instruments_cache.get("hyperliquid", {})
