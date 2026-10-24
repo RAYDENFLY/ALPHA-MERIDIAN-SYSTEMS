@@ -3523,7 +3523,10 @@ async def research_data_endpoint(dataset_id: str, symbol: Optional[str] = Query(
 async def research_audit_endpoint(dataset_id: str, start: str = Query(...), end: str = Query(...)) -> Dict[str, Any]:
     try:
         from datetime import date
-        return audit_dataset(db, dataset_id, date.fromisoformat(start), date.fromisoformat(end))
+        start_date, end_date = date.fromisoformat(start), date.fromisoformat(end)
+        if start_date > end_date:
+            raise ValueError("start date must not be after end date")
+        return audit_dataset(db, dataset_id, start_date, end_date)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

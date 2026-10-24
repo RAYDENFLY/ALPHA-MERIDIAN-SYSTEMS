@@ -13,4 +13,4 @@ def test_persisted_audit_reports_partial_coverage_and_invalid_numeric():
 
 def test_unknown_dataset_schedule_is_not_complete():
     db=DatabaseManager(Path(f".pytest-audit-unknown-{id(object())}.db")); result=audit_dataset(db,"future_dataset",date(2024,1,1),date(2024,1,5))
-    assert result["coverage"]["status"]=="MISSING"
+    assert result["coverage"]["status"]=="UNKNOWN"

@@ -33,10 +33,10 @@ def cot_expected_dates(start: date, end: date, anchor_weekday: int = 1) -> Set[s
 
 def assess_coverage(observed: Iterable[str], start: date, end: date, expected: Optional[Set[str]], explanation: str = "") -> CoverageAssessment:
     dates=set(observed); in_range={d for d in dates if start.isoformat() <= d <= end.isoformat()}
-    if not in_range:
-        return CoverageAssessment("MISSING",start.isoformat(),end.isoformat(),min(dates) if dates else None,max(dates) if dates else None,len(dates),0 if expected is not None else None,sorted(expected or set()),sorted(dates-{*expected} if expected is not None else set()),0.0 if expected is not None else None,explanation or "No observations in requested range")
     if expected is None:
-        return CoverageAssessment("UNKNOWN",start.isoformat(),end.isoformat(),min(dates),max(dates),len(dates),None,[],sorted(dates),None,explanation or "Expected schedule cannot be determined")
+        return CoverageAssessment("UNKNOWN",start.isoformat(),end.isoformat(),min(dates) if dates else None,max(dates) if dates else None,len(dates),None,[],sorted(dates),None,explanation or "Expected schedule cannot be determined")
+    if not in_range:
+        return CoverageAssessment("MISSING",start.isoformat(),end.isoformat(),min(dates) if dates else None,max(dates) if dates else None,len(dates),0,sorted(expected),sorted(dates-set(expected)),0.0,explanation or "No observations in requested range")
     missing=sorted(expected-in_range); unexpected=sorted(in_range-expected); ratio=(len(expected)-len(missing))/len(expected) if expected else None
     status="COMPLETE" if not missing else "PARTIAL"
     return CoverageAssessment(status,start.isoformat(),end.isoformat(),min(dates),max(dates),len(dates),len(expected),missing,unexpected,ratio,explanation)
