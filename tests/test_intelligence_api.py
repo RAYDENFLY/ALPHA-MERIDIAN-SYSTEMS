@@ -2,11 +2,12 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from src.api.app import app
+from types import SimpleNamespace
 
 
 @pytest.fixture
 def client():
+    from src.api.app import app
     return TestClient(app)
 
 
@@ -68,7 +69,22 @@ class TestIntelligenceAPI:
         assert "active_walls_count" in data
         assert isinstance(data["recent_events"], list)
 
-    def test_market_context_endpoint(self, client):
+    def test_market_context_endpoint(self, client, monkeypatch):
+        from src.api import app as app_module
+
+        expected = {
+            "symbol": "BTCUSDT",
+            "structural_indicators": {"trend": "NEUTRAL"},
+            "order_book_depth": {"status": "AVAILABLE", "imbalance": 0.1},
+            "trade_flow": {"status": "AVAILABLE", "cvd": 12.0},
+            "liquidation_heatmap": {"status": "AVAILABLE", "long_clusters": [], "short_clusters": []},
+            "whale_activity": {"status": "AVAILABLE", "net_whale_bias": "BALANCED"},
+        }
+        monkeypatch.setattr(
+            app_module.market_context_service,
+            "get_market_context",
+            lambda symbol, force_refresh=False: SimpleNamespace(to_dict=lambda: {**expected, "symbol": symbol}),
+        )
         resp = client.get("/api/intelligence/market_context?symbol=BTCUSDT")
         assert resp.status_code == 200
         data = resp.json()
