@@ -22,13 +22,10 @@ setInterval(() => {
     }
 }, 5000);
 
-// 4. Periodic Model B refresh when Model B tab is active (every 10 seconds)
-setInterval(() => {
-    const tab = document.getElementById('tab-model_b');
-    if (tab && !tab.classList.contains('hidden')) {
-        loadModelB();
-    }
-}, 10000);
+// 4. Model B refresh lifecycle is managed reactively by startModelBAutoRefresh / stopModelBAutoRefresh
+if (typeof startModelBAutoRefresh === 'function' && typeof isModelBTabActive === 'function' && isModelBTabActive()) {
+    startModelBAutoRefresh();
+}
 
 // 5. Initialize tab from URL parameter/hash if provided, strictly defaulting to 'setups'
 const urlParams = new URLSearchParams(window.location.search);

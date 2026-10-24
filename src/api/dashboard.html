@@ -1654,9 +1654,13 @@
             <div class="card-bg p-5 rounded-xl border border-indigo-900/40 bg-slate-900/60 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2">
                     <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" id="scannerTelemetryLiveDot"></span>
                         <span class="text-sm font-bold text-white tracking-wide">Universal AsterDEX Scanner Engine Telemetry</span>
                         <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800" id="scannerCoverageBadge">100% BULK COVERAGE</span>
+                        <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/80 flex items-center gap-1.5" id="scannerTelemetryLiveBadge" title="Real-time telemetry auto-refreshing every 3s">
+                            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+                            <span>LIVE (3s)</span>
+                        </span>
                     </div>
                     <div class="flex items-center gap-4 text-xs font-mono text-slate-400" id="scannerCycleMetadata">
                         <span id="scannerCycleId">Cycle: --</span>
@@ -1931,20 +1935,20 @@
                         <span id="modelBJournalMetricsBadge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-800 text-slate-300">0 Trades</span>
                     </div>
                     <div class="flex flex-wrap items-center gap-3">
-                        <div class="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 text-[11px]" id="modelBCohortFilterGroup">
-                            <button onclick="setModelBCohortFilter('ALL')" id="modelBCohortFilterAll" class="px-2.5 py-1 rounded-md font-semibold bg-indigo-600 text-white transition flex items-center gap-1">
+                        <div class="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-[11px]" id="modelBCohortFilterGroup">
+                            <button type="button" data-cohort="ALL" onclick="setModelBCohortFilter('ALL')" id="modelBCohortFilterAll" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white shadow-md shadow-indigo-950/80 ring-2 ring-indigo-400 font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none">
                                 <span>All</span>
-                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-800/80 text-indigo-200 font-mono" id="modelBCountAll">42</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-800/80 text-indigo-200 font-mono font-bold" id="modelBCountAll">42</span>
                             </button>
-                            <button onclick="setModelBCohortFilter('V2')" id="modelBCohortFilterV2" class="px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1">
-                                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                            <button type="button" data-cohort="V2" onclick="setModelBCohortFilter('V2')" id="modelBCohortFilterV2" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-purple-300 hover:border-purple-500/40 transition-all flex items-center gap-1.5 cursor-pointer select-none">
+                                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
                                 <span>V2 (Remediated)</span>
-                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/40 font-mono" id="modelBCountV2">0</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-500/60 font-mono font-bold" id="modelBCountV2">0</span>
                             </button>
-                            <button onclick="setModelBCohortFilter('V1')" id="modelBCohortFilterV1" class="px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1">
-                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                            <button type="button" data-cohort="V1" onclick="setModelBCohortFilter('V1')" id="modelBCohortFilterV1" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-slate-200 hover:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer select-none">
+                                <span class="w-2 h-2 rounded-full bg-slate-500"></span>
                                 <span>V1 (Legacy)</span>
-                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 font-mono" id="modelBCountV1">42</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 font-mono font-bold" id="modelBCountV1">42</span>
                             </button>
                         </div>
                         <div class="flex items-center gap-4 text-xs font-mono" id="modelBJournalSummary">
@@ -4179,7 +4183,7 @@
     <script src="/static/js/backtest.js"></script>
     <script src="/static/js/alerts.js"></script>
     <script src="/static/js/model-a.js"></script>
-    <script src="/static/js/model-b.js"></script>
+    <script src="/static/js/model-b.js?v=20261024_telemetry_v1"></script>
     <script src="/static/js/model-d.js"></script>
     <script src="/static/js/position_intelligence.js"></script>
     <script src="/static/js/sweep_chart.js"></script>

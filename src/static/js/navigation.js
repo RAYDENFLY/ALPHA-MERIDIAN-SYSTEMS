@@ -222,6 +222,9 @@ function switchTab(tabId) {
     if (tabId !== 'model_a' && typeof stopModelAAutoRefresh === 'function') {
         stopModelAAutoRefresh();
     }
+    if (tabId !== 'model_b' && typeof stopModelBAutoRefresh === 'function') {
+        stopModelBAutoRefresh();
+    }
 
     // 6. Trigger active tab data loader
     if (tabId === 'setups' && typeof fetchSetups === 'function') fetchSetups();
@@ -230,7 +233,10 @@ function switchTab(tabId) {
     if (tabId === 'backtest' && typeof loadBacktest === 'function') loadBacktest();
     if (tabId === 'alerts' && typeof loadAlerts === 'function') loadAlerts();
     if (tabId === 'model_a' && typeof loadModelA === 'function') loadModelA();
-    if (tabId === 'model_b' && typeof loadModelB === 'function') loadModelB();
+    if (tabId === 'model_b') {
+        if (typeof loadModelB === 'function') loadModelB();
+        if (typeof startModelBAutoRefresh === 'function') startModelBAutoRefresh();
+    }
     if (tabId === 'model_d' && typeof loadModelD === 'function') loadModelD();
     if (tabId === 'liquidity_intel') {
         if (typeof loadLiquidityChartSymbols === 'function') loadLiquidityChartSymbols();

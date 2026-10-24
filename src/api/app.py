@@ -2775,7 +2775,8 @@ def get_model_b_journal(
         cohort=cohort,
     )
     all_model_b_trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
-    metrics = journal.compute_trade_metrics(all_model_b_trades)
+    metrics_trades = trades if (cohort and cohort.strip().upper() != "ALL") else all_model_b_trades
+    metrics = journal.compute_trade_metrics(metrics_trades)
     
     v1_count = sum(1 for t in all_model_b_trades if t.get("cohort") == "V1")
     v2_count = sum(1 for t in all_model_b_trades if t.get("cohort") == "V2")

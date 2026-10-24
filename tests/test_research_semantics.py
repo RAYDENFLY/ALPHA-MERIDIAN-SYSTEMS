@@ -10,9 +10,12 @@ def test_freshness_is_independent_and_deterministic():
 
 def test_cftc_freshness_uses_observation_date_only():
     ref=datetime(2024,1,22,tzinfo=timezone.utc)
+    assert cftc_freshness("2024-01-22", ref) == "FRESH"
     assert cftc_freshness("2024-01-20", ref) == "FRESH"
-    assert cftc_freshness("2024-01-05", ref) == "AGING"
-    assert cftc_freshness("2023-12-01", ref) == "STALE"
+    assert cftc_freshness("2024-01-12", ref) == "FRESH"  # 10 days
+    assert cftc_freshness("2024-01-11", ref) == "AGING"  # 11 days
+    assert cftc_freshness("2024-01-01", ref) == "AGING"  # 21 days
+    assert cftc_freshness("2023-12-31", ref) == "STALE"  # 22 days
     assert cftc_freshness(None, ref) == "UNKNOWN"
     assert cftc_freshness("not-a-date", ref) == "UNKNOWN"
     assert cftc_freshness("2024-02-01", ref) == "UNKNOWN"

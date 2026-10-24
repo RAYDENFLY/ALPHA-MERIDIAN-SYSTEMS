@@ -1,6 +1,78 @@
         // MODEL B LIQUIDITY RESEARCH ENGINE JAVASCRIPT
         // =========================================================================
 
+        let modelBTelemetryTimer = null;
+        let modelBHeavyDataTimer = null;
+        let modelBIsFetchingStatus = false;
+        let modelBStatusAbortController = null;
+        let modelBLastSuccessfulStatusMs = 0;
+        const MODEL_B_STATUS_POLL_INTERVAL_MS = 3000; // 3 to 5 seconds real-time polling
+        const MODEL_B_HEAVY_POLL_INTERVAL_MS = 15000; // 15 seconds for heavy tables
+
+        function isModelBTabActive() {
+            const tab = document.getElementById('tab-model_b');
+            return Boolean(tab && !tab.classList.contains('hidden'));
+        }
+
+        function startModelBAutoRefresh() {
+            stopModelBAutoRefresh();
+
+            // 1. Immediate telemetry update
+            fetchModelBStatus(true);
+
+            // 2. High-frequency telemetry & rotation progress bar polling (3000ms)
+            modelBTelemetryTimer = setInterval(() => {
+                if (!document.hidden && isModelBTabActive()) {
+                    fetchModelBStatus(true);
+                }
+            }, MODEL_B_STATUS_POLL_INTERVAL_MS);
+
+            // 3. Moderate interval for positions, coverage, and setups (15000ms)
+            modelBHeavyDataTimer = setInterval(() => {
+                if (!document.hidden && isModelBTabActive()) {
+                    if (typeof fetchModelBPositions === 'function') fetchModelBPositions();
+                    if (typeof fetchModelBSetups === 'function') fetchModelBSetups();
+                    if (typeof fetchModelBOrders === 'function') fetchModelBOrders();
+                }
+            }, MODEL_B_HEAVY_POLL_INTERVAL_MS);
+        }
+
+        function stopModelBAutoRefresh() {
+            if (modelBTelemetryTimer) {
+                clearInterval(modelBTelemetryTimer);
+                modelBTelemetryTimer = null;
+            }
+            if (modelBHeavyDataTimer) {
+                clearInterval(modelBHeavyDataTimer);
+                modelBHeavyDataTimer = null;
+            }
+            if (modelBStatusAbortController) {
+                try { modelBStatusAbortController.abort(); } catch (e) {}
+                modelBStatusAbortController = null;
+            }
+            modelBIsFetchingStatus = false;
+        }
+
+        window.startModelBAutoRefresh = startModelBAutoRefresh;
+        window.stopModelBAutoRefresh = stopModelBAutoRefresh;
+        window.startModelBTelemetryPolling = startModelBAutoRefresh;
+        window.stopModelBTelemetryPolling = stopModelBAutoRefresh;
+        window.isModelBTabActive = isModelBTabActive;
+
+        function handleModelBStatusError(errMsg) {
+            if (Date.now() - modelBLastSuccessfulStatusMs > 12000) {
+                const liveDot = document.getElementById('scannerTelemetryLiveDot');
+                if (liveDot) {
+                    liveDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse';
+                }
+                const liveBadge = document.getElementById('scannerTelemetryLiveBadge');
+                if (liveBadge) {
+                    liveBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1.5';
+                    liveBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>SYNCING...</span>';
+                }
+            }
+        }
+
         async function loadModelB() {
             await Promise.allSettled([
                 fetchModelBStatus(),
@@ -19,29 +91,67 @@
             ]);
         }
 
-        async function fetchModelBStatus() {
+        async function fetchModelBStatus(silent = false) {
+            if (modelBIsFetchingStatus) return;
+            modelBIsFetchingStatus = true;
+
+            if (modelBStatusAbortController) {
+                try { modelBStatusAbortController.abort(); } catch (e) {}
+            }
+            modelBStatusAbortController = new AbortController();
+            const timeoutHandle = setTimeout(() => {
+                if (modelBStatusAbortController) {
+                    try { modelBStatusAbortController.abort(); } catch (e) {}
+                }
+            }, 4500);
+
             try {
-                const res = await fetch('/api/model_b/status');
-                if (!res.ok) return;
+                const res = await fetch('/api/model_b/status', {
+                    signal: modelBStatusAbortController.signal,
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                clearTimeout(timeoutHandle);
+                if (!res.ok) {
+                    handleModelBStatusError(`HTTP ${res.status}`);
+                    return;
+                }
                 const data = await res.json();
                 modelBCachedStatus = data;
+                modelBLastSuccessfulStatusMs = Date.now();
 
+                // 1. Live status indicator heartbeat
+                const liveDot = document.getElementById('scannerTelemetryLiveDot');
+                if (liveDot) {
+                    liveDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+                }
+                const liveBadge = document.getElementById('scannerTelemetryLiveBadge');
+                if (liveBadge) {
+                    liveBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/80 flex items-center gap-1.5';
+                    liveBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span><span>LIVE (3s)</span>';
+                }
+
+                // 2. Risk, capital & kill switch status
+                const currentEq = data.capital?.current_equity_usdt ?? 100.0;
                 const eqEl = document.getElementById('modelBEquityDisplay');
-                if (eqEl) eqEl.innerText = `$${Number(data.capital.current_equity_usdt || 100.0).toFixed(2)} USDT`;
+                if (eqEl) eqEl.innerText = `$${Number(currentEq).toFixed(2)} USDT`;
 
+                const dailyRealized = data.risk_limits?.daily_loss_realized_usdt ?? 0;
+                const dailyLimit = data.risk_limits?.daily_loss_limit_usdt ?? 3.0;
                 const dailyEl = document.getElementById('modelBDailyLossDisplay');
-                if (dailyEl) dailyEl.innerText = `$${Number(data.risk_limits.daily_loss_realized_usdt || 0).toFixed(2)} / $${Number(data.risk_limits.daily_loss_limit_usdt || 3.0).toFixed(2)}`;
+                if (dailyEl) dailyEl.innerText = `$${Number(dailyRealized).toFixed(2)} / $${Number(dailyLimit).toFixed(2)}`;
+
+                const weeklyRealized = data.risk_limits?.weekly_loss_realized_usdt ?? 0;
+                const weeklyLimit = data.risk_limits?.weekly_loss_limit_usdt ?? 7.5;
+                const weeklyEl = document.getElementById('modelBWeeklyLossDisplay');
+                if (weeklyEl) weeklyEl.innerText = `$${Number(weeklyRealized).toFixed(2)} / $${Number(weeklyLimit).toFixed(2)}`;
 
                 const overrideActive = Boolean(data.risk_limits?.diagnostic_override_active || data.diagnostic?.override_active);
                 const killSwitchOn = Boolean(data.risk_limits?.entry_kill_switch || data.diagnostic?.entry_kill_switch);
 
                 const bannerEl = document.getElementById('modelBDiagnosticBanner');
                 if (bannerEl) {
-                    if (overrideActive) {
-                        bannerEl.classList.remove('hidden');
-                    } else {
-                        bannerEl.classList.add('hidden');
-                    }
+                    if (overrideActive) bannerEl.classList.remove('hidden');
+                    else bannerEl.classList.add('hidden');
                 }
 
                 const killBtn = document.getElementById('modelBKillSwitchBtn');
@@ -64,7 +174,7 @@
                     if (killSwitchOn) {
                         dailyStat.innerText = 'KILL SWITCH (ENTRIES BLOCKED)';
                         dailyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
-                    } else if (data.risk_limits.daily_circuit_breaker_active) {
+                    } else if (data.risk_limits?.daily_circuit_breaker_active) {
                         if (overrideActive) {
                             dailyStat.innerText = 'BYPASSED (DIAGNOSTIC)';
                             dailyStat.className = 'text-xs text-amber-400 font-mono font-bold';
@@ -78,15 +188,12 @@
                     }
                 }
 
-                const weeklyEl = document.getElementById('modelBWeeklyLossDisplay');
-                if (weeklyEl) weeklyEl.innerText = `$${Number(data.risk_limits.weekly_loss_realized_usdt || 0).toFixed(2)} / $${Number(data.risk_limits.weekly_loss_limit_usdt || 7.5).toFixed(2)}`;
-
                 const weeklyStat = document.getElementById('modelBWeeklyStatus');
                 if (weeklyStat) {
                     if (killSwitchOn) {
                         weeklyStat.innerText = 'KILL SWITCH (ENTRIES BLOCKED)';
                         weeklyStat.className = 'text-xs text-rose-400 font-mono font-bold animate-pulse';
-                    } else if (data.risk_limits.weekly_circuit_breaker_active) {
+                    } else if (data.risk_limits?.weekly_circuit_breaker_active) {
                         if (overrideActive) {
                             weeklyStat.innerText = 'BYPASSED (DIAGNOSTIC)';
                             weeklyStat.className = 'text-xs text-amber-400 font-mono font-bold';
@@ -101,16 +208,16 @@
                 }
 
                 const expEl = document.getElementById('modelBExposureDisplay');
-                if (expEl) expEl.innerText = `${data.risk_limits.open_positions_count || 0} / ${data.risk_limits.max_open_positions || 10} Open`;
+                if (expEl) expEl.innerText = `${data.risk_limits?.open_positions_count || 0} / ${data.risk_limits?.max_open_positions || 10} Open`;
 
                 const pendEl = document.getElementById('modelBPendingOrdersDisplay');
-                if (pendEl) pendEl.innerText = `${data.risk_limits.pending_orders_count || 0} Pending`;
+                if (pendEl) pendEl.innerText = `${data.risk_limits?.pending_orders_count || 0} Pending`;
 
                 const statPend = document.getElementById('modelBStatPendingOrders');
-                if (statPend) statPend.innerText = `${data.risk_limits.pending_orders_count || 0} Pending`;
+                if (statPend) statPend.innerText = `${data.risk_limits?.pending_orders_count || 0} Pending`;
 
                 const statOpen = document.getElementById('modelBStatOpenPositions');
-                if (statOpen) statOpen.innerText = `${data.risk_limits.open_positions_count || 0} Open`;
+                if (statOpen) statOpen.innerText = `${data.risk_limits?.open_positions_count || 0} Open`;
 
                 const statClosed = document.getElementById('modelBStatClosedTrades');
                 if (statClosed && data.execution_metrics) {
@@ -125,7 +232,7 @@
                     scanTimeEl.innerText = data.last_scan_utc ? `Last Scan: ${new Date(data.last_scan_utc).toLocaleTimeString()}` : 'Last Scan: Never';
                 }
 
-                // Render Universal AsterDEX Scanner Engine Telemetry
+                // 3. Render Universal AsterDEX Scanner Engine Telemetry & Fair Rotation Progress Bar
                 const perf = data.scanner_performance;
                 const isRunning = Boolean(data.is_running);
                 const scanCount = Number(data.scan_count || 0);
@@ -158,8 +265,9 @@
                     const deepEl = document.getElementById('scannerDeepEvaluated');
                     if (deepEl) deepEl.innerText = `${cov.deep_evaluated ?? cov.evaluated ?? 0} / Cycle`;
 
+                    const rotProgPct = Number(rot.progress_pct || 0);
                     const rotProgEl = document.getElementById('scannerRotationProgress');
-                    if (rotProgEl) rotProgEl.innerText = `${Number(rot.progress_pct || 0).toFixed(1)}%`;
+                    if (rotProgEl) rotProgEl.innerText = `${rotProgPct.toFixed(1)}%`;
 
                     const rotOffEl = document.getElementById('scannerRotationOffset');
                     if (rotOffEl) rotOffEl.innerText = `Offset: ${rot.offset || 0} / ${rot.pool_size || 0}`;
@@ -176,13 +284,25 @@
                     const readyYieldEl = document.getElementById('scannerReadyYield');
                     if (readyYieldEl) readyYieldEl.innerText = `${cand.ready || 0} READY`;
 
+                    // Progress bar dynamically width adjusted
                     const progBar = document.getElementById('scannerProgressBar');
-                    if (progBar) progBar.style.width = `${Math.min(100, Math.max(0, rot.progress_pct || 0))}%`;
+                    if (progBar) {
+                        const clampedWidth = Math.min(100, Math.max(0, rotProgPct));
+                        progBar.style.width = `${clampedWidth}%`;
+                    }
 
+                    // Progress bar dynamic summary text
                     const progText = document.getElementById('scannerProgressBarText');
-                    if (progText) progText.innerText = `${rot.offset || 0} / ${rot.pool_size || 0} Liquid Contracts Rotated (${Number(rot.progress_pct || 0).toFixed(1)}%)`;
+                    if (progText) {
+                        progText.innerText = `${rot.offset || 0} / ${rot.pool_size || 0} Liquid Contracts Rotated (${rotProgPct.toFixed(1)}%)`;
+                    }
+
+                    const covBadge = document.getElementById('scannerCoverageBadge');
+                    if (covBadge) {
+                        covBadge.innerText = `${cov.bulk_screened || cov.screened || 0} BULK SCREENED`;
+                    }
                 } else {
-                    // Explicit IDLE / INITIALIZING / UNREADY display; never display synthetic progress
+                    // Explicit IDLE / INITIALIZING display
                     const idleLabel = isRunning ? (scanCount > 0 ? 'SYNCHRONIZING' : 'INITIALIZING') : 'IDLE / STOPPED';
                     const cycleIdEl = document.getElementById('scannerCycleId');
                     if (cycleIdEl) cycleIdEl.innerText = `Cycle: -- (${idleLabel})`;
@@ -229,9 +349,13 @@
                     const progText = document.getElementById('scannerProgressBarText');
                     if (progText) progText.innerText = `0 / 0 Liquid Contracts Rotated (${idleLabel})`;
                 }
-
             } catch (err) {
-                console.error("Model B status error:", err);
+                if (err.name === 'AbortError') return;
+                console.warn("Model B status polling hiccup (handled):", err);
+                handleModelBStatusError(err.message || String(err));
+            } finally {
+                clearTimeout(timeoutHandle);
+                modelBIsFetchingStatus = false;
             }
         }
 
@@ -687,165 +811,223 @@
             }
         }
 
+        let modelBAllRawJournalTrades = [];
         let currentModelBCohortFilter = 'ALL';
-        window.setModelBCohortFilter = function(filter) {
-            currentModelBCohortFilter = filter;
+
+        function isV2Trade(t) {
+            if (!t) return false;
+            if (t.cohort === 'V2') return true;
+            if (t.cohort_version === 'MODEL_B_V2_REMEDIATED') return true;
+            if (typeof t.details_json === 'string' && t.details_json.includes('MODEL_B_V2_REMEDIATED')) return true;
+            const entryTs = Number(t.entry_timestamp_ms || 0);
+            if (entryTs >= 1792838400000 && t.exit_reason !== 'COHORT_CUTOVER_V2') return true;
+            return false;
+        }
+
+        function updateModelBCohortButtonsUI(filter) {
             const btnAll = document.getElementById('modelBCohortFilterAll');
             const btnV2 = document.getElementById('modelBCohortFilterV2');
             const btnV1 = document.getElementById('modelBCohortFilterV1');
-            if (btnAll && btnV2 && btnV1) {
-                btnAll.className = filter === 'ALL'
-                    ? 'px-2.5 py-1 rounded-md font-semibold bg-indigo-600 text-white transition flex items-center gap-1'
-                    : 'px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1';
-                btnV2.className = filter === 'V2'
-                    ? 'px-2.5 py-1 rounded-md font-semibold bg-purple-600 text-white transition flex items-center gap-1'
-                    : 'px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1';
-                btnV1.className = filter === 'V1'
-                    ? 'px-2.5 py-1 rounded-md font-semibold bg-slate-700 text-white transition flex items-center gap-1'
-                    : 'px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1';
+            if (!btnAll || !btnV2 || !btnV1) return;
+
+            const baseClass = "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer select-none ";
+            if (filter === 'V2') {
+                btnAll.className = baseClass + "text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-white hover:border-slate-700";
+                btnV2.className = baseClass + "bg-purple-600 text-white shadow-md shadow-purple-950/80 ring-2 ring-purple-400 font-bold";
+                btnV1.className = baseClass + "text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-slate-200 hover:border-slate-700";
+            } else if (filter === 'V1') {
+                btnAll.className = baseClass + "text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-white hover:border-slate-700";
+                btnV2.className = baseClass + "text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-purple-300 hover:border-purple-500/40";
+                btnV1.className = baseClass + "bg-slate-700 text-white shadow-md shadow-slate-950/80 ring-2 ring-slate-400 font-bold";
+            } else {
+                btnAll.className = baseClass + "bg-indigo-600 text-white shadow-md shadow-indigo-950/80 ring-2 ring-indigo-400 font-bold";
+                btnV2.className = baseClass + "text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-purple-300 hover:border-purple-500/40";
+                btnV1.className = baseClass + "text-slate-400 bg-slate-900/80 border border-slate-800 hover:text-slate-200 hover:border-slate-700";
             }
+        }
+
+        window.setModelBCohortFilter = function(filter) {
+            const fUpper = String(filter || 'ALL').toUpperCase();
+            currentModelBCohortFilter = fUpper;
+            updateModelBCohortButtonsUI(fUpper);
+
             if (typeof resetPaginationPage === 'function') {
                 resetPaginationPage('model_b_journal');
             }
-            fetchModelBJournal();
+
+            renderModelBJournalTable();
         };
+
+        function renderModelBJournalTable() {
+            const tbody = document.getElementById('modelBJournalTableBody');
+            if (!tbody) return;
+
+            // Filter in-memory trades smoothly
+            let filteredTrades = modelBAllRawJournalTrades;
+            if (currentModelBCohortFilter === 'V2') {
+                filteredTrades = modelBAllRawJournalTrades.filter(isV2Trade);
+            } else if (currentModelBCohortFilter === 'V1') {
+                filteredTrades = modelBAllRawJournalTrades.filter(t => !isV2Trade(t));
+            }
+
+            modelBCachedJournalTrades = filteredTrades;
+
+            // Update cohort counts on buttons
+            const allCount = modelBAllRawJournalTrades.length;
+            const v2Count = modelBAllRawJournalTrades.filter(isV2Trade).length;
+            const v1Count = allCount - v2Count;
+
+            const countAllEl = document.getElementById('modelBCountAll');
+            const countV2El = document.getElementById('modelBCountV2');
+            const countV1El = document.getElementById('modelBCountV1');
+            if (countAllEl) countAllEl.innerText = String(allCount);
+            if (countV2El) countV2El.innerText = String(v2Count);
+            if (countV1El) countV1El.innerText = String(v1Count);
+
+            // Compute dynamic metrics for the selected cohort filter
+            const closedTrades = filteredTrades.filter(t => !t.is_open && Boolean(t.exit_timestamp_ms || t.exit_price));
+            const closedCount = closedTrades.length;
+            const openCount = filteredTrades.filter(t => t.is_open || !t.exit_timestamp_ms).length;
+            const wins = closedTrades.filter(t => t.outcome === 'WIN');
+            const winRate = closedCount > 0 ? (wins.length / closedCount * 100.0).toFixed(1) : '0.0';
+            const netPnl = closedTrades.reduce((acc, t) => acc + Number(t.pnl_net || 0), 0.0);
+
+            const wrEl = document.getElementById('modelBWinRate');
+            if (wrEl) wrEl.innerText = `${winRate}%`;
+
+            const netEl = document.getElementById('modelBNetPnl');
+            if (netEl) {
+                netEl.innerText = `${netPnl >= 0 ? '+$' : '-$'}${Math.abs(netPnl).toFixed(2)}`;
+                netEl.className = netPnl > 0 ? 'text-emerald-400 font-bold' : (netPnl < 0 ? 'text-rose-400 font-bold' : 'text-slate-300 font-bold');
+            }
+
+            const badge = document.getElementById('modelBJournalMetricsBadge');
+            if (badge) {
+                const cohortSuffix = currentModelBCohortFilter === 'V2' ? ' (V2 Remediated)' : (currentModelBCohortFilter === 'V1' ? ' (V1 Legacy)' : ' (All)');
+                badge.innerText = `${closedCount} Closed / ${openCount} Open${cohortSuffix}`;
+            }
+
+            const pElJournal = document.getElementById('modelBJournalPaginationContainer');
+            if (filteredTrades.length === 0) {
+                const emptyMsg = currentModelBCohortFilter === 'V2'
+                    ? `<div class="max-w-md mx-auto space-y-2 py-4">
+                         <div class="inline-flex p-2.5 rounded-full bg-purple-950/80 text-purple-400 border border-purple-800">
+                           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                         </div>
+                         <div class="font-bold text-white text-sm">No V2 Remediated Trades Closed Yet</div>
+                         <div class="text-xs text-slate-400">Model B V2 is actively monitoring markets with a clean $0 drawdown slate under remediated 1.0R dynamic TP floor and order-flow filters. Upcoming paper fills will appear here tagged as V2.</div>
+                         <button onclick="setModelBCohortFilter('ALL')" class="mt-2 px-3 py-1 text-xs font-semibold rounded bg-purple-600 hover:bg-purple-500 text-white transition">View All 42 Trades</button>
+                       </div>`
+                    : '<div class="py-4 text-slate-500">No Model B trades found for selected filter.</div>';
+                tbody.innerHTML = `<tr><td colspan="9" class="px-4 py-6 text-center">${emptyMsg}</td></tr>`;
+                if (pElJournal) pElJournal.innerHTML = '';
+                return;
+            }
+
+            const pagedTrades = (typeof paginateList === 'function')
+                ? paginateList('model_b_journal', filteredTrades)
+                : filteredTrades;
+
+            tbody.innerHTML = pagedTrades.map(t => {
+                const isLong = (t.direction || '').toUpperCase() === 'LONG';
+                const dirClass = isLong ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+                const netPnlVal = Number(t.pnl_net || 0);
+                const netClass = netPnlVal > 0 ? 'text-emerald-400 font-bold' : (netPnlVal < 0 ? 'text-rose-400 font-bold' : 'text-slate-300');
+                const isV2 = isV2Trade(t);
+
+                const rowClasses = isV2
+                    ? 'bg-purple-950/20 hover:bg-purple-900/30 border-l-4 border-l-purple-400 transition'
+                    : 'hover:bg-slate-800/40 border-l-4 border-l-slate-700 transition';
+
+                const cohortBadge = isV2
+                    ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide bg-purple-900/90 text-purple-200 border border-purple-400 shadow-sm shadow-purple-950/60 uppercase" title="Remediated V2 Cohort">
+                         <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                         V2 REMEDIATED
+                       </span>`
+                    : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide bg-slate-800 text-slate-400 border border-slate-700 uppercase" title="${escapeHtml(t.cohort_label || 'Legacy V1 Cohort')}">
+                         <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                         V1 LEGACY
+                       </span>`;
+
+                const symbolCohortPill = isV2
+                    ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-black bg-purple-600 text-white shadow-sm ring-1 ring-purple-300/40">V2</span>`
+                    : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">V1</span>`;
+
+                const isArchived = t.exit_reason === 'COHORT_CUTOVER_V2';
+
+                return `
+                    <tr class="${rowClasses}">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-bold text-white">${escapeHtml(t.symbol)}</span>
+                                ${symbolCohortPill}
+                            </div>
+                            <div class="text-[10px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                <span>${escapeHtml(t.trade_id.substring(0, 10))}</span>
+                                ${isArchived ? '<span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-800" title="Archived at Cohort V2 Cutover"><span class="w-1 h-1 rounded-full bg-amber-400"></span>Archived</span>' : ''}
+                            </div>
+                        </td>
+                        <td class="px-3 py-3">
+                            ${cohortBadge}
+                        </td>
+                        <td class="px-4 py-3 ${dirClass}">${escapeHtml(t.direction || 'LONG')}</td>
+                        <td class="px-4 py-3">
+                            <div class="text-white font-mono">$${formatPrice(t.entry_price)}</div>
+                            <div class="text-[10px] text-slate-400 font-mono">Exit: ${t.exit_price ? '$' + formatPrice(t.exit_price) : 'OPEN'}</div>
+                        </td>
+                        <td class="px-4 py-3 text-slate-300 font-mono">$${Number(t.pnl_gross || 0).toFixed(3)}</td>
+                        <td class="px-4 py-3 text-amber-400 font-mono">$${Number(t.fee_paid || 0).toFixed(3)}</td>
+                        <td class="px-4 py-3 font-mono ${netClass}">${netPnlVal >= 0 ? '+$' : '-$'}${Math.abs(netPnlVal).toFixed(3)}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${t.outcome === 'WIN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' : (t.outcome === 'LOSS' ? 'bg-rose-950 text-rose-300 border border-rose-600' : 'bg-slate-800 text-slate-300')}">
+                                ${escapeHtml(t.outcome || (t.is_open ? 'OPEN' : 'CLOSED'))}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <button onclick="inspectModelBJournalChart('${escapeHtml(t.trade_id)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 ml-auto shadow-sm" title="Inspect Historical Entry & Exit Chart">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                <span>Chart</span>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            if (typeof renderPaginationControls === 'function') {
+                renderPaginationControls('model_b_journal', 'modelBJournalPaginationContainer', () => {
+                    renderModelBJournalTable();
+                });
+            }
+        }
 
         async function fetchModelBJournal() {
             try {
-                let url = '/api/model_b/journal?limit=200';
-                if (currentModelBCohortFilter && currentModelBCohortFilter !== 'ALL') {
-                    url += `&cohort=${encodeURIComponent(currentModelBCohortFilter)}`;
-                }
-                const res = await fetch(url);
+                const res = await fetch('/api/model_b/journal?limit=500');
                 if (!res.ok) return;
                 const data = await res.json();
-
-                const counts = data.cohort_counts || {};
-                const countAllEl = document.getElementById('modelBCountAll');
-                const countV2El = document.getElementById('modelBCountV2');
-                const countV1El = document.getElementById('modelBCountV1');
-                if (countAllEl) countAllEl.innerText = String(counts.all ?? (data.total_count || 0));
-                if (countV2El) countV2El.innerText = String(counts.v2 ?? 0);
-                if (countV1El) countV1El.innerText = String(counts.v1 ?? 0);
-
-                const metrics = data.metrics || {};
-                const wrEl = document.getElementById('modelBWinRate');
-                if (wrEl) wrEl.innerText = `${metrics.win_rate_pct || 0.0}%`;
-
-                const statWr = document.getElementById('modelBStatWinRate');
-                if (statWr) statWr.innerText = `${metrics.win_rate_pct || 0.0}%`;
-
-                const netEl = document.getElementById('modelBNetPnl');
-                const statNet = document.getElementById('modelBStatRealizedPnl');
-                const netVal = Number(metrics.net_pnl || 0.0);
-                const netText = `${netVal >= 0 ? '+$' : '-$'}${Math.abs(netVal).toFixed(2)}`;
-                const netCls = netVal > 0 ? 'text-emerald-400' : (netVal < 0 ? 'text-rose-400' : 'text-white');
-                if (netEl) {
-                    netEl.innerText = netText;
-                    netEl.className = netCls;
-                }
-                if (statNet) {
-                    statNet.innerText = netText;
-                    statNet.className = `text-lg font-bold mt-0.5 ${netCls}`;
-                }
-
-                const statClosed = document.getElementById('modelBStatClosedTrades');
-                if (statClosed) {
-                    statClosed.innerText = `${metrics.closed_trades_count || 0} Closed`;
-                }
-
-                const badge = document.getElementById('modelBJournalMetricsBadge');
-                if (badge) badge.innerText = `${metrics.closed_trades_count || 0} Closed / ${metrics.open_trades_count || 0} Open`;
-
-                const tbody = document.getElementById('modelBJournalTableBody');
-                if (!tbody) return;
-
-                const trades = data.trades || [];
-                modelBCachedJournalTrades = trades;
-                const pElJournal = document.getElementById('modelBJournalPaginationContainer');
-                if (trades.length === 0) {
-                    const emptyMsg = currentModelBCohortFilter === 'V2'
-                        ? 'No V2 Remediated trades closed yet. Model B V2 burn-in is actively monitoring markets with 0 open positions.'
-                        : 'No Model B trades found for selected filter.';
-                    tbody.innerHTML = `<tr><td colspan="9" class="px-4 py-6 text-center text-slate-500">${escapeHtml(emptyMsg)}</td></tr>`;
-                    if (pElJournal) pElJournal.innerHTML = '';
-                    return;
-                }
-
-                const pagedTrades = (typeof paginateList === 'function')
-                    ? paginateList('model_b_journal', trades)
-                    : trades;
-
-                tbody.innerHTML = pagedTrades.map(t => {
-                    const isLong = (t.direction || '').toUpperCase() === 'LONG';
-                    const dirClass = isLong ? 'text-emerald-400' : 'text-rose-400';
-                    const netPnl = Number(t.pnl_net || 0);
-                    const netClass = netPnl > 0 ? 'text-emerald-400' : (netPnl < 0 ? 'text-rose-400' : 'text-slate-300');
-                    const isV2 = t.cohort === 'V2' || t.cohort_version === 'MODEL_B_V2_REMEDIATED';
-
-                    const cohortBadge = isV2
-                        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-950/90 text-purple-300 border border-purple-500 shadow-sm" title="V2 Remediated Cohort">
-                             <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                             V2
-                           </span>`
-                        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800/90 text-slate-400 border border-slate-700" title="${escapeHtml(t.cohort_label || 'V1 Legacy Cohort')}">
-                             <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-                             V1
-                           </span>`;
-
-                    const symbolCohortPill = isV2
-                        ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-500/60 shadow-sm">V2</span>`
-                        : `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">V1</span>`;
-
-                    const isArchived = t.exit_reason === 'COHORT_CUTOVER_V2';
-
-                    return `
-                        <tr class="hover:bg-slate-800/40 transition">
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="font-bold text-white">${escapeHtml(t.symbol)}</span>
-                                    ${symbolCohortPill}
-                                </div>
-                                <div class="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                                    <span>${escapeHtml(t.trade_id.substring(0, 10))}</span>
-                                    ${isArchived ? '<span class="text-amber-400 font-semibold" title="Cutover to V2">(Archived)</span>' : ''}
-                                </div>
-                            </td>
-                            <td class="px-3 py-3">
-                                ${cohortBadge}
-                            </td>
-                            <td class="px-4 py-3 ${dirClass} font-semibold">${t.direction}</td>
-                            <td class="px-4 py-3">
-                                <div class="text-white">$${formatPrice(t.entry_price)}</div>
-                                <div class="text-[10px] text-slate-400">Exit: ${t.exit_price ? '$' + formatPrice(t.exit_price) : 'OPEN'}</div>
-                            </td>
-                            <td class="px-4 py-3 text-slate-300">$${Number(t.pnl_gross || 0).toFixed(3)}</td>
-                            <td class="px-4 py-3 text-amber-400">$${Number(t.fee_paid || 0).toFixed(3)}</td>
-                            <td class="px-4 py-3 font-bold ${netClass}">${netPnl >= 0 ? '+$' : '-$'}${Math.abs(netPnl).toFixed(3)}</td>
-                            <td class="px-4 py-3">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${t.outcome === 'WIN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' : (t.outcome === 'LOSS' ? 'bg-rose-950 text-rose-300 border border-rose-600' : 'bg-slate-800 text-slate-300')}">
-                                    ${t.outcome || (t.is_open ? 'OPEN' : 'CLOSED')}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <button onclick="inspectModelBJournalChart('${escapeHtml(t.trade_id)}')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 ml-auto shadow-sm" title="Inspect Historical Entry & Exit Chart">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                                    <span>Chart</span>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-
-                if (typeof renderPaginationControls === 'function') {
-                    renderPaginationControls('model_b_journal', 'modelBJournalPaginationContainer', () => {
-                        fetchModelBJournal();
-                    });
-                }
-
+                modelBAllRawJournalTrades = data.trades || [];
+                renderModelBJournalTable();
             } catch (err) {
                 console.error("Model B journal error:", err);
             }
+        }
+
+        // Attach event delegation on DOMContentLoaded to guarantee interactivity
+        if (typeof document !== 'undefined') {
+            document.addEventListener('DOMContentLoaded', () => {
+                const group = document.getElementById('modelBCohortFilterGroup');
+                if (group) {
+                    group.addEventListener('click', (e) => {
+                        const btn = e.target.closest('button[data-cohort]');
+                        if (btn) {
+                            const cohort = btn.getAttribute('data-cohort');
+                            if (cohort && typeof window.setModelBCohortFilter === 'function') {
+                                window.setModelBCohortFilter(cohort);
+                            }
+                        }
+                    });
+                }
+            });
         }
 
         async function fetchModelBOrderBook() {
@@ -1219,13 +1401,26 @@
             }
         }
 
-        // Periodic Model B refresh when Model B tab is active
-        setInterval(() => {
-            const tab = document.getElementById('tab-model_b');
-            if (tab && !tab.classList.contains('hidden')) {
-                loadModelB();
-            }
-        }, 10000);
+        // Model B Tab & Document Lifecycle Listeners
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopModelBAutoRefresh();
+                } else if (isModelBTabActive()) {
+                    startModelBAutoRefresh();
+                }
+            });
+
+            window.addEventListener('beforeunload', () => {
+                stopModelBAutoRefresh();
+            });
+
+            document.addEventListener('DOMContentLoaded', () => {
+                if (isModelBTabActive()) {
+                    startModelBAutoRefresh();
+                }
+            });
+        }
 
         // -------------------------------------------------------------------------
         // Model B Live Shadow Research Client Implementation
