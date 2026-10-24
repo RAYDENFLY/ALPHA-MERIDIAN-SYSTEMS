@@ -400,6 +400,20 @@
                     </div>
 
                     <!-- 6. SETTINGS -->
+                    <!-- 7. MARKET PARTICIPANTS -->
+                    <div class="space-y-0.5">
+                        <button type="button" onclick="toggleCategoryAccordion('participants')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-people-group sidebar-icon" aria-hidden="true"></i><span class="sidebar-cat-title text-[11px] uppercase tracking-wider font-mono">Market Participants</span></span>
+                            <svg id="catChevron-participants" class="chevron w-3.5 h-3.5 transform rotate-180 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="catGroup-participants" class="space-y-0.5 pl-1">
+                            <button type="button" onclick="switchTab('market_participant')" id="sideBtn-market_participant" class="sidebar-item w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300"><i class="fa-solid fa-users sidebar-icon text-cyan-400" aria-hidden="true"></i><span class="sidebar-text">Market Participant</span></button>
+                            <button type="button" onclick="switchTab('cot')" id="sideBtn-cot" class="sidebar-item w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300"><i class="fa-solid fa-chart-column sidebar-icon text-indigo-400" aria-hidden="true"></i><span class="sidebar-text">Commitment of Traders</span></button>
+                            <button type="button" onclick="switchTab('retail_sentiment')" id="sideBtn-retail_sentiment" class="sidebar-item w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300"><i class="fa-solid fa-scale-balanced sidebar-icon text-amber-400" aria-hidden="true"></i><span class="sidebar-text">Retail Sentiment</span></button>
+                        </div>
+                    </div>
+
+                    <!-- 8. SETTINGS -->
                     <div class="space-y-0.5">
                         <button type="button" onclick="toggleCategoryAccordion('settings')" class="sidebar-cat-toggle w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded transition">
                             <span class="flex items-center gap-2">
@@ -428,6 +442,21 @@
 
             <!-- Main Content Container with all Tabs -->
             <main class="main-content space-y-4">
+
+        <!-- MARKET PARTICIPANT -->
+        <div id="tab-market_participant" class="hidden space-y-4">
+            <div class="card-bg p-5 rounded-xl border border-slate-800">
+                <h2 class="text-lg font-bold text-white">Market Participant</h2>
+                <p class="text-xs text-slate-400 mt-1">Read-only positioning and sentiment research.</p>
+                <div id="marketParticipantSummary" class="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+            </div>
+        </div>
+        <div id="tab-cot" class="hidden space-y-4">
+            <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Commitment of Traders</h2><p class="text-xs text-slate-400 mt-1">Weekly CFTC report-date data. Not real-time positioning.</p><div id="cotState" class="mt-5 text-sm text-slate-400">Loading research data…</div><div id="cotTable" class="mt-4 overflow-x-auto"></div></div>
+        </div>
+        <div id="tab-retail_sentiment" class="hidden space-y-4">
+            <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Retail Sentiment</h2><div class="mt-5 p-4 rounded border border-amber-900/60 bg-amber-950/20 text-sm text-amber-200">UNAVAILABLE — no verified retail positioning dataset is currently configured. No sentiment values are fabricated.</div></div>
+        </div>
 
         <!-- TAB 1: CANDIDATE SETUPS -->
         <div id="tab-setups" class="space-y-4">
@@ -4136,6 +4165,7 @@
     <script src="/static/js/ai_analyst.js"></script>
     <script src="/static/js/trade_inspector.js"></script>
     <script src="/static/js/navigation.js"></script>
+    <script src="/static/js/market_participant.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -32,7 +32,7 @@ from src.core.types import (
     TradeRecord,
 )
 from src.data.database import DatabaseManager
-from src.exchange.normalized import LiquiditySnapshot, NormalizedInstrument
+from src.exchange.normalized import LiquiditySnapshot, NormalizedInstrument, NormalizedOrderBook, OrderBookLevel
 from src.execution.paper_engine import PaperExecutionEngine
 from src.execution.types import PaperOrder, PaperOrderStatus
 from src.journal.repository import JournalRepository
@@ -43,7 +43,7 @@ from config.settings import AppConfig, ModelBConfig, PaperExecutionConfig
 
 
 
-def create_test_candle_series(symbol: str = "TESTUSDT", base_price: float = 100.0, count: int = 30) -> List[Candle]:
+def create_test_candle_series(symbol: str = "TESTUSDT", base_price: float = 90.0, count: int = 30) -> List[Candle]:
     """Create a synthetic 1H candle series forming a confirmed swing low and sweep-reclaim."""
     candles = []
     base_ts = 1792300000000  # Fixed base time
@@ -51,16 +51,16 @@ def create_test_candle_series(symbol: str = "TESTUSDT", base_price: float = 100.
     for i in range(count):
         ts = base_ts + (i * 3600 * 1000)
         close_ts = ts + (3600 * 1000) - 1
+        p = base_price + (i * 0.3)
 
-        # Form a clear swing low at bar 10 (low=90.0), then sweep at bar 28 (low=89.0, close=92.0)
         if i == 10:
-            o, h, l, c = 95.0, 96.0, 90.0, 93.0
+            o, h, l, c = base_price + 2.0, base_price + 3.0, base_price, base_price + 1.5
         elif i == 28:
-            o, h, l, c = 91.0, 93.0, 89.0, 92.0  # Swept 90.0 and closed above
+            o, h, l, c = base_price + 4.0, base_price + 7.5, base_price - 0.5, base_price + 7.0
         elif i == 29:
-            o, h, l, c = 92.0, 94.0, 91.5, 93.5  # Current closed bar
+            o, h, l, c = base_price + 7.0, base_price + 9.5, base_price + 6.5, base_price + 9.0
         else:
-            o, h, l, c = 100.0, 102.0, 98.0, 100.0
+            o, h, l, c = p, p + 0.5, p - 0.5, p + 0.2
 
         candles.append(
             Candle(
@@ -79,15 +79,17 @@ def create_test_candle_series(symbol: str = "TESTUSDT", base_price: float = 100.
 
 
 def create_test_instrument(symbol: str = "TESTUSDT") -> NormalizedInstrument:
+    min_qty = 0.0001 if "BTC" in symbol else 0.01
+    min_notional = 1.0 if "BTC" in symbol else 5.0
     return NormalizedInstrument(
         symbol=symbol,
         exchange_name="asterdex",
         base_asset=symbol.replace("USDT", ""),
         quote_asset="USDT",
-        min_qty=0.1,
-        step_size=0.1,
+        min_qty=min_qty,
+        step_size=min_qty,
         tick_size=0.01,
-        min_notional=5.0,
+        min_notional=min_notional,
         contract_type="PERPETUAL",
         is_active=True,
         volume_24h_usdt=5000000.0,
@@ -132,6 +134,16 @@ def test_setup():
                 absorption_score=0.65,
             )
 
+        def get_latest_book(self, symbol):
+            p = 50000.0 if "BTC" in symbol else (2000.0 if "ETH" in symbol else 99.0)
+            return NormalizedOrderBook(
+                symbol=symbol,
+                exchange_name="asterdex",
+                timestamp_ms=1792300000000,
+                bids=[OrderBookLevel(price=p * 0.9998, size=500.0)],
+                asks=[OrderBookLevel(price=p * 1.0002, size=500.0)],
+            )
+
     generator.liquidity_collector = MockCollector()
 
 
@@ -144,6 +156,10 @@ def test_setup():
         paper_engine=paper_engine,
         generator=generator,
     )
+    def mock_agg_books(sym):
+        p = 50000.0 if "BTC" in sym else (2000.0 if "ETH" in sym else 99.0)
+        return {"asterdex": NormalizedOrderBook(sym, "asterdex", 1792300000000, [OrderBookLevel(price=p * 0.9998, size=500.0)], [OrderBookLevel(price=p * 1.0002, size=500.0)])}
+    runner.exchange_service.get_aggregated_order_books = mock_agg_books
 
 
     yield {
@@ -176,12 +192,7 @@ class TestModelBCandidateDeduplication:
 
         # Mock exchange get_klines and focus symbols
         runner.get_focus_symbols = lambda max_symbols=20: [inst]
-        valid_book = NormalizedOrderBook("LINKUSDT", "asterdex", 1792350000000, [OrderBookLevel(price=19.98, size=500.0)], [OrderBookLevel(price=20.02, size=500.0)])
-        runner.exchange = type("MockEx", (), {
-            "get_klines": lambda self, sym, tf, limit=50: candles,
-            "get_order_book": lambda self, sym: valid_book,
-        })()
-        runner.exchange_service.get_aggregated_order_books = lambda sym: {"asterdex": valid_book}
+        runner.exchange = type("MockEx", (), {"get_klines": lambda self, sym, tf, limit=50: candles})()
 
         # Run cycle 1
         now_ms = 1792350000000
@@ -278,6 +289,7 @@ class TestModelBCandidateDeduplication:
             paper_engine=paper_engine2,
         )
         runner2.generator.liquidity_collector = runner1.generator.liquidity_collector
+        runner2.exchange_service.get_aggregated_order_books = runner1.exchange_service.get_aggregated_order_books
         runner2.get_focus_symbols = lambda max_symbols=20: [inst]
         runner2.exchange = type("MockEx", (), {"get_klines": lambda self, sym, tf, limit=50: candles})()
 
