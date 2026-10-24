@@ -22,3 +22,10 @@ def test_treasury_missing_values_and_cot_net_position():
     rows = parse_cot_csv(csv, "u")
     assert len(rows) == 1
     assert rows[0].value == 20
+
+
+def test_cot_invalid_report_date_is_rejected():
+    from pytest import raises
+    csv = "Market_and_Exchange_Names,Report_Date_as_YYYY-MM-DD,Open_Interest_All,Dealer_Positions_Long_All,Dealer_Positions_Short_All\nBitcoin,not-a-date,100,60,40\n"
+    with raises(ValueError):
+        parse_cot_csv(csv, "u")

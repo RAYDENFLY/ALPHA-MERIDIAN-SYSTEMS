@@ -97,6 +97,7 @@ def evaluate_liquidity_setup(
         # B) Last closed bar closed strictly above key_low
         swept = (last_closed.low < key_low) or (len(candles) >= 2 and candles[-2].low < key_low)
         reclaimed = swept and (last_closed.close > key_low)
+        confirmed_close = last_closed.close > last_closed.open
 
         # C) Liquidity confirmation: bid depth imbalance or positive CVD or absorption
         has_bid_imbalance = snapshot.imbalance_25bps >= min_imbalance
@@ -105,7 +106,7 @@ def evaluate_liquidity_setup(
 
         liquidity_confirmed = has_bid_imbalance or (has_positive_cvd and has_absorption)
 
-        if reclaimed and liquidity_confirmed:
+        if reclaimed and liquidity_confirmed and confirmed_close:
             entry_px = last_closed.close
             sweep_low = min(last_closed.low, candles[-2].low if len(candles) >= 2 else last_closed.low)
             sl_px = sweep_low * (1.0 - buffer_pct)
@@ -144,6 +145,7 @@ def evaluate_liquidity_setup(
 
         swept = (last_closed.high > key_high) or (len(candles) >= 2 and candles[-2].high > key_high)
         reclaimed = swept and (last_closed.close < key_high)
+        confirmed_close = last_closed.close < last_closed.open
 
         has_ask_imbalance = snapshot.imbalance_25bps <= -min_imbalance
         has_negative_cvd = snapshot.cvd_1h < 0
@@ -151,7 +153,7 @@ def evaluate_liquidity_setup(
 
         liquidity_confirmed = has_ask_imbalance or (has_negative_cvd and has_absorption)
 
-        if reclaimed and liquidity_confirmed:
+        if reclaimed and liquidity_confirmed and confirmed_close:
             entry_px = last_closed.close
             sweep_high = max(last_closed.high, candles[-2].high if len(candles) >= 2 else last_closed.high)
             sl_px = sweep_high * (1.0 + buffer_pct)

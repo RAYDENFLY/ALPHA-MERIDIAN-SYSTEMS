@@ -22,5 +22,8 @@ def parse_cot_csv(text,url,dataset_id='cftc_cot_disaggregated'):
         for cat,(lk,sk) in pairs.items():
             try: net=float(row[lk])-float(row[sk])
             except (ValueError,TypeError,KeyError): continue
-            d=row['Report_Date_as_YYYY-MM-DD']; out.append(ResearchObservation('cftc',dataset_id,row['Market_and_Exchange_Names'],cat,d,None,d,net,'contracts',url,'DELAYED','VALID',f'{dataset_id}:{d}:{cat}'))
+            d=row['Report_Date_as_YYYY-MM-DD']
+            try: datetime.strptime(d, '%Y-%m-%d')
+            except (TypeError, ValueError): raise ValueError(f"invalid CFTC report date: {d}")
+            out.append(ResearchObservation('cftc',dataset_id,row['Market_and_Exchange_Names'],cat,d,None,d,net,'contracts',url,'DELAYED','VALID',f'{dataset_id}:{d}:{cat}'))
     return out

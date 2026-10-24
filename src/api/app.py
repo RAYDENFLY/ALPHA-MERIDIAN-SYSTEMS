@@ -23,6 +23,7 @@ from src.core.logger import logger
 from src.core.types import Candle, CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
 from src.data.database import DatabaseManager
 from src.research_data.storage import ResearchDataStore
+from src.research_data.scheduler import ResearchDataScheduler
 from src.exchange.aster import AsterDexAdapter
 from src.exchange.aster_v3 import AsterDexV3Adapter
 from src.exchange.account_service import AsterAccountService, AccountConnectionStatus
@@ -116,6 +117,7 @@ import sqlite3
 cfg = get_default_config()
 db = DatabaseManager(cfg.db_path)
 research_store = ResearchDataStore(db)
+research_scheduler: Optional[ResearchDataScheduler] = None
 # Least-privilege initialization: public market-data adapter never loads private API credentials in PAPER/RESEARCH
 exchange = AsterDexAdapter(
     base_url=cfg.exchange.base_url,
@@ -420,7 +422,7 @@ async def background_scan_worker():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global runner, specs_map, bg_task, stop_event
+    global runner, specs_map, bg_task, stop_event, research_scheduler
     logger.info("Initializing scanner API server...")
     # Load metadata before Model A's worker. Failure is non-fatal to the API
     # and independent Model B services, but leaves Model A stopped.
@@ -499,6 +501,12 @@ async def lifespan(app: FastAPI):
     if wallet_master_enabled:
         model_d_wallet_pipeline.start()
 
+    # Research synchronization is opt-in and isolated from all trading workers.
+    if os.getenv("RESEARCH_DATA_SCHEDULER_ENABLED", "false").strip().lower() == "true":
+        research_scheduler = ResearchDataScheduler(research_store)
+        research_scheduler.start()
+        logger.info("Research data scheduler started (opt-in).")
+
     yield
 
     logger.info("Shutting down scanner API server...")
@@ -510,6 +518,10 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     logger.info("Background scanner worker shutdown cleanly.")
+
+    if research_scheduler:
+        await research_scheduler.stop()
+        research_scheduler = None
 
     # Stop Model B runner
     try:
