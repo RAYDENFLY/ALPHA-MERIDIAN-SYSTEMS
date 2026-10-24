@@ -27,10 +27,10 @@ def _closed(i, pnl, ts=NOW_MS):
 
 
 def test_config_and_effective_runtime_value():
-    assert ModelBConfig().max_open_positions == 10
+    assert ModelBConfig().max_open_positions == 3
     cfg = get_default_config()  # includes .env overrides
-    assert cfg.model_b.max_open_positions == 10
-    assert ModelBRiskManager(config=cfg.model_b).max_open_positions == 10
+    assert cfg.model_b.max_open_positions == 3
+    assert ModelBRiskManager(config=cfg.model_b).max_open_positions == 3
     assert cfg.mode == ExecutionMode.PAPER
     assert cfg.live_trading_locked is True
 
@@ -49,12 +49,12 @@ def test_no_daily_trade_count_limit_many_entries_same_day():
 
 def test_ten_concurrent_allowed_eleventh_rejected():
     risk = ModelBRiskManager(config=ModelBConfig())
-    for i in range(10):
+    for i in range(3):
         ok, reason = risk.can_open_new_position(NOW_MS)
         assert ok, reason
         risk.record_entry(_open(i))
     ok, reason = risk.can_open_new_position(NOW_MS)
-    assert ok is False and "10/10" in reason
+    assert ok is False and "3/3" in reason
 
 
 def test_config_cannot_exceed_ten():

@@ -176,7 +176,12 @@ class TestModelBCandidateDeduplication:
 
         # Mock exchange get_klines and focus symbols
         runner.get_focus_symbols = lambda max_symbols=20: [inst]
-        runner.exchange = type("MockEx", (), {"get_klines": lambda self, sym, tf, limit=50: candles})()
+        valid_book = NormalizedOrderBook("LINKUSDT", "asterdex", 1792350000000, [OrderBookLevel(price=19.98, size=500.0)], [OrderBookLevel(price=20.02, size=500.0)])
+        runner.exchange = type("MockEx", (), {
+            "get_klines": lambda self, sym, tf, limit=50: candles,
+            "get_order_book": lambda self, sym: valid_book,
+        })()
+        runner.exchange_service.get_aggregated_order_books = lambda sym: {"asterdex": valid_book}
 
         # Run cycle 1
         now_ms = 1792350000000

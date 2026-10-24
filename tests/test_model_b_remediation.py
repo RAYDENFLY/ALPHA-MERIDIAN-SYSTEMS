@@ -303,8 +303,8 @@ class TestOpportunityEnginesIntegration:
             symbol="TESTUSDT",
             exchange_name="asterdex",
             timestamp_ms=1700000000000,
-            bids=[OrderBookLevel(price=49.0, size=100.0), OrderBookLevel(price=48.0, size=200.0)],
-            asks=[OrderBookLevel(price=51.0, size=100.0), OrderBookLevel(price=52.0, size=200.0)],
+            bids=[OrderBookLevel(price=49.98, size=200.0)],
+            asks=[OrderBookLevel(price=50.02, size=200.0)],
         )
 
         # Neutral evaluation
@@ -433,10 +433,18 @@ class TestOpportunityEnginesIntegration:
         )
         catalyst_engine.ingest_event(event)
 
+        valid_book = NormalizedOrderBook(
+            symbol="RUMORUSDT",
+            exchange_name="asterdex",
+            timestamp_ms=1700000000000,
+            bids=[OrderBookLevel(price=49.98, size=200.0)],
+            asks=[OrderBookLevel(price=50.02, size=200.0)],
+        )
         candidate = generator.evaluate_symbol(
             symbol="RUMORUSDT",
             candles=candles,
             instrument=instrument,
+            order_book=valid_book,
         )
 
         assert candidate is not None
