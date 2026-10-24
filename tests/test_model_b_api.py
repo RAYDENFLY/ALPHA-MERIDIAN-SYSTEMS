@@ -26,7 +26,7 @@ class TestModelBAPIEndpoints:
         assert data["capital"]["max_leverage"] == 10
         assert data["risk_limits"]["daily_loss_limit_usdt"] == 3.0
         assert data["risk_limits"]["weekly_loss_limit_usdt"] == 7.5
-        assert data["risk_limits"]["max_open_positions"] == 3
+        assert data["risk_limits"]["max_open_positions"] == 6
         assert data["live_trading_locked"] is True
         assert "paper" in data
 

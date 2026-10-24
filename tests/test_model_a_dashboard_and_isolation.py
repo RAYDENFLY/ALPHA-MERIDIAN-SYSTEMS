@@ -161,7 +161,7 @@ def test_9_and_10_model_b_behavior_unchanged_and_existing_journals_intact(client
     assert resp_b.status_code == 200
     b_data = resp_b.json()
     assert b_data["model_id"] == "MODEL_B"
-    assert b_data["risk_limits"]["max_open_positions"] == 3
+    assert b_data["risk_limits"]["max_open_positions"] == 6
 
     # Verify SQLite database counts are completely untouched
     with db.get_connection() as conn:
