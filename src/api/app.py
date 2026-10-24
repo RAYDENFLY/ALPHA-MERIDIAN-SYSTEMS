@@ -24,6 +24,7 @@ from src.core.types import Candle, CandidateStatus, Direction, EntryCategory, Ex
 from src.data.database import DatabaseManager
 from src.research_data.storage import ResearchDataStore
 from src.research_data.scheduler import ResearchDataScheduler
+from src.research_data.audit import audit_dataset
 from src.exchange.aster import AsterDexAdapter
 from src.exchange.aster_v3 import AsterDexV3Adapter
 from src.exchange.account_service import AsterAccountService, AccountConnectionStatus
@@ -3516,6 +3517,15 @@ async def research_data_endpoint(dataset_id: str, symbol: Optional[str] = Query(
     total = research_store.total_observation_count(dataset_id)
     status = (sync or {}).get("sync_status") or ("MISSING" if not rows else "AVAILABLE")
     return {"dataset_id": dataset_id, "observations": rows, "status": status, "sync": sync, "inserted_count": (sync or {}).get("observation_count", 0), "total_observation_count": total}
+
+
+@app.get("/api/research/data/{dataset_id}/audit")
+async def research_audit_endpoint(dataset_id: str, start: str = Query(...), end: str = Query(...)) -> Dict[str, Any]:
+    try:
+        from datetime import date
+        return audit_dataset(db, dataset_id, date.fromisoformat(start), date.fromisoformat(end))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 if __name__ == "__main__":
