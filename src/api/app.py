@@ -25,6 +25,7 @@ from src.data.database import DatabaseManager
 from src.research_data.storage import ResearchDataStore
 from src.research_data.scheduler import ResearchDataScheduler
 from src.research_data.audit import audit_dataset
+from src.research_data.retail_positioning import RetailPositioningProvider
 from src.exchange.aster import AsterDexAdapter
 from src.exchange.aster_v3 import AsterDexV3Adapter
 from src.exchange.account_service import AsterAccountService, AccountConnectionStatus
@@ -119,6 +120,7 @@ cfg = get_default_config()
 db = DatabaseManager(cfg.db_path)
 research_store = ResearchDataStore(db)
 research_scheduler: Optional[ResearchDataScheduler] = None
+retail_positioning_provider = RetailPositioningProvider()
 # Least-privilege initialization: public market-data adapter never loads private API credentials in PAPER/RESEARCH
 exchange = AsterDexAdapter(
     base_url=cfg.exchange.base_url,
@@ -3529,6 +3531,11 @@ async def research_audit_endpoint(dataset_id: str, start: str = Query(...), end:
         return audit_dataset(db, dataset_id, start_date, end_date)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/research/retail_positioning")
+async def retail_positioning_endpoint(symbol: str = Query("BTCUSDT"), period: str = Query("1h"), limit: int = Query(50, ge=1, le=500)) -> Dict[str, Any]:
+    return await asyncio.to_thread(retail_positioning_provider.get, symbol, period, limit)
 
 
 if __name__ == "__main__":

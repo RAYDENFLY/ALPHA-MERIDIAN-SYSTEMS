@@ -28,10 +28,23 @@
         }
     }
     window.loadMarketParticipant = loadMarketParticipant;
+    async function loadRetailPositioning() {
+        const panel = document.querySelector('#tab-retail_sentiment .border');
+        if (!panel) return;
+        panel.innerHTML = '<span class="text-slate-400">Loading Bybit account-ratio data…</span>';
+        try {
+            const response = await fetch('/api/research/retail_positioning?symbol=BTCUSDT&period=1h&limit=24');
+            const data = await response.json();
+            if (!response.ok || data.status !== 'AVAILABLE') throw new Error(data.error || 'Retail positioning unavailable');
+            const latest=data.observations[0];
+            panel.innerHTML = `<div><div class="text-xs text-slate-400">Bybit · Account ratio · ${data.period}</div><div class="mt-2 text-lg font-bold text-white">${(latest.long_short_account_ratio ?? 0).toFixed(2)} L/S</div><div class="text-xs text-slate-400">Long holders ${(latest.long_account_ratio*100).toFixed(2)}% · Short holders ${(latest.short_account_ratio*100).toFixed(2)}%</div><div class="text-[10px] text-slate-500 mt-2">Holder-count ratio only; not position size and not all crypto retail traders.</div></div>`;
+        } catch (error) { panel.innerHTML = `<span class="text-amber-200">UNAVAILABLE — ${error.message}. No retail values are fabricated.</span>`; }
+    }
     const originalSwitchTab = window.switchTab;
     window.switchTab = function (tabId) {
         const result = originalSwitchTab.apply(this, arguments);
         if (tabId === 'market_participant' || tabId === 'cot' || tabId === 'institutional_positioning') loadMarketParticipant();
+        if (tabId === 'retail_sentiment') loadRetailPositioning();
         return result;
     };
 })();
