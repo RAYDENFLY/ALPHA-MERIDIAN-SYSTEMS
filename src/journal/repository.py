@@ -385,21 +385,30 @@ class JournalRepository:
                 else None
             )
             m_val = str(d.get("model_id") or "").strip().upper()
-            d["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B") else ("UNKNOWN" if not m_val else m_val)
+            d["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B", "MODEL_B_FAST") else ("UNKNOWN" if not m_val else m_val)
 
             cohort_ver = details.get("cohort_version")
-            is_v2 = (cohort_ver == "MODEL_B_V2_REMEDIATED") or (entry_ts is not None and entry_ts >= 1792838400000)
-            cohort_name = "V2" if is_v2 else "V1"
-            cohort_label = "V2 (Remediated)" if is_v2 else ("V1 (Archived)" if cohort_ver == "MODEL_B_V1_ARCHIVED" else "V1 (Legacy)")
+            if d["model_id"] == "MODEL_B_FAST" or cohort_ver == "MODEL_B_FAST_V2":
+                cohort_name = "FAST_V2"
+                cohort_label = "15M SCALP (FAST)"
+                resolved_cohort_ver = cohort_ver or "MODEL_B_FAST_V2"
+                strategy_badge = "15M SCALP (FAST)"
+            else:
+                is_v2 = (cohort_ver == "MODEL_B_V2_REMEDIATED") or (entry_ts is not None and entry_ts >= 1792838400000)
+                cohort_name = "V2" if is_v2 else "V1"
+                cohort_label = "1H SWING (V2)" if is_v2 else ("V1 (Archived)" if cohort_ver == "MODEL_B_V1_ARCHIVED" else "V1 (Legacy)")
+                resolved_cohort_ver = cohort_ver or ("MODEL_B_V2_REMEDIATED" if is_v2 else "MODEL_B_V1")
+                strategy_badge = "1H SWING (V2)" if is_v2 else "V1 LEGACY"
 
             if cohort and cohort.upper() != "ALL":
                 c_req = cohort.upper().strip()
-                if cohort_name != c_req and str(cohort_ver).upper() != c_req:
+                if cohort_name != c_req and str(resolved_cohort_ver).upper() != c_req and not (c_req == "V2" and cohort_name == "FAST_V2"):
                     continue
 
             d["cohort"] = cohort_name
-            d["cohort_version"] = cohort_ver or ("MODEL_B_V2_REMEDIATED" if is_v2 else "MODEL_B_V1")
+            d["cohort_version"] = resolved_cohort_ver
             d["cohort_label"] = cohort_label
+            d["strategy_badge"] = strategy_badge
             results.append(d)
 
         return results
@@ -548,7 +557,7 @@ class JournalRepository:
             rows = [dict(r) for r in cur.fetchall()]
         for r in rows:
             m_val = str(r.get("model_id") or "").strip().upper()
-            r["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B") else ("UNKNOWN" if not m_val else m_val)
+            r["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B", "MODEL_B_FAST") else ("UNKNOWN" if not m_val else m_val)
         return rows
 
     def save_lifecycle_event(

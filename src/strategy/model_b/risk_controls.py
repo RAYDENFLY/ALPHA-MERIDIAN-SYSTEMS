@@ -45,10 +45,10 @@ def enforce_stop_floor(entry: float, stop: float, direction: Direction, atr: Opt
     return entry - distance if direction == Direction.LONG else entry + distance
 
 
-def cooldown_clear(journal: Any, symbol: str, direction: Direction, now_ms: int, cooldown_minutes: int, current_price: Optional[float] = None, atr: Optional[float] = None, min_displacement_atr: float = 0.5) -> Tuple[bool, str]:
+def cooldown_clear(journal: Any, symbol: str, direction: Direction, now_ms: int, cooldown_minutes: int, current_price: Optional[float] = None, atr: Optional[float] = None, min_displacement_atr: float = 0.5, model_id: str = "MODEL_B") -> Tuple[bool, str]:
     if journal is None: return False, "cooldown_journal_unavailable"
     cutoff = now_ms - cooldown_minutes * 60_000
-    for trade in journal.get_trades(open_only=False, limit=500, model_id="MODEL_B"):
+    for trade in journal.get_trades(open_only=False, limit=500, model_id=model_id):
         if trade.get("symbol") != symbol or str(trade.get("direction", "")).upper() != direction.value: continue
         exit_ts = trade.get("exit_timestamp_ms")
         if trade.get("is_open") or (exit_ts and exit_ts >= cutoff):

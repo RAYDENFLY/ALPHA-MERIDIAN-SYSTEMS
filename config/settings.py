@@ -156,6 +156,9 @@ class ModelBConfig(BaseModel):
     enabled: bool = Field(default=True, description="Enable Model B liquidity engine scanner")
     model_id: str = "MODEL_B"
     version: str = "1.0.0-alpha"
+    trigger_timeframe: str = Field(default="1h", description="Trigger candle timeframe (e.g. '1h' or '15m')")
+    trend_timeframe: str = Field(default="4h", description="Higher-timeframe EMA trend alignment timeframe (e.g. '4h' or '1h')")
+    pending_expiry_bars: int = Field(default=6, ge=1, le=100, description="Pending limit order TTL in trigger bars")
     initial_equity_usdt: float = Field(default=100.0, gt=0.0, description="Independent Model B paper equity")
     target_account_equity_usdt: float = Field(default=100.0, gt=0.0, description="Target account equity reference")
     target_trade_risk_usdt: float = Field(default=1.00, gt=0.0, description="Target dollar risk per trade")
@@ -210,6 +213,30 @@ class ModelBConfig(BaseModel):
     discord_webhook_url: Optional[str] = Field(
         default=None, description="Optional Discord webhook for Model B notifications"
     )
+
+
+def create_model_b_fast_config(base_config: Optional[ModelBConfig] = None) -> ModelBConfig:
+    """Create the parallel Fast Scalping instance configuration (MODEL_B_FAST: 15m Trigger / 1H Trend)."""
+    data = base_config.model_dump() if base_config is not None else {}
+    data.update({
+        "enabled": True,
+        "model_id": "MODEL_B_FAST",
+        "cohort_version": "MODEL_B_FAST_V2",
+        "trigger_timeframe": "15m",
+        "trend_timeframe": "1h",
+        "min_stop_distance_pct": 0.008,
+        "min_stop_atr_multiple": 1.25,
+        "pending_expiry_bars": 8,
+        "pending_order_ttl_hours": 2.0,
+        "initial_equity_usdt": 100.0,
+        "target_account_equity_usdt": 100.0,
+        "target_trade_risk_usdt": 1.00,
+        "max_open_positions": 6,
+        "max_open_per_direction": 3,
+        "daily_loss_limit_usdt": 3.00,
+        "weekly_loss_limit_usdt": 7.50,
+    })
+    return ModelBConfig(**data)
 
 
 class ModelCConfig(BaseModel):

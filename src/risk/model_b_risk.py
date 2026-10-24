@@ -52,6 +52,7 @@ class ModelBRiskManager:
             self.cohort_cutover_ms = getattr(config, "cohort_cutover_ms", cohort_cutover_ms)
             self.diagnostic_override_active = bool(getattr(config, "diagnostic_breaker_override", diagnostic_override_active))
             self.entry_kill_switch = bool(getattr(config, "entry_kill_switch", entry_kill_switch))
+            resolved_model_id = str(getattr(config, "model_id", "MODEL_B") or "MODEL_B")
         else:
             self.initial_equity = initial_equity_usdt
             self.trade_risk_usdt = trade_risk_usdt
@@ -63,10 +64,11 @@ class ModelBRiskManager:
             self.cohort_cutover_ms = cohort_cutover_ms
             self.diagnostic_override_active = diagnostic_override_active
             self.entry_kill_switch = entry_kill_switch
+            resolved_model_id = "MODEL_B"
 
         self.diagnostic_state: Dict[str, Any] = {}
         self.equity_usdt = self.initial_equity
-        self.model_id = "MODEL_B"
+        self.model_id = resolved_model_id
         self.live_trading_locked = live_trading_locked
 
         self.current_day_str: str = ""
@@ -101,7 +103,7 @@ class ModelBRiskManager:
         self,
         journal: Any,
         now_ms: Optional[int] = None,
-        model_id: Optional[str] = "MODEL_B",
+        model_id: Optional[str] = None,
         cohort_filter: Optional[str] = None,
         cutover_ms: Optional[int] = None,
     ) -> None:
@@ -109,11 +111,12 @@ class ModelBRiskManager:
         if journal is None:
             return
 
+        target_model_id = str(model_id or self.model_id or "MODEL_B")
         current_ms = now_ms if now_ms is not None else int(datetime.now(timezone.utc).timestamp() * 1000)
         self._sync_calendar_buckets(current_ms)
 
-        # Query closed trades specifically for Model B
-        trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
+        # Query closed trades specifically for target_model_id
+        trades = journal.get_trades(open_only=False, limit=5000, model_id=target_model_id)
         closed_trades = [t for t in trades if not t.get("is_open", False) and t.get("exit_timestamp_ms") is not None]
 
         # Cohort scoping: if cohort_filter is set (or configured on risk manager), exclude legacy cohorts
@@ -167,7 +170,7 @@ class ModelBRiskManager:
         self.equity_usdt = round(self.initial_equity + cumulative_realized_pnl, 4)
 
         # Sync open trades (scoped to target cohort if active)
-        raw_open = journal.get_open_trades(model_id="MODEL_B")
+        raw_open = journal.get_open_trades(model_id=target_model_id)
         if active_cohort or active_cutover:
             filtered_open = []
             for r in raw_open:
@@ -195,7 +198,7 @@ class ModelBRiskManager:
                 notional_usdt=float(r["notional_usdt"]),
                 is_open=True,
                 setup_id=r.get("setup_id", ""),
-                model_id="MODEL_B",
+                model_id=target_model_id,
             )
             for r in raw_open
         ]

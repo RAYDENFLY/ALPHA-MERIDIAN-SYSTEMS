@@ -241,7 +241,9 @@ class ModelBStrategyGenerator:
         if unverified:
             self.engine_telemetry["news_catalyst"]["unverified_ignored"] += len(unverified)
 
-        # 6. Run structural 1H + liquidity setup evaluator
+        # 6. Run structural trigger-timeframe + liquidity setup evaluator
+        trigger_tf = str(getattr(self.config, "trigger_timeframe", "1h") or "1h")
+        trend_tf = str(getattr(self.config, "trend_timeframe", "4h") or "4h")
         signal = evaluate_liquidity_setup(
             symbol=symbol,
             candles=candles,
@@ -249,6 +251,7 @@ class ModelBStrategyGenerator:
             min_imbalance=self.config.min_imbalance_ratio,
             min_absorption=self.config.min_absorption_score,
             max_spread_bps=self.config.max_spread_bps,
+            timeframe_label=trigger_tf.upper(),
         )
         if not signal:
             return None
@@ -394,8 +397,21 @@ class ModelBStrategyGenerator:
         # Anchor candidate timestamp and logical setup ID to triggering candle timestamp
         anchor_candle_ms = getattr(signal, "timestamp_ms", None) or current_ts
         ts_ms = anchor_candle_ms
-        expires_at = ts_ms + int(self.config.pending_order_ttl_hours * 3600 * 1000)
-        cid = f"MCAND_B_{symbol}_{signal.direction.value}_{anchor_candle_ms}"
+        active_model_id = str(getattr(self.config, "model_id", "MODEL_B") or "MODEL_B")
+        active_cohort = str(getattr(self.config, "cohort_version", "MODEL_B_V2_REMEDIATED") or "MODEL_B_V2_REMEDIATED")
+        expiry_bars = getattr(self.config, "pending_expiry_bars", None)
+        if trigger_tf.lower() == "15m":
+            bar_duration_ms = 15 * 60 * 1000
+        elif trigger_tf.lower() == "5m":
+            bar_duration_ms = 5 * 60 * 1000
+        else:
+            bar_duration_ms = 3600 * 1000
+        if expiry_bars is not None and int(expiry_bars) > 0:
+            expires_at = ts_ms + int(expiry_bars) * bar_duration_ms
+        else:
+            expires_at = ts_ms + int(self.config.pending_order_ttl_hours * 3600 * 1000)
+        cid_prefix = "MCAND_B_FAST" if active_model_id == "MODEL_B_FAST" else "MCAND_B"
+        cid = f"{cid_prefix}_{symbol}_{signal.direction.value}_{anchor_candle_ms}"
 
         candidate = SetupCandidate(
             candidate_id=cid,
@@ -412,7 +428,7 @@ class ModelBStrategyGenerator:
             net_reward_to_risk=dynamic_net_rr,
             invalidation_price=signal.stop_loss,
             invalidation_reason="Stop loss breached",
-            smc_evidence=["Liquidity sweep and reclaim on 1H"],
+            smc_evidence=[f"Liquidity sweep and reclaim on {trigger_tf.upper()}"],
             snr_evidence=[f"Order book wall status: {wall_evidence['status']}"],
             supporting_reasons=supporting_reasons,
             opposing_reasons=rejection_reasons,
@@ -422,11 +438,13 @@ class ModelBStrategyGenerator:
             status=status,
             rejection_reasons=rejection_reasons,
             entry_category=EntryCategory.REVERSAL,
-            model_id="MODEL_B",
+            model_id=active_model_id,
             expires_at_ms=expires_at,
             ai_analysis={
-                "strategy": "Model_B_Liquidity_Sweep",
-                "cohort_version": "MODEL_B_V2_REMEDIATED",
+                "strategy": "Model_B_Fast_Scalp" if active_model_id == "MODEL_B_FAST" else "Model_B_Liquidity_Sweep",
+                "cohort_version": active_cohort,
+                "trigger_timeframe": trigger_tf,
+                "trend_timeframe": trend_tf,
                 "signal_type": signal.signal_type,
                 "reasons": supporting_reasons,
                 "spread_bps": snapshot.spread_bps,

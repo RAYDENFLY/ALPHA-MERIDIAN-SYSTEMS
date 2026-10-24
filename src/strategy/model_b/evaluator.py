@@ -75,10 +75,13 @@ def evaluate_liquidity_setup(
     min_absorption: float = 0.25,
     max_spread_bps: float = 15.0,
     buffer_pct: float = 0.001,
+    timeframe_label: str = "1H",
 ) -> Optional[ModelBSetupSignal]:
-    """Evaluate 1H candle series and liquidity snapshot for Model B setup."""
+    """Evaluate candle series and liquidity snapshot for Model B setup."""
     if len(candles) < 20:
         return None
+
+    tf_lbl = str(timeframe_label or "1H").upper()
 
     # Spread gate: Reject wide-spread illiquid pairs
     if snapshot.spread_bps > max_spread_bps:
@@ -119,7 +122,7 @@ def evaluate_liquidity_setup(
                 tp2 = high_targets[0] if high_targets else entry_px + (risk_dist * 3.0)
 
                 reasons = [
-                    f"1H Long Liquidity Sweep-Reclaim of swing low {key_low:.4f}",
+                    f"{tf_lbl} Long Liquidity Sweep-Reclaim of swing low {key_low:.4f}",
                     f"Closed at {last_closed.close:.4f} with depth imbalance {snapshot.imbalance_25bps:+.2%}",
                     f"CVD=${snapshot.cvd_1h:,.0f}, absorption={snapshot.absorption_score:.2f}",
                 ]
@@ -165,7 +168,7 @@ def evaluate_liquidity_setup(
                 tp2 = low_targets[0] if low_targets else entry_px - (risk_dist * 3.0)
 
                 reasons = [
-                    f"1H Short Liquidity Sweep-Reclaim of swing high {key_high:.4f}",
+                    f"{tf_lbl} Short Liquidity Sweep-Reclaim of swing high {key_high:.4f}",
                     f"Closed at {last_closed.close:.4f} with depth imbalance {snapshot.imbalance_25bps:+.2%}",
                     f"CVD=${snapshot.cvd_1h:,.0f}, absorption={snapshot.absorption_score:.2f}",
                 ]

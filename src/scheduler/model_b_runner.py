@@ -41,6 +41,11 @@ from src.execution.model_b_live_preflight import (
 class ModelBRunner:
     """Coordinator for Model B Aggressive Liquidity Research Engine."""
 
+    _shared_bulk_snapshot_cache: Dict[str, Dict[str, Any]] = {}
+    _shared_bulk_snapshot_ts: float = 0.0
+    _shared_bulk_snapshot_lock = threading.Lock()
+    BULK_SNAPSHOT_CACHE_TTL_SEC: float = 20.0
+
     def __init__(
         self,
         db: DatabaseManager,
@@ -63,7 +68,13 @@ class ModelBRunner:
         self.journal = journal
         self.exchange = exchange
         self.config = config or ModelBConfig()
-        self.paper_config = paper_config or PaperExecutionConfig()
+        base_paper = paper_config or PaperExecutionConfig()
+        self.paper_config = base_paper.model_copy(
+            update={"pending_expiry_bars": int(getattr(self.config, "pending_expiry_bars", base_paper.pending_expiry_bars))}
+        )
+        self.model_id: str = str(getattr(self.config, "model_id", "MODEL_B") or "MODEL_B")
+        self.trigger_timeframe: str = str(getattr(self.config, "trigger_timeframe", "1h") or "1h")
+        self.trend_timeframe: str = str(getattr(self.config, "trend_timeframe", "4h") or "4h")
 
         self.exchange_service = exchange_service or MultiExchangeService()
         self.liquidity_collector = LiquidityCollector(db=self.db, exchange_service=self.exchange_service)
@@ -93,7 +104,7 @@ class ModelBRunner:
             journal=self.journal,
             risk_manager=self.risk_manager,
             config=self.paper_config,
-            model_id="MODEL_B",
+            model_id=self.model_id,
         )
         self.shadow_evaluator = shadow_evaluator or ModelBShadowEvaluator(db=self.db)
         self.account_service = account_service
@@ -174,8 +185,20 @@ class ModelBRunner:
 
         if aster_adapter is not None:
             try:
-                snapshots = aster_adapter()
-                bulk_lat_ms = (time.time() - t_bulk) * 1000.0
+                now_sec = time.time()
+                with ModelBRunner._shared_bulk_snapshot_lock:
+                    if (
+                        ModelBRunner._shared_bulk_snapshot_cache
+                        and (now_sec - ModelBRunner._shared_bulk_snapshot_ts) <= ModelBRunner.BULK_SNAPSHOT_CACHE_TTL_SEC
+                    ):
+                        snapshots = dict(ModelBRunner._shared_bulk_snapshot_cache)
+                        bulk_lat_ms = (time.time() - t_bulk) * 1000.0
+                    else:
+                        snapshots = aster_adapter()
+                        bulk_lat_ms = (time.time() - t_bulk) * 1000.0
+                        if snapshots:
+                            ModelBRunner._shared_bulk_snapshot_cache = dict(snapshots)
+                            ModelBRunner._shared_bulk_snapshot_ts = time.time()
                 self.telemetry_tracker.record_request("asterdex:/fapi/v1/ticker/bulkTicker_and_24hr", bulk_lat_ms)
             except Exception as b_err:
                 logger.debug(f"ModelBRunner: Bulk market snapshot failed: {b_err}")
@@ -272,14 +295,14 @@ class ModelBRunner:
         return final_targets, len(snapshots), len(qualified_instruments)
 
     def _rehydrate_risk_counters(self, now_ms: Optional[int] = None) -> None:
-        """Authoritatively rehydrate risk counters from SQLite journal using net PnL scoped to V2 cohort."""
+        """Authoritatively rehydrate risk counters from SQLite journal using net PnL scoped to active cohort."""
         if self.risk_manager and self.journal:
             cohort_ver = getattr(self.config, "cohort_version", "MODEL_B_V2_REMEDIATED")
             cutover_ts = getattr(self.config, "cohort_cutover_ms", 1792838400000)
             self.risk_manager.sync_state_from_journal(
                 self.journal,
                 now_ms=now_ms,
-                model_id="MODEL_B",
+                model_id=self.model_id,
                 cohort_filter=cohort_ver,
                 cutover_ms=cutover_ts,
             )
@@ -336,28 +359,30 @@ class ModelBRunner:
                 candles: List[Candle] = []
                 candles_4h: List[Candle] = []
                 kline_lat_ms = 0.0
+                trig_tf = self.trigger_timeframe
+                trnd_tf = self.trend_timeframe
 
                 if self.exchange:
                     t_kline = time.time()
                     try:
-                        candles = self.exchange.get_klines(sym, "1h", limit=50)
+                        candles = self.exchange.get_klines(sym, trig_tf, limit=50)
                         candles = [c for c in candles if getattr(c, "is_closed", True)]
                         kline_lat_ms = (time.time() - t_kline) * 1000.0
                     except Exception as k_err:
                         kline_lat_ms = (time.time() - t_kline) * 1000.0
-                        logger.debug(f"ModelBRunner: Failed to fetch candles for {sym}: {k_err}")
+                        logger.debug(f"ModelBRunner ({self.model_id}): Failed to fetch {trig_tf} candles for {sym}: {k_err}")
 
                 if not candles and self.db:
-                    candles = self.db.get_candles(sym, "1h", limit=50)
+                    candles = self.db.get_candles(sym, trig_tf, limit=50)
                     candles = [c for c in candles if getattr(c, "is_closed", True)]
                 if self.exchange:
                     try:
-                        candles_4h = self.exchange.get_klines(sym, "4h", limit=50)
+                        candles_4h = self.exchange.get_klines(sym, trnd_tf, limit=50)
                         candles_4h = [c for c in candles_4h if getattr(c, "is_closed", True)]
                     except Exception as htf_err:
-                        logger.debug(f"ModelBRunner: Failed to fetch 4H candles for {sym}: {htf_err}")
+                        logger.debug(f"ModelBRunner ({self.model_id}): Failed to fetch {trnd_tf} candles for {sym}: {htf_err}")
                 if not candles_4h and self.db:
-                    candles_4h = self.db.get_candles(sym, "4h", limit=50)
+                    candles_4h = self.db.get_candles(sym, trnd_tf, limit=50)
                     candles_4h = [c for c in candles_4h if getattr(c, "is_closed", True)]
 
                 cand = None
@@ -479,11 +504,13 @@ class ModelBRunner:
                 candles: List[Candle] = []
                 if self.exchange:
                     try:
-                        candles = self.exchange.get_klines(sym, "1h", limit=50)
+                        candles = self.exchange.get_klines(sym, self.trigger_timeframe, limit=50)
+                        candles = [c for c in candles if getattr(c, "is_closed", True)]
                     except Exception as k_err:
                         logger.debug(f"ModelBRunner: Failed to fetch monitoring candles for {sym}: {k_err}")
                 if not candles:
-                    candles = self.db.get_candles(sym, "1h", limit=50)
+                    candles = self.db.get_candles(sym, self.trigger_timeframe, limit=50)
+                    candles = [c for c in candles if getattr(c, "is_closed", True)]
                 if candles:
                     candles_by_symbol[sym] = candles
 
@@ -501,7 +528,7 @@ class ModelBRunner:
                 if cand.status == CandidateStatus.READY:
                     if cand.direction == Direction.SHORT and getattr(self.config, "short_regime_gate_enabled", False):
                         indicator_context = (cand.ai_analysis or {}).get("indicator_context", {})
-                        allowed, cooldown_reason = cooldown_clear(self.journal, cand.symbol, cand.direction, current_ms, getattr(self.config, "short_cooldown_minutes", 240), cand.entry_price, indicator_context.get("atr_1h"), getattr(self.config, "short_reentry_min_displacement_atr", 0.5))
+                        allowed, cooldown_reason = cooldown_clear(self.journal, cand.symbol, cand.direction, current_ms, getattr(self.config, "short_cooldown_minutes", 240), cand.entry_price, indicator_context.get("atr_1h"), getattr(self.config, "short_reentry_min_displacement_atr", 0.5), model_id=self.model_id)
                         if not allowed:
                             cand.status = CandidateStatus.REJECTED
                             cand.rejection_reasons.append(cooldown_reason)
@@ -536,7 +563,7 @@ class ModelBRunner:
                             self.journal.save_setup(cand)
                         else:
                             # Check if rejected by account risk gate
-                            recent_orders = self.journal.get_paper_orders(symbol=cand.symbol, model_id="MODEL_B")
+                            recent_orders = self.journal.get_paper_orders(symbol=cand.symbol, model_id=self.model_id)
                             matching_rejected = next((o for o in recent_orders if o.get("candidate_id") == cand.candidate_id and o.get("status") == "REJECTED"), None)
                             if matching_rejected:
                                 cand.execution_status = ExecutionStatus.REJECTED
@@ -686,8 +713,8 @@ class ModelBRunner:
         except Exception as sync_err:
             logger.debug(f"ModelBRunner: Failed to sync candidate on trade close: {sync_err}")
 
-    def start_background_loop(self, interval_seconds: float = 60.0) -> None:
-        """Launch background polling thread for periodic 1H scans."""
+    def start_background_loop(self, interval_seconds: float = 60.0, initial_delay_seconds: float = 0.0) -> None:
+        """Launch background polling thread for periodic scans."""
         if self._is_running:
             return
 
@@ -695,7 +722,12 @@ class ModelBRunner:
         self._stop_event.clear()
 
         def _loop() -> None:
-            logger.info("ModelBRunner: Background loop started.")
+            logger.info(f"ModelBRunner ({self.model_id}): Background loop started (trigger={self.trigger_timeframe}, trend={self.trend_timeframe}).")
+            if initial_delay_seconds > 0:
+                for _ in range(int(initial_delay_seconds)):
+                    if self._stop_event.is_set():
+                        return
+                    time.sleep(1.0)
             # Initial discovery
             self.discover_universe()
 
@@ -703,7 +735,7 @@ class ModelBRunner:
                 try:
                     self.run_scan_cycle()
                 except Exception as loop_err:
-                    logger.error(f"ModelBRunner: Loop iteration error: {loop_err}")
+                    logger.error(f"ModelBRunner ({self.model_id}): Loop iteration error: {loop_err}")
 
                 # Sleep with interrupt check
                 for _ in range(int(interval_seconds)):
@@ -711,9 +743,9 @@ class ModelBRunner:
                         break
                     time.sleep(1.0)
 
-            logger.info("ModelBRunner: Background loop terminated.")
+            logger.info(f"ModelBRunner ({self.model_id}): Background loop terminated.")
 
-        self._worker_thread = threading.Thread(target=_loop, daemon=True, name="ModelBRunnerWorker")
+        self._worker_thread = threading.Thread(target=_loop, daemon=True, name=f"{self.model_id}RunnerWorker")
         self._worker_thread.start()
 
     def stop(self) -> None:
@@ -894,18 +926,28 @@ class ModelBRunner:
         total_discovered = sum(len(v) for v in self.discovered_universe.values())
 
         # Compute authoritative execution metrics from SQLite journal
-        all_orders = self.journal.get_paper_orders(model_id="MODEL_B") if self.journal else []
-        all_trades = self.journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B") if self.journal else []
-        all_setups = self.journal.get_latest_setups(limit=1000, model_id="MODEL_B") if self.journal else []
+        all_orders = self.journal.get_paper_orders(model_id=self.model_id) if self.journal else []
+        all_trades = self.journal.get_trades(open_only=False, limit=5000, model_id=self.model_id) if self.journal else []
+        all_setups = self.journal.get_latest_setups(limit=1000, model_id=self.model_id) if self.journal else []
 
         rejected_orders_count = sum(1 for o in all_orders if o.get("status") == "REJECTED")
         expired_orders_count = sum(1 for o in all_orders if o.get("status") == "EXPIRED")
         invalidated_orders_count = sum(1 for o in all_orders if o.get("status") == "INVALIDATED")
         closed_trades_count = sum(1 for t in all_trades if not t.get("is_open"))
 
+        is_fast = self.model_id == "MODEL_B_FAST"
         return {
-            "model_id": "MODEL_B",
-            "model_name": "Aggressive Multi-Exchange Liquidity Research",
+            "model_id": self.model_id,
+            "model_name": (
+                "Aggressive Multi-Exchange Liquidity Scalper (15m / 1H)"
+                if is_fast
+                else "Aggressive Multi-Exchange Liquidity Research (1H / 4H)"
+            ),
+            "trigger_timeframe": self.trigger_timeframe,
+            "trend_timeframe": self.trend_timeframe,
+            "min_stop_distance_pct": self.config.min_stop_distance_pct,
+            "pending_expiry_bars": getattr(self.config, "pending_expiry_bars", 6),
+            "cohort_version": getattr(self.config, "cohort_version", "MODEL_B_V2_REMEDIATED"),
             "is_running": self._is_running,
             "last_scan_utc": self.last_scan_utc,
             "last_successful_scan_utc": self.last_successful_scan_utc,

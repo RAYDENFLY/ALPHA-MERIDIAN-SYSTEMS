@@ -1,12 +1,19 @@
 """Model C — Data Types and Research Schema Specifications.
 
-Phase C0: Pump.fun Research Scope & Data Feasibility.
+Phase C0 & C1: Pump.fun Research Scope, Data Feasibility & Prospective Collection Pipeline.
 Strictly non-executable research schema. No trading logic, order execution, or wallet operations.
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
+import hashlib
 from typing import Any, Dict, List, Optional
+
+
+def utc_now_iso() -> str:
+    """Return current UTC timestamp in ISO 8601 string format with millisecond precision."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 class ModelCLifecycleState(str, Enum):
@@ -39,6 +46,40 @@ class DataSourceType(str, Enum):
     RAYDIUM_PUBLIC = "RAYDIUM_PUBLIC"
 
 
+class PumpFunEventType(str, Enum):
+    """Parsed Pump.fun event classifications."""
+    CREATE = "CREATE"
+    TRADE = "TRADE"
+    COMPLETE = "COMPLETE"
+    SET_PARAMS = "SET_PARAMS"
+    UNKNOWN = "UNKNOWN"
+    MALFORMED = "MALFORMED"
+
+
+class EventParseStatus(str, Enum):
+    """Parsing fidelity status for ingested on-chain events."""
+    PARSED = "PARSED"                      # Full event binary decoded successfully
+    PARTIALLY_PARSED = "PARTIALLY_PARSED"  # Instruction detected in log text, but binary payload absent
+    UNSUPPORTED = "UNSUPPORTED"            # Unrecognized discriminator or unknown program instruction
+    MALFORMED = "MALFORMED"                # Payload corrupted, truncated, or failed Borsh decoding
+
+
+class TokenQualityStatus(str, Enum):
+    """Data quality classification for normalized token records."""
+    VALID = "VALID"
+    PARTIAL = "PARTIAL"
+    CORRUPTED = "CORRUPTED"
+    UNCONFIRMED = "UNCONFIRMED"
+
+
+class CollectorHealthStatus(str, Enum):
+    """Operational health status of the prospective event collector."""
+    HEALTHY = "HEALTHY"
+    DEGRADED = "DEGRADED"
+    DISCONNECTED = "DISCONNECTED"
+    PERSISTENCE_FAILED = "PERSISTENCE_FAILED"
+
+
 @dataclass(frozen=True)
 class PumpFunProgramConstants:
     """Canonical constants for the Pump.fun smart contract on Solana Mainnet."""
@@ -52,6 +93,162 @@ class PumpFunProgramConstants:
     GRADUATION_REAL_SOL_TARGET: int = 85_000_000_000     # ~85 SOL in lamports (~$12,750 @ $150/SOL)
     DECIMALS: int = 6
     FEE_BASIS_POINTS: int = 100                          # 1.0% protocol transaction fee
+
+
+@dataclass
+class RawEventRecord:
+    """Raw, immutable on-chain event as received from Solana RPC/WebSocket."""
+    schema_version: str = "1.0"
+    event_id: str = ""
+    signature: str = ""
+    slot: int = 0
+    block_time: Optional[int] = None       # On-chain block Unix timestamp (seconds)
+    received_at: str = field(default_factory=utc_now_iso)  # Local ingestion time
+    program_id: str = PumpFunProgramConstants.PROGRAM_ID
+    event_type: str = PumpFunEventType.UNKNOWN.value
+    raw_payload: str = ""                  # Full raw log / message payload
+    parse_status: str = EventParseStatus.PARSED.value
+    parser_version: str = "1.0"
+
+    def compute_event_id(self) -> str:
+        """Deterministic event ID based on signature, slot, event_type, and raw payload hash."""
+        h = hashlib.sha256(f"{self.signature}:{self.slot}:{self.event_type}:{self.raw_payload}".encode()).hexdigest()
+        self.event_id = f"evt_{h[:24]}"
+        return self.event_id
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "event_id": self.event_id or self.compute_event_id(),
+            "signature": self.signature,
+            "slot": self.slot,
+            "block_time": self.block_time,
+            "received_at": self.received_at,
+            "program_id": self.program_id,
+            "event_type": self.event_type,
+            "raw_payload": self.raw_payload,
+            "parse_status": self.parse_status,
+            "parser_version": self.parser_version,
+        }
+
+
+@dataclass
+class NormalizedTokenRecord:
+    """Normalized prospective record for a Pump.fun token discovered on-chain."""
+    schema_version: str = "1.0"
+    mint_address: str = ""
+    creation_signature: str = ""
+    creation_slot: int = 0
+    creation_timestamp: Optional[int] = None  # On-chain block time (seconds)
+    creator_address: str = ""
+    bonding_curve_pda: Optional[str] = None
+    name: Optional[str] = None
+    symbol: Optional[str] = None
+    metadata_uri: Optional[str] = None
+    first_seen_at: str = field(default_factory=utc_now_iso)
+    last_seen_at: str = field(default_factory=utc_now_iso)
+    lifecycle_state: str = ModelCLifecycleState.DISCOVERED.value
+    migration_status: bool = False
+    migration_timestamp: Optional[int] = None
+    migration_pool_address: Optional[str] = None
+    migration_destination: Optional[str] = None  # "RAYDIUM", "PUMPSWAP", "UNKNOWN"
+    data_quality_status: str = TokenQualityStatus.VALID.value
+    tracked_for_sampling: bool = True
+    sampling_reason: str = "UNIVERSAL_DISCOVERY"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "mint_address": self.mint_address,
+            "creation_signature": self.creation_signature,
+            "creation_slot": self.creation_slot,
+            "creation_timestamp": self.creation_timestamp,
+            "creator_address": self.creator_address,
+            "bonding_curve_pda": self.bonding_curve_pda,
+            "name": self.name,
+            "symbol": self.symbol,
+            "metadata_uri": self.metadata_uri,
+            "first_seen_at": self.first_seen_at,
+            "last_seen_at": self.last_seen_at,
+            "lifecycle_state": self.lifecycle_state,
+            "migration_status": int(self.migration_status),
+            "migration_timestamp": self.migration_timestamp,
+            "migration_pool_address": self.migration_pool_address,
+            "migration_destination": self.migration_destination,
+            "data_quality_status": self.data_quality_status,
+            "tracked_for_sampling": int(self.tracked_for_sampling),
+            "sampling_reason": self.sampling_reason,
+        }
+
+
+@dataclass
+class NormalizedTradeRecord:
+    """Normalized on-chain trade event executed on a Pump.fun bonding curve."""
+    schema_version: str = "1.0"
+    event_id: str = ""
+    signature: str = ""
+    slot: int = 0
+    block_time: Optional[int] = None
+    mint_address: str = ""
+    trader_address: str = ""
+    is_buy: bool = True
+    sol_amount_lamports: int = 0
+    token_amount_units: int = 0
+    virtual_sol_reserves_lamports: int = 0
+    virtual_token_reserves_units: int = 0
+    real_sol_reserves_lamports: int = 0
+    real_token_reserves_units: int = 0
+    received_at: str = field(default_factory=utc_now_iso)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "event_id": self.event_id,
+            "signature": self.signature,
+            "slot": self.slot,
+            "block_time": self.block_time,
+            "mint_address": self.mint_address,
+            "trader_address": self.trader_address,
+            "is_buy": int(self.is_buy),
+            "sol_amount_lamports": self.sol_amount_lamports,
+            "token_amount_units": self.token_amount_units,
+            "virtual_sol_reserves_lamports": self.virtual_sol_reserves_lamports,
+            "virtual_token_reserves_units": self.virtual_token_reserves_units,
+            "real_sol_reserves_lamports": self.real_sol_reserves_lamports,
+            "real_token_reserves_units": self.real_token_reserves_units,
+            "received_at": self.received_at,
+        }
+
+
+@dataclass
+class DataGapRecord:
+    """Explicitly tracked discontinuity or gap in collection."""
+    gap_id: str
+    start_time: str
+    end_time: Optional[str] = None
+    reason: str = "WEBSOCKET_DISCONNECT"
+    last_known_slot: Optional[int] = None
+    reconnected_slot: Optional[int] = None
+    estimated_missed_slots: Optional[int] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "gap_id": self.gap_id,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "reason": self.reason,
+            "last_known_slot": self.last_known_slot,
+            "reconnected_slot": self.reconnected_slot,
+            "estimated_missed_slots": self.estimated_missed_slots,
+        }
+
+
+@dataclass
+class CollectorCheckpoint:
+    """Durable state marker persisted across collector restarts."""
+    checkpoint_key: str
+    checkpoint_value: str
+    updated_at: str = field(default_factory=utc_now_iso)
 
 
 @dataclass
@@ -113,9 +310,7 @@ class BondingCurveState:
         complete: bool,
     ) -> "BondingCurveState":
         constants = PumpFunProgramConstants()
-        # Progress is the proportion of real SOL accumulated towards the ~85 SOL graduation cap
         progress = min(100.0, max(0.0, (real_sol / constants.GRADUATION_REAL_SOL_TARGET) * 100.0))
-        # Marginal price in SOL per token unit (accounting for 10^6 token decimals and 10^9 SOL lamports)
         if virtual_token > 0:
             price_sol = (virtual_sol / 1e9) / (virtual_token / 1e6)
         else:
@@ -177,9 +372,9 @@ class ResearchLabelSpec:
     """Specification of an objective empirical research label without look-ahead bias."""
     label_id: str
     description: str
-    observation_window_seconds: int     # e.g., features computed strictly during first 300s (5m)
-    prediction_horizon_seconds: int     # e.g., outcome evaluated at 3600s (1h)
-    label_type: str                     # "BINARY", "CATEGORICAL", "CONTINUOUS"
+    observation_window_seconds: int
+    prediction_horizon_seconds: int
+    label_type: str
     evaluation_formula: str
     leakage_prevention_rule: str
 

@@ -51,12 +51,18 @@ class PaperExecutionEngine:
     def _serialize_position_details(self, pos: PaperPosition) -> str:
         """Serialize extended position state (TP1/TP2, trailing stop, partial PnL) to JSON."""
         d = pos.to_dict()
-        if pos.model_id == "MODEL_B":
+        if pos.model_id == "MODEL_B_FAST":
+            d["cohort_version"] = "MODEL_B_FAST_V2"
+            d["timeframe"] = "15m"
+        elif pos.model_id == "MODEL_B":
             d["cohort_version"] = "MODEL_B_V2_REMEDIATED"
+            d["timeframe"] = "1h"
         return json.dumps(d)
 
     def _build_open_trade_record(self, pos: PaperPosition, order_status: str = "FILLED") -> TradeRecord:
         """Construct an open TradeRecord reflecting current PaperPosition state for SQLite persistence."""
+        active_model = pos.model_id or self.model_id
+        tf_str = "15m" if active_model == "MODEL_B_FAST" else "1h"
         return TradeRecord(
             trade_id=pos.trade_id,
             symbol=pos.symbol,
@@ -73,7 +79,7 @@ class PaperExecutionEngine:
             funding_paid=pos.funding_paid,
             is_open=True,
             setup_id=pos.setup_id,
-            timeframe="1h",
+            timeframe=tf_str,
             order_status=order_status,
             leverage=pos.leverage,
             margin_usdt=pos.margin_usdt,
@@ -83,7 +89,7 @@ class PaperExecutionEngine:
             funding_data_missing=pos.funding_data_missing,
             details_json=self._serialize_position_details(pos),
             entry_category=EntryCategory(pos.entry_category),
-            model_id=pos.model_id or self.model_id,
+            model_id=active_model,
         )
 
     def recover_state(self) -> None:
@@ -212,7 +218,8 @@ class PaperExecutionEngine:
         if assessment is None or not assessment.is_feasible:
             return None
 
-        order_id = f"PORD_{sym}_{candidate.timestamp_ms}"
+        order_prefix = "PORD_FAST" if self.model_id == "MODEL_B_FAST" else "PORD"
+        order_id = f"{order_prefix}_{sym}_{candidate.timestamp_ms}"
 
         # 3. Prevent duplicate order submission across restarts
         existing_orders = self.journal.get_paper_orders(symbol=sym, model_id=self.model_id)
@@ -570,7 +577,8 @@ class PaperExecutionEngine:
 
     def _open_position(self, order: PaperOrder, fill_candle: Candle) -> PaperPosition:
         """Create and persist an active open position and register it with the RiskManager."""
-        trade_id = f"PTRD_{order.symbol}_{order.created_bar_time_ms}"
+        trade_prefix = "PTRD_FAST" if self.model_id == "MODEL_B_FAST" else "PTRD"
+        trade_id = f"{trade_prefix}_{order.symbol}_{order.created_bar_time_ms}"
         entry_price = order.fill_price or order.price
         initial_r = abs(entry_price - order.stop_loss)
         trail_dist = initial_r * self.config.trailing_stop_distance_r if initial_r > 0 else 0.0
@@ -946,7 +954,7 @@ class PaperExecutionEngine:
                         exit_reason=exit_reason,
                         is_open=False,
                         setup_id=pos.setup_id,
-                        timeframe="1h",
+                        timeframe="15m" if (pos.model_id or self.model_id) == "MODEL_B_FAST" else "1h",
                         order_status="CLOSED",
                         leverage=pos.leverage,
                         margin_usdt=(initial_qty * pos.entry_price) / pos.leverage if pos.leverage > 0 else pos.margin_usdt,

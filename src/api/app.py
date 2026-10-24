@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from config.settings import ExecutionMode, ModelBConfig, get_default_config
+from config.settings import ExecutionMode, ModelBConfig, create_model_b_fast_config, get_default_config
 from src.core.logger import logger
 from src.core.types import Candle, CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
 from src.data.database import DatabaseManager
@@ -193,7 +193,7 @@ alert_engine = PriceAlertEngine(
     cooldown_sec=60.0,
 )
 
-# Model B Aggressive Multi-Exchange Liquidity Research Engine
+# Model B Aggressive Multi-Exchange Liquidity Research Engine (Normal 1H / 4H)
 model_b_config: ModelBConfig = getattr(cfg, "model_b", None) or ModelBConfig()
 # Diagnostic override is honored only in PAPER/RESEARCH with live trading locked (Model B scope only).
 model_b_diagnostic_state = resolve_override_state(cfg)
@@ -208,6 +208,29 @@ model_b_runner = ModelBRunner(
     risk_manager=model_b_risk_mgr,
     account_service=account_service,
 )
+
+# Model B Fast Scalper Parallel Instance (15m Trigger / 1H Trend)
+model_b_fast_config: ModelBConfig = create_model_b_fast_config(model_b_config)
+model_b_fast_risk_mgr = ModelBRiskManager(config=model_b_fast_config)
+model_b_fast_risk_mgr.diagnostic_state = dict(model_b_diagnostic_state)
+model_b_fast_runner = ModelBRunner(
+    db=db,
+    journal=journal,
+    exchange=exchange,
+    config=model_b_fast_config,
+    paper_config=cfg.paper,
+    exchange_service=model_b_runner.exchange_service,
+    risk_manager=model_b_fast_risk_mgr,
+    account_service=account_service,
+)
+
+
+def _resolve_model_b_instance(model_id: Optional[str] = None) -> tuple[str, ModelBRunner, ModelBRiskManager]:
+    """Resolve the active Model B runner and risk manager by model_id ('MODEL_B' or 'MODEL_B_FAST')."""
+    m_clean = str(model_id or "MODEL_B").strip().upper()
+    if m_clean == "MODEL_B_FAST":
+        return "MODEL_B_FAST", model_b_fast_runner, model_b_fast_risk_mgr
+    return "MODEL_B", model_b_runner, model_b_risk_mgr
 
 # Model D is read-only and independently scoped. It is not started as a background
 # executor here; collection is explicit and paper research never reaches order APIs.
@@ -490,13 +513,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to start price alerts market data service: {e}")
 
-    # Start Model B background research loop if enabled
+    # Start Model B background research loops if enabled (staggered by 15s to share Stage 1 cache cleanly)
     if getattr(model_b_config, "enabled", False):
         try:
-            model_b_runner.start_background_loop(interval_seconds=60.0)
-            logger.info("Model B background research loop started.")
+            model_b_runner.start_background_loop(interval_seconds=60.0, initial_delay_seconds=0.0)
+            logger.info("Model B (1H/4H) background research loop started.")
         except Exception as e:
             logger.warning(f"Failed to start Model B runner: {e}")
+        try:
+            model_b_fast_runner.start_background_loop(interval_seconds=60.0, initial_delay_seconds=15.0)
+            logger.info("Model B Fast Scalper (15m/1H) background research loop started.")
+        except Exception as e:
+            logger.warning(f"Failed to start Model B Fast runner: {e}")
 
     if model_d_scan_worker.state["enabled"]:
         model_d_scan_worker.start()
@@ -528,12 +556,17 @@ async def lifespan(app: FastAPI):
         await research_scheduler.stop()
         research_scheduler = None
 
-    # Stop Model B runner
+    # Stop Model B runners
     try:
         model_b_runner.stop()
         logger.info("Model B runner stopped.")
     except Exception as e:
         logger.warning(f"Error stopping Model B runner: {e}")
+    try:
+        model_b_fast_runner.stop()
+        logger.info("Model B Fast runner stopped.")
+    except Exception as e:
+        logger.warning(f"Error stopping Model B Fast runner: {e}")
     model_d_scan_worker.stop()
     model_d_exit_monitor.stop()
     model_d_wallet_pipeline.stop()
@@ -2395,9 +2428,66 @@ def delete_alert(alert_id: str):
 # =====================================================================
 
 @app.get("/api/model_b/status")
-def get_model_b_status():
-    """Retrieve runtime status, portfolio capital, and risk meters for Model B."""
-    return model_b_runner.get_status()
+def get_model_b_status(
+    model_id: Optional[str] = Query(None, description="Target Model B instance: MODEL_B (1H/4H) or MODEL_B_FAST (15m/1H)"),
+):
+    """Retrieve runtime status, portfolio capital, and risk meters for Model B (Normal or Fast Scalper)."""
+    resolved_id, runner, _ = _resolve_model_b_instance(model_id)
+    primary_status = runner.get_status()
+    normal_status = model_b_runner.get_status() if resolved_id != "MODEL_B" else primary_status
+    fast_status = model_b_fast_runner.get_status() if resolved_id != "MODEL_B_FAST" else primary_status
+    primary_status["model_b_fast"] = {
+        "model_id": fast_status.get("model_id", "MODEL_B_FAST"),
+        "cohort_version": fast_status.get("cohort_version", "MODEL_B_FAST_V2"),
+        "trigger_timeframe": fast_status.get("trigger_timeframe", "15m"),
+        "trend_timeframe": fast_status.get("trend_timeframe", "1h"),
+        "min_stop_distance_pct": fast_status.get("min_stop_distance_pct", 0.008),
+        "pending_expiry_bars": fast_status.get("pending_expiry_bars", 8),
+        "is_running": fast_status.get("is_running", False),
+        "scan_count": fast_status.get("scan_count", 0),
+        "last_scan_utc": fast_status.get("last_scan_utc"),
+        "last_scan_status": fast_status.get("last_scan_status"),
+        "capital": fast_status.get("capital", {}),
+        "risk_limits": fast_status.get("risk_limits", {}),
+        "execution_metrics": fast_status.get("execution_metrics", {}),
+    }
+    primary_status["parallel_instances"] = {
+        "MODEL_B": {
+            "model_id": "MODEL_B",
+            "cohort_version": normal_status.get("cohort_version", "MODEL_B_V2_REMEDIATED"),
+            "trigger_timeframe": normal_status.get("trigger_timeframe", "1h"),
+            "trend_timeframe": normal_status.get("trend_timeframe", "4h"),
+            "min_stop_distance_pct": normal_status.get("min_stop_distance_pct", 0.015),
+            "pending_expiry_bars": normal_status.get("pending_expiry_bars", 6),
+            "is_running": normal_status.get("is_running", False),
+            "scan_count": normal_status.get("scan_count", 0),
+            "current_equity_usdt": (normal_status.get("capital") or {}).get("current_equity_usdt", 100.0),
+            "open_positions_count": (normal_status.get("risk_limits") or {}).get("open_positions_count", 0),
+            "pending_orders_count": (normal_status.get("risk_limits") or {}).get("pending_orders_count", 0),
+            "trades_closed": (normal_status.get("execution_metrics") or {}).get("trades_closed", 0),
+        },
+        "MODEL_B_FAST": {
+            "model_id": "MODEL_B_FAST",
+            "cohort_version": fast_status.get("cohort_version", "MODEL_B_FAST_V2"),
+            "trigger_timeframe": fast_status.get("trigger_timeframe", "15m"),
+            "trend_timeframe": fast_status.get("trend_timeframe", "1h"),
+            "min_stop_distance_pct": fast_status.get("min_stop_distance_pct", 0.008),
+            "pending_expiry_bars": fast_status.get("pending_expiry_bars", 8),
+            "is_running": fast_status.get("is_running", False),
+            "scan_count": fast_status.get("scan_count", 0),
+            "current_equity_usdt": (fast_status.get("capital") or {}).get("current_equity_usdt", 100.0),
+            "open_positions_count": (fast_status.get("risk_limits") or {}).get("open_positions_count", 0),
+            "pending_orders_count": (fast_status.get("risk_limits") or {}).get("pending_orders_count", 0),
+            "trades_closed": (fast_status.get("execution_metrics") or {}).get("trades_closed", 0),
+        },
+    }
+    return primary_status
+
+
+@app.get("/api/model_b_fast/status")
+def get_model_b_fast_status():
+    """Retrieve dedicated runtime status, portfolio capital, and risk meters for Model B Fast Scalper (15m / 1H)."""
+    return get_model_b_status(model_id="MODEL_B_FAST")
 
 
 def _wallet_pipeline_status() -> str:
@@ -2548,12 +2638,17 @@ def get_model_d_wallet(wallet_id: str) -> Dict[str, Any]:
 
 
 @app.get("/api/model_b/diagnostic/report")
-async def model_b_diagnostic_report(cohort: str = Query("auto", pattern="^(auto|experiment|baseline|all)$")) -> Dict[str, Any]:
+async def model_b_diagnostic_report(
+    cohort: str = Query("auto", pattern="^(auto|experiment|baseline|all)$"),
+    model_id: Optional[str] = Query("MODEL_B", description="Target Model B instance: MODEL_B or MODEL_B_FAST"),
+) -> Dict[str, Any]:
     """Read-only LONG vs SHORT diagnostic metrics, signal/rejection stats and breaker reconciliation."""
-    trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B") + journal.get_open_trades(model_id="MODEL_B")
-    candidates = journal.get_latest_setups(limit=5000, model_id="MODEL_B")
-    report = build_model_b_diagnostic_report(trades, candidates, {**model_b_risk_mgr.diagnostic_state, "active": model_b_risk_mgr.diagnostic_override_active}, cohort=cohort)
-    status = model_b_runner.get_status()
+    resolved_id, runner, risk_mgr_inst = _resolve_model_b_instance(model_id)
+    trades = journal.get_trades(open_only=False, limit=5000, model_id=resolved_id) + journal.get_open_trades(model_id=resolved_id)
+    candidates = journal.get_latest_setups(limit=5000, model_id=resolved_id)
+    report = build_model_b_diagnostic_report(trades, candidates, {**risk_mgr_inst.diagnostic_state, "active": risk_mgr_inst.diagnostic_override_active}, cohort=cohort)
+    status = runner.get_status()
+    report["model_id"] = resolved_id
     report["risk_status"] = status.get("risk_limits", {})
     report["diagnostic"] = status.get("diagnostic", {})
     last = status.get("last_successful_scan_utc")
@@ -2566,49 +2661,80 @@ async def model_b_diagnostic_report(cohort: str = Query("auto", pattern="^(auto|
 
 class ModelBKillSwitchPayload(BaseModel):
     enabled: bool
+    model_id: Optional[str] = None
 
 
 @app.post("/api/model_b/diagnostic/kill_switch", dependencies=[Depends(require_mutating_api_access)])
-async def model_b_kill_switch(payload: ModelBKillSwitchPayload) -> Dict[str, Any]:
+async def model_b_kill_switch(
+    payload: ModelBKillSwitchPayload,
+    model_id: Optional[str] = Query(None),
+) -> Dict[str, Any]:
     """Immediately block (or re-allow) NEW Model B paper entries. Resting paper orders are cancelled when ON."""
+    target_model = payload.model_id or model_id
+    if target_model:
+        resolved_id, runner, risk_mgr_inst = _resolve_model_b_instance(target_model)
+        risk_mgr_inst.entry_kill_switch = payload.enabled
+        runner.config.entry_kill_switch = payload.enabled
+        logger.warning(f"{resolved_id}_ENTRY_KILL_SWITCH set to {payload.enabled}")
+        return {"model_id": resolved_id, "entry_kill_switch": payload.enabled, "paper_only": True}
     model_b_risk_mgr.entry_kill_switch = payload.enabled
     model_b_runner.config.entry_kill_switch = payload.enabled
-    logger.warning(f"MODEL_B_ENTRY_KILL_SWITCH set to {payload.enabled}")
+    model_b_fast_risk_mgr.entry_kill_switch = payload.enabled
+    model_b_fast_runner.config.entry_kill_switch = payload.enabled
+    logger.warning(f"MODEL_B_ENTRY_KILL_SWITCH (both instances) set to {payload.enabled}")
     return {"entry_kill_switch": payload.enabled, "paper_only": True}
 
 
 @app.get("/api/model_b/scanner_telemetry")
-def get_model_b_scanner_telemetry(limit: int = Query(10, ge=1, le=50)):
+def get_model_b_scanner_telemetry(
+    limit: int = Query(10, ge=1, le=50),
+    model_id: Optional[str] = Query("MODEL_B"),
+):
     """Retrieve real-world performance telemetry, coverage stats, and request latencies for Model B."""
-    if not model_b_runner or not hasattr(model_b_runner, "telemetry_tracker"):
-        return {"latest": None, "history": []}
+    resolved_id, runner, _ = _resolve_model_b_instance(model_id)
+    if not runner or not hasattr(runner, "telemetry_tracker"):
+        return {"model_id": resolved_id, "latest": None, "history": []}
     return {
-        "latest": model_b_runner.telemetry_tracker.get_latest(),
-        "history": model_b_runner.telemetry_tracker.get_history(limit=limit),
+        "model_id": resolved_id,
+        "latest": runner.telemetry_tracker.get_latest(),
+        "history": runner.telemetry_tracker.get_history(limit=limit),
     }
 
 
 @app.post("/api/model_b/scan")
-async def trigger_model_b_scan():
-    """Trigger an immediate 1H scan cycle across universal perpetual markets for Model B."""
-    # Model B uses its own MultiExchangeService and does not depend on Model A specs_map
-    candidates = await asyncio.to_thread(model_b_runner.run_scan_cycle)
+async def trigger_model_b_scan(model_id: Optional[str] = Query("MODEL_B")):
+    """Trigger an immediate scan cycle across universal perpetual markets for Model B (1H or 15m Fast)."""
+    resolved_id, runner, _ = _resolve_model_b_instance(model_id)
+    candidates = await asyncio.to_thread(runner.run_scan_cycle)
     ready_count = sum(1 for c in candidates if c.status == CandidateStatus.READY)
     return {
-        "status": model_b_runner.last_scan_status,
-        "scan_count": model_b_runner.scan_count,
+        "model_id": resolved_id,
+        "trigger_timeframe": runner.trigger_timeframe,
+        "trend_timeframe": runner.trend_timeframe,
+        "status": runner.last_scan_status,
+        "scan_count": runner.scan_count,
         "total_evaluated": len(candidates),
         "ready_count": ready_count,
         "candidates": [c.to_dict() for c in candidates[:20]],
     }
 
 
+@app.post("/api/model_b_fast/scan")
+async def trigger_model_b_fast_scan():
+    """Trigger an immediate 15m scan cycle for Model B Fast Scalper."""
+    return await trigger_model_b_scan(model_id="MODEL_B_FAST")
+
+
 @app.get("/api/model_b/setups")
-def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
+def get_model_b_setups(
+    limit: int = Query(50, ge=1, le=200),
+    model_id: Optional[str] = Query("MODEL_B"),
+):
     """Retrieve latest Model B setup candidates from database enriched with execution state, structured reasons, and metrics."""
-    setups = journal.get_latest_setups(limit=limit, model_id="MODEL_B")
-    all_orders = journal.get_paper_orders(model_id="MODEL_B")
-    all_trades = journal.get_trades(open_only=False, limit=1000, model_id="MODEL_B")
+    resolved_id, runner, _ = _resolve_model_b_instance(model_id)
+    setups = journal.get_latest_setups(limit=limit, model_id=resolved_id)
+    all_orders = journal.get_paper_orders(model_id=resolved_id)
+    all_trades = journal.get_trades(open_only=False, limit=1000, model_id=resolved_id)
     
     enriched_setups = []
     for s in setups:
@@ -2627,14 +2753,17 @@ def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
         item["cvd_1h"] = ai.get("cvd_1h")
         item["quantity"] = risk.get("quantity")
         item["risk_budget_usdt"] = risk.get("risk_budget_usdt", 1.0)
+        item["trigger_timeframe"] = details.get("trigger_timeframe") or runner.trigger_timeframe
+        item["trend_timeframe"] = details.get("trend_timeframe") or runner.trend_timeframe
+        item["cohort_version"] = details.get("cohort_version") or getattr(runner.config, "cohort_version", "MODEL_B_V2_REMEDIATED")
         
         # Check active open positions
-        open_pos = model_b_runner.paper_engine.open_positions.get(sym) if model_b_runner else None
+        open_pos = runner.paper_engine.open_positions.get(sym) if runner else None
         
         # Check active pending limit orders
         pending_order = None
-        if model_b_runner:
-            pending_order = next((o for o in model_b_runner.paper_engine.pending_orders.values() if o.candidate_id == cid or o.symbol == sym), None)
+        if runner:
+            pending_order = next((o for o in runner.paper_engine.pending_orders.values() if o.candidate_id == cid or o.symbol == sym), None)
             
         # Check historical orders for this candidate specifically
         exact_orders = [o for o in all_orders if o.get("candidate_id") == cid]
@@ -2722,8 +2851,13 @@ def get_model_b_setups(limit: int = Query(50, ge=1, le=200)):
             
         enriched_setups.append(item)
 
-    return {"setups": enriched_setups, "count": len(enriched_setups), "model_id": "MODEL_B"}
+    return {"setups": enriched_setups, "count": len(enriched_setups), "model_id": resolved_id}
 
+
+@app.get("/api/model_b_fast/setups")
+def get_model_b_fast_setups(limit: int = Query(50, ge=1, le=200)):
+    """Retrieve latest Model B Fast Scalper setup candidates."""
+    return get_model_b_setups(limit=limit, model_id="MODEL_B_FAST")
 
 
 @app.get("/api/model_b/orders")
@@ -2731,27 +2865,42 @@ def get_model_b_orders(
     symbol: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
+    model_id: Optional[str] = Query("MODEL_B"),
 ):
-    """Retrieve simulated paper orders isolated to Model B with status and symbol filtering."""
+    """Retrieve simulated paper orders isolated to the selected Model B instance with status and symbol filtering."""
+    resolved_id, runner, _ = _resolve_model_b_instance(model_id)
     orders = journal.get_paper_orders(
         symbol=symbol,
         status=status,
-        model_id="MODEL_B",
+        model_id=resolved_id,
     )
-    pending_count = len(model_b_runner.paper_engine.pending_orders) if model_b_runner else 0
+    pending_count = len(runner.paper_engine.pending_orders) if runner else 0
     return {
-        "model_id": "MODEL_B",
+        "model_id": resolved_id,
+        "pending_expiry_bars": getattr(runner.config, "pending_expiry_bars", 8 if resolved_id == "MODEL_B_FAST" else 6),
         "orders": orders[:limit],
         "count": len(orders),
         "pending_count": pending_count,
     }
 
+
+@app.get("/api/model_b_fast/orders")
+def get_model_b_fast_orders(
+    symbol: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Retrieve simulated paper orders isolated to Model B Fast Scalper."""
+    return get_model_b_orders(symbol=symbol, status=status, limit=limit, model_id="MODEL_B_FAST")
+
+
 @app.get("/api/model_b/positions")
-def get_model_b_positions():
-    """Retrieve active open simulated paper positions for Model B enriched with live mark prices, UPnL, ROE, and margin."""
-    positions = model_b_runner.get_enriched_open_positions() if model_b_runner else []
+def get_model_b_positions(model_id: Optional[str] = Query("MODEL_B")):
+    """Retrieve active open simulated paper positions for the selected Model B instance enriched with live mark prices."""
+    resolved_id, runner, _ = _resolve_model_b_instance(model_id)
+    positions = runner.get_enriched_open_positions() if runner else []
     return {
-        "model_id": "MODEL_B",
+        "model_id": resolved_id,
         "positions": positions,
         "count": len(positions),
         "is_simulated": True,
@@ -2759,39 +2908,47 @@ def get_model_b_positions():
     }
 
 
+@app.get("/api/model_b_fast/positions")
+def get_model_b_fast_positions():
+    """Retrieve active open simulated paper positions for Model B Fast Scalper."""
+    return get_model_b_positions(model_id="MODEL_B_FAST")
+
+
 @app.get("/api/model_b/journal")
 def get_model_b_journal(
     outcome: Optional[str] = Query(None),
     open_only: bool = Query(False),
-    cohort: Optional[str] = Query(None, description="Filter by cohort: ALL, V1, or V2"),
+    cohort: Optional[str] = Query(None, description="Filter by cohort: ALL, V1, V2, or FAST_V2"),
     limit: int = Query(100, ge=1, le=500),
+    model_id: Optional[str] = Query("MODEL_B"),
 ):
-    """Retrieve simulated paper trading journal, metrics, pending orders, and lifecycle events for Model B."""
+    """Retrieve simulated paper trading journal, metrics, pending orders, and lifecycle events for Model B or Model B Fast."""
+    resolved_id, runner, _ = _resolve_model_b_instance(model_id)
     trades = journal.get_trades(
         outcome=outcome,
         open_only=open_only,
         limit=limit,
-        model_id="MODEL_B",
+        model_id=resolved_id,
         cohort=cohort,
     )
-    all_model_b_trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
-    metrics_trades = trades if (cohort and cohort.strip().upper() != "ALL") else all_model_b_trades
+    all_instance_trades = journal.get_trades(open_only=False, limit=5000, model_id=resolved_id)
+    metrics_trades = trades if (cohort and cohort.strip().upper() != "ALL") else all_instance_trades
     metrics = journal.compute_trade_metrics(metrics_trades)
     
-    v1_count = sum(1 for t in all_model_b_trades if t.get("cohort") == "V1")
-    v2_count = sum(1 for t in all_model_b_trades if t.get("cohort") == "V2")
+    v1_count = sum(1 for t in all_instance_trades if t.get("cohort") == "V1")
+    v2_count = sum(1 for t in all_instance_trades if t.get("cohort") in ("V2", "FAST_V2"))
 
-    pending_orders = [o.to_dict() for o in model_b_runner.paper_engine.pending_orders.values()] if model_b_runner else []
-    all_orders = journal.get_paper_orders(model_id="MODEL_B")
-    lifecycle_events = journal.get_lifecycle_events(limit=limit, model_id="MODEL_B")
+    pending_orders = [o.to_dict() for o in runner.paper_engine.pending_orders.values()] if runner else []
+    all_orders = journal.get_paper_orders(model_id=resolved_id)
+    lifecycle_events = journal.get_lifecycle_events(limit=limit, model_id=resolved_id)
     
     return {
-        "model_id": "MODEL_B",
+        "model_id": resolved_id,
         "trades": trades,
         "metrics": metrics,
         "total_count": len(trades),
         "cohort_counts": {
-            "all": len(all_model_b_trades),
+            "all": len(all_instance_trades),
             "v1": v1_count,
             "v2": v2_count,
         },
@@ -2802,6 +2959,16 @@ def get_model_b_journal(
         "lifecycle_events": lifecycle_events[:limit],
         "lifecycle_events_count": len(lifecycle_events),
     }
+
+
+@app.get("/api/model_b_fast/journal")
+def get_model_b_fast_journal(
+    outcome: Optional[str] = Query(None),
+    open_only: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Retrieve simulated paper trading journal for Model B Fast Scalper (15m / 1H)."""
+    return get_model_b_journal(outcome=outcome, open_only=open_only, cohort=None, limit=limit, model_id="MODEL_B_FAST")
 
 
 @app.get("/api/model_b/coverage")
