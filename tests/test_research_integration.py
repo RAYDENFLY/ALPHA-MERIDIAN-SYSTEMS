@@ -24,6 +24,10 @@ def test_market_participant_ui_has_explicit_cot_and_retail_states():
     js=Path("src/static/js/market_participant.js").read_text(encoding="utf-8")
     assert 'id="tab-cot"' in html and 'id="tab-retail_sentiment"' in html
     assert 'id="tab-institutional_positioning"' in html
+    assert 'id="retailPositioningState"' in html
     assert '/api/research/retail_positioning' in Path("src/static/js/market_participant.js").read_text(encoding="utf-8")
     assert 'no verified retail positioning dataset' in html
     assert '/api/research/data/cftc_cot_disaggregated' in js
+    assert 'if (state) state.textContent' in js
+    assert 'Weekly / non-real-time' in js
+    assert 'payload.freshness' in js

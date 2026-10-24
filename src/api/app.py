@@ -25,6 +25,7 @@ from src.data.database import DatabaseManager
 from src.research_data.storage import ResearchDataStore
 from src.research_data.scheduler import ResearchDataScheduler
 from src.research_data.audit import audit_dataset
+from src.research_data.freshness import cftc_freshness
 from src.research_data.retail_positioning import RetailPositioningProvider
 from src.exchange.aster import AsterDexAdapter
 from src.exchange.aster_v3 import AsterDexV3Adapter
@@ -205,6 +206,7 @@ model_b_runner = ModelBRunner(
     config=model_b_config,
     paper_config=cfg.paper,
     risk_manager=model_b_risk_mgr,
+    account_service=account_service,
 )
 
 # Model D is read-only and independently scoped. It is not started as a background
@@ -2761,6 +2763,7 @@ def get_model_b_positions():
 def get_model_b_journal(
     outcome: Optional[str] = Query(None),
     open_only: bool = Query(False),
+    cohort: Optional[str] = Query(None, description="Filter by cohort: ALL, V1, or V2"),
     limit: int = Query(100, ge=1, le=500),
 ):
     """Retrieve simulated paper trading journal, metrics, pending orders, and lifecycle events for Model B."""
@@ -2769,10 +2772,14 @@ def get_model_b_journal(
         open_only=open_only,
         limit=limit,
         model_id="MODEL_B",
+        cohort=cohort,
     )
     all_model_b_trades = journal.get_trades(open_only=False, limit=5000, model_id="MODEL_B")
     metrics = journal.compute_trade_metrics(all_model_b_trades)
     
+    v1_count = sum(1 for t in all_model_b_trades if t.get("cohort") == "V1")
+    v2_count = sum(1 for t in all_model_b_trades if t.get("cohort") == "V2")
+
     pending_orders = [o.to_dict() for o in model_b_runner.paper_engine.pending_orders.values()] if model_b_runner else []
     all_orders = journal.get_paper_orders(model_id="MODEL_B")
     lifecycle_events = journal.get_lifecycle_events(limit=limit, model_id="MODEL_B")
@@ -2782,6 +2789,11 @@ def get_model_b_journal(
         "trades": trades,
         "metrics": metrics,
         "total_count": len(trades),
+        "cohort_counts": {
+            "all": len(all_model_b_trades),
+            "v1": v1_count,
+            "v2": v2_count,
+        },
         "pending_orders": pending_orders,
         "pending_orders_count": len(pending_orders),
         "paper_orders": all_orders[:limit],
@@ -3518,7 +3530,11 @@ async def research_data_endpoint(dataset_id: str, symbol: Optional[str] = Query(
     sync = research_store.get_sync_state(dataset_id)
     total = research_store.total_observation_count(dataset_id)
     status = (sync or {}).get("sync_status") or ("MISSING" if not rows else "AVAILABLE")
-    return {"dataset_id": dataset_id, "observations": rows, "status": status, "sync": sync, "inserted_count": (sync or {}).get("observation_count", 0), "total_observation_count": total}
+    result = {"dataset_id": dataset_id, "observations": rows, "status": status, "sync": sync, "inserted_count": (sync or {}).get("observation_count", 0), "total_observation_count": total}
+    if dataset_id == "cftc_cot_disaggregated":
+        latest = rows[0].get("observation_timestamp") if rows else None
+        result.update({"freshness": cftc_freshness(latest, datetime.now(timezone.utc)), "latest_observation_timestamp": latest, "retrieved_at": (sync or {}).get("last_success_at")})
+    return result
 
 
 @app.get("/api/research/data/{dataset_id}/audit")

@@ -139,6 +139,18 @@ class PaperExecutionConfig(BaseModel):
     )
 
 
+class ModelBLiveMicroConfig(BaseModel):
+    """Dedicated live micro-account configuration (~$16 USDT Aster account)."""
+    target_trade_risk_usdt: float = Field(default=0.45, gt=0.0, description="Target live risk per trade")
+    max_margin_usdt: float = Field(default=4.00, gt=0.0, description="Max isolated margin per live trade")
+    daily_loss_limit_usdt: float = Field(default=1.35, gt=0.0, description="Daily circuit breaker (3R)")
+    weekly_loss_limit_usdt: float = Field(default=3.00, gt=0.0, description="Weekly circuit breaker")
+    max_open_positions: int = Field(default=2, ge=1, le=5, description="Max concurrent live positions")
+    max_open_per_direction: int = Field(default=1, ge=1, le=5, description="Max live positions per direction")
+    min_notional_buffer: float = Field(default=5.50, gt=0.0, description="Aster DEX min_notional buffer")
+    leverage: int = Field(default=10, ge=1, le=20, description="Live micro-account leverage")
+
+
 class ModelBConfig(BaseModel):
     """Configuration for Model B Aggressive Liquidity Research Engine."""
     enabled: bool = Field(default=True, description="Enable Model B liquidity engine scanner")
@@ -153,6 +165,13 @@ class ModelBConfig(BaseModel):
     max_open_per_direction: int = Field(default=3, ge=1, le=10, description="Max concurrent open paper positions per direction (tactical V2 limit)")
     cohort_version: str = Field(default="MODEL_B_V2_REMEDIATED", description="Active Model B forward cohort tag")
     cohort_cutover_ms: int = Field(default=1792838400000, description="Model B V2 cutover timestamp in ms")
+    # Live Micro-Account Profile (~$16 USDT)
+    live_target_trade_risk_usdt: float = Field(default=0.45, gt=0.0, description="Live target risk per trade (~$16 profile)")
+    live_max_margin_usdt: float = Field(default=4.00, gt=0.0, description="Live max margin per position")
+    live_daily_loss_limit_usdt: float = Field(default=1.35, gt=0.0, description="Live daily loss breaker (3R)")
+    live_weekly_loss_limit_usdt: float = Field(default=3.00, gt=0.0, description="Live weekly loss breaker")
+    live_max_open_positions: int = Field(default=2, ge=1, le=5, description="Live max concurrent positions")
+    live_max_open_per_direction: int = Field(default=1, ge=1, le=5, description="Live max concurrent per direction")
     max_leverage: int = Field(default=10, ge=1, le=20, description="Max leverage allowed")
     max_margin_usdt: float = Field(default=15.00, gt=0.0, description="Max isolated margin allowed per position")
     min_risk_reward: float = Field(default=1.5, gt=0.0, description="Minimum net reward-to-risk ratio")

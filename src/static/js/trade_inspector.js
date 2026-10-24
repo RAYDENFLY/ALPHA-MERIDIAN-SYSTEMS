@@ -266,11 +266,17 @@ function renderInspectorHeader(t) {
         ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800">MODEL A PAPER</span>'
         : '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-950 text-amber-300 border border-amber-800">MODEL B PAPER</span>';
 
+    const isV2 = t.cohort === 'V2' || t.cohort_version === 'MODEL_B_V2_REMEDIATED';
+    const cohortBadge = !isModelA
+        ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold ${isV2 ? 'bg-purple-950 text-purple-300 border border-purple-500' : 'bg-slate-800 text-slate-400 border border-slate-700'}">${isV2 ? 'COHORT V2' : 'COHORT V1'}</span>`
+        : '';
+
     badgeContainer.innerHTML = `
         <span class="px-2 py-0.5 rounded text-[11px] font-bold border ${sideCls}">${side} ${t.leverage || 10}x</span>
         <span class="px-2 py-0.5 rounded text-[11px] font-bold border ${outcomeCls}">${outcome}</span>
         <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">Venue: ${escapeHtml(venue)}</span>
         ${modelBadge}
+        ${cohortBadge}
     `;
 }
 

@@ -459,7 +459,7 @@
             <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Institutional Positioning</h2><p class="text-xs text-slate-400 mt-1">CFTC-reported futures categories only; not all institutional crypto positioning.</p><div id="institutionalState" class="mt-5 text-sm text-slate-400">Loading research data…</div><div id="institutionalTable" class="mt-4 overflow-x-auto"></div></div>
         </div>
         <div id="tab-retail_sentiment" class="hidden space-y-4">
-            <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Retail Sentiment</h2><div class="mt-5 p-4 rounded border border-amber-900/60 bg-amber-950/20 text-sm text-amber-200">UNAVAILABLE — no verified retail positioning dataset is currently configured. No sentiment values are fabricated.</div></div>
+            <div class="card-bg p-5 rounded-xl border border-slate-800"><h2 class="text-lg font-bold text-white">Retail Sentiment</h2><div id="retailPositioningState" class="mt-5 p-4 rounded border border-amber-900/60 bg-amber-950/20 text-sm text-amber-200">UNAVAILABLE — no verified retail positioning dataset is currently configured. No sentiment values are fabricated.</div></div>
         </div>
 
         <!-- TAB 1: CANDIDATE SETUPS -->
@@ -1930,9 +1930,27 @@
                         <h3 class="text-base font-bold text-white">Model B Paper Portfolio & Journal</h3>
                         <span id="modelBJournalMetricsBadge" class="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-800 text-slate-300">0 Trades</span>
                     </div>
-                    <div class="flex items-center gap-4 text-xs font-mono" id="modelBJournalSummary">
-                        <span>Win Rate: <strong class="text-white" id="modelBWinRate">0.0%</strong></span>
-                        <span>Net PnL: <strong class="text-white" id="modelBNetPnl">$0.00</strong></span>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <div class="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 text-[11px]" id="modelBCohortFilterGroup">
+                            <button onclick="setModelBCohortFilter('ALL')" id="modelBCohortFilterAll" class="px-2.5 py-1 rounded-md font-semibold bg-indigo-600 text-white transition flex items-center gap-1">
+                                <span>All</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-800/80 text-indigo-200 font-mono" id="modelBCountAll">42</span>
+                            </button>
+                            <button onclick="setModelBCohortFilter('V2')" id="modelBCohortFilterV2" class="px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                                <span>V2 (Remediated)</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/40 font-mono" id="modelBCountV2">0</span>
+                            </button>
+                            <button onclick="setModelBCohortFilter('V1')" id="modelBCohortFilterV1" class="px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                                <span>V1 (Legacy)</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 font-mono" id="modelBCountV1">42</span>
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-4 text-xs font-mono" id="modelBJournalSummary">
+                            <span>Win Rate: <strong class="text-white" id="modelBWinRate">0.0%</strong></span>
+                            <span>Net PnL: <strong class="text-white" id="modelBNetPnl">$0.00</strong></span>
+                        </div>
                     </div>
                 </div>
 
@@ -1941,6 +1959,7 @@
                         <thead class="bg-slate-900/80 text-slate-400 uppercase text-[11px] border-b border-slate-800">
                             <tr>
                                 <th class="px-4 py-2.5">Trade ID / Symbol</th>
+                                <th class="px-3 py-2.5">Cohort</th>
                                 <th class="px-4 py-2.5">Direction</th>
                                 <th class="px-4 py-2.5">Entry / Exit Price</th>
                                 <th class="px-4 py-2.5">Gross PnL</th>
@@ -1951,7 +1970,7 @@
                             </tr>
                         </thead>
                         <tbody id="modelBJournalTableBody" class="divide-y divide-slate-800">
-                            <tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>
+                            <tr><td colspan="9" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>
                         </tbody>
                     </table>
                 </div>

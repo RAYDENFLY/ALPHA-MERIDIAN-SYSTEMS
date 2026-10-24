@@ -31,6 +31,11 @@ from src.strategy.model_b.generator import ModelBStrategyGenerator
 from src.strategy.model_b.risk_controls import cooldown_clear
 from src.research import ModelBShadowEvaluator
 from config.settings import ModelBConfig, PaperExecutionConfig
+from src.execution.model_b_live_preflight import (
+    ModelBLiveMicroConfig,
+    ModelBLivePreFlightValidator,
+    ExitPlanType,
+)
 
 
 class ModelBRunner:
@@ -51,6 +56,8 @@ class ModelBRunner:
         catalyst_engine: Optional[NewsCatalystEngine] = None,
         generator: Optional[ModelBStrategyGenerator] = None,
         shadow_evaluator: Optional[ModelBShadowEvaluator] = None,
+        account_service: Optional[Any] = None,
+        live_preflight_validator: Optional[ModelBLivePreFlightValidator] = None,
     ) -> None:
         self.db = db
         self.journal = journal
@@ -89,6 +96,12 @@ class ModelBRunner:
             model_id="MODEL_B",
         )
         self.shadow_evaluator = shadow_evaluator or ModelBShadowEvaluator(db=self.db)
+        self.account_service = account_service
+        self.live_preflight_validator = live_preflight_validator or ModelBLivePreFlightValidator(
+            config=self.config,
+            account_service=self.account_service,
+            specs_provider=self.exchange,
+        )
 
         self._lock = threading.Lock()
         self._is_running = False
@@ -422,6 +435,36 @@ class ModelBRunner:
                                             for r in det["rejection_reasons"]:
                                                 if r not in candidate.rejection_reasons:
                                                     candidate.rejection_reasons.append(r)
+
+                            if getattr(self, "live_preflight_validator", None):
+                                try:
+                                    live_open_cnt = 0
+                                    live_dir_cnt = 0
+                                    if getattr(self, "account_service", None):
+                                        try:
+                                            snap = self.account_service.get_snapshot()
+                                            for p in snap.positions:
+                                                raw_amt = float(p.get("raw_position_amt", p.get("positionAmt", 0.0)))
+                                                if abs(raw_amt) > 1e-8:
+                                                    live_open_cnt += 1
+                                                    p_dir = "LONG" if raw_amt > 0 else "SHORT"
+                                                    cand_dir = (candidate.direction.value if hasattr(candidate.direction, "value") else str(candidate.direction)).upper()
+                                                    if p_dir == cand_dir:
+                                                        live_dir_cnt += 1
+                                        except Exception:
+                                            pass
+                                    preflight_res = self.live_preflight_validator.validate_candidate(
+                                        candidate=candidate,
+                                        now_ms=current_ms,
+                                        live_open_positions_count=live_open_cnt,
+                                        live_open_direction_count=live_dir_cnt,
+                                    )
+                                    if not candidate.ai_analysis:
+                                        candidate.ai_analysis = {}
+                                    candidate.ai_analysis["live_readiness_dry_run"] = preflight_res.to_dict()
+                                    candidate.exit_plan = preflight_res.exit_plan
+                                except Exception as pf_err:
+                                    logger.debug(f"Preflight dry-run error for {candidate.symbol}: {pf_err}")
 
                             found_candidates.append(candidate)
                             self.journal.save_setup(candidate)
@@ -919,4 +962,9 @@ class ModelBRunner:
             },
             "scanner_performance": self.telemetry_tracker.get_latest(),
             "live_trading_locked": True,
+            "live_readiness_dry_run": (
+                self.live_preflight_validator.get_live_readiness_telemetry()
+                if getattr(self, "live_preflight_validator", None)
+                else None
+            ),
         }

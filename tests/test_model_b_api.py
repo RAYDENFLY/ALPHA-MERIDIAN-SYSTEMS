@@ -1,12 +1,7 @@
-"""Integration tests for Model B REST API endpoints."""
-
 import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
+from starlette.testclient import TestClient
 
 from src.api.app import app
-from src.core.types import Candle, CandidateStatus, Direction, SetupCandidate
-from src.exchange.normalized import NormalizedOrderBook, OrderBookLevel
 
 
 @pytest.fixture
@@ -49,13 +44,35 @@ class TestModelBAPIEndpoints:
         assert "setups" in data
         assert isinstance(data["setups"], list)
 
-    def test_get_model_b_journal(self, client: TestClient):
+    def test_get_model_b_journal_and_cohort_tagging(self, client: TestClient):
         res = client.get("/api/model_b/journal")
         assert res.status_code == 200
         data = res.json()
         assert data["model_id"] == "MODEL_B"
         assert "trades" in data
         assert "metrics" in data
+        assert "cohort_counts" in data
+        assert data["cohort_counts"]["all"] >= 0
+        assert data["cohort_counts"]["v1"] >= 0
+        assert data["cohort_counts"]["v2"] >= 0
+
+        # Verify every trade has cohort, cohort_version, and cohort_label
+        for t in data["trades"]:
+            assert "cohort" in t
+            assert t["cohort"] in ("V1", "V2")
+            assert "cohort_version" in t
+            assert "cohort_label" in t
+
+        # Verify cohort filtering endpoint behavior
+        res_v1 = client.get("/api/model_b/journal?cohort=V1")
+        assert res_v1.status_code == 200
+        for t in res_v1.json()["trades"]:
+            assert t["cohort"] == "V1"
+
+        res_v2 = client.get("/api/model_b/journal?cohort=V2")
+        assert res_v2.status_code == 200
+        for t in res_v2.json()["trades"]:
+            assert t["cohort"] == "V2"
 
     def test_get_model_b_orderbook(self, client: TestClient):
         res = client.get("/api/model_b/orderbook/BTCUSDT")

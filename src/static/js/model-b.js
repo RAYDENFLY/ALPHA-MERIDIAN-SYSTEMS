@@ -687,11 +687,46 @@
             }
         }
 
+        let currentModelBCohortFilter = 'ALL';
+        window.setModelBCohortFilter = function(filter) {
+            currentModelBCohortFilter = filter;
+            const btnAll = document.getElementById('modelBCohortFilterAll');
+            const btnV2 = document.getElementById('modelBCohortFilterV2');
+            const btnV1 = document.getElementById('modelBCohortFilterV1');
+            if (btnAll && btnV2 && btnV1) {
+                btnAll.className = filter === 'ALL'
+                    ? 'px-2.5 py-1 rounded-md font-semibold bg-indigo-600 text-white transition flex items-center gap-1'
+                    : 'px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1';
+                btnV2.className = filter === 'V2'
+                    ? 'px-2.5 py-1 rounded-md font-semibold bg-purple-600 text-white transition flex items-center gap-1'
+                    : 'px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1';
+                btnV1.className = filter === 'V1'
+                    ? 'px-2.5 py-1 rounded-md font-semibold bg-slate-700 text-white transition flex items-center gap-1'
+                    : 'px-2.5 py-1 rounded-md font-semibold text-slate-400 hover:text-white transition flex items-center gap-1';
+            }
+            if (typeof resetPaginationPage === 'function') {
+                resetPaginationPage('model_b_journal');
+            }
+            fetchModelBJournal();
+        };
+
         async function fetchModelBJournal() {
             try {
-                const res = await fetch('/api/model_b/journal?limit=25');
+                let url = '/api/model_b/journal?limit=200';
+                if (currentModelBCohortFilter && currentModelBCohortFilter !== 'ALL') {
+                    url += `&cohort=${encodeURIComponent(currentModelBCohortFilter)}`;
+                }
+                const res = await fetch(url);
                 if (!res.ok) return;
                 const data = await res.json();
+
+                const counts = data.cohort_counts || {};
+                const countAllEl = document.getElementById('modelBCountAll');
+                const countV2El = document.getElementById('modelBCountV2');
+                const countV1El = document.getElementById('modelBCountV1');
+                if (countAllEl) countAllEl.innerText = String(counts.all ?? (data.total_count || 0));
+                if (countV2El) countV2El.innerText = String(counts.v2 ?? 0);
+                if (countV1El) countV1El.innerText = String(counts.v1 ?? 0);
 
                 const metrics = data.metrics || {};
                 const wrEl = document.getElementById('modelBWinRate');
@@ -729,7 +764,10 @@
                 modelBCachedJournalTrades = trades;
                 const pElJournal = document.getElementById('modelBJournalPaginationContainer');
                 if (trades.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500">No Model B trades executed yet.</td></tr>';
+                    const emptyMsg = currentModelBCohortFilter === 'V2'
+                        ? 'No V2 Remediated trades closed yet. Model B V2 burn-in is actively monitoring markets with 0 open positions.'
+                        : 'No Model B trades found for selected filter.';
+                    tbody.innerHTML = `<tr><td colspan="9" class="px-4 py-6 text-center text-slate-500">${escapeHtml(emptyMsg)}</td></tr>`;
                     if (pElJournal) pElJournal.innerHTML = '';
                     return;
                 }
@@ -743,12 +781,38 @@
                     const dirClass = isLong ? 'text-emerald-400' : 'text-rose-400';
                     const netPnl = Number(t.pnl_net || 0);
                     const netClass = netPnl > 0 ? 'text-emerald-400' : (netPnl < 0 ? 'text-rose-400' : 'text-slate-300');
+                    const isV2 = t.cohort === 'V2' || t.cohort_version === 'MODEL_B_V2_REMEDIATED';
+
+                    const cohortBadge = isV2
+                        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-950/90 text-purple-300 border border-purple-500 shadow-sm" title="V2 Remediated Cohort">
+                             <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                             V2
+                           </span>`
+                        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800/90 text-slate-400 border border-slate-700" title="${escapeHtml(t.cohort_label || 'V1 Legacy Cohort')}">
+                             <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                             V1
+                           </span>`;
+
+                    const symbolCohortPill = isV2
+                        ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-500/60 shadow-sm">V2</span>`
+                        : `<span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">V1</span>`;
+
+                    const isArchived = t.exit_reason === 'COHORT_CUTOVER_V2';
 
                     return `
                         <tr class="hover:bg-slate-800/40 transition">
                             <td class="px-4 py-3">
-                                <div class="font-bold text-white">${escapeHtml(t.symbol)}</div>
-                                <div class="text-[10px] text-slate-500">${escapeHtml(t.trade_id.substring(0, 10))}</div>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-bold text-white">${escapeHtml(t.symbol)}</span>
+                                    ${symbolCohortPill}
+                                </div>
+                                <div class="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <span>${escapeHtml(t.trade_id.substring(0, 10))}</span>
+                                    ${isArchived ? '<span class="text-amber-400 font-semibold" title="Cutover to V2">(Archived)</span>' : ''}
+                                </div>
+                            </td>
+                            <td class="px-3 py-3">
+                                ${cohortBadge}
                             </td>
                             <td class="px-4 py-3 ${dirClass} font-semibold">${t.direction}</td>
                             <td class="px-4 py-3">

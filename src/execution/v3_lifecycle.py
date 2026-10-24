@@ -65,6 +65,7 @@ class ManagedPosition:
     protection_state: ProtectionState = ProtectionState.NONE
     is_open: bool = False
     alerts: List[str] = field(default_factory=list)
+    exit_plan: str = "PARTIAL_TP1_RUNNER_TP2"
 
 
 class V3OrderLifecycleManager:
@@ -77,12 +78,16 @@ class V3OrderLifecycleManager:
         emergency_policy: EmergencyPolicy = EmergencyPolicy.CLOSE_MARKET_IMMEDIATELY,
         event_dispatcher: Optional[Any] = None,
         live_trading_locked: bool = True,
+        client_order_prefix: Optional[str] = None,
+        isolated_manual_symbols: Optional[set] = None,
     ) -> None:
         self.adapter = adapter
         self.risk_manager = risk_manager
         self.emergency_policy = emergency_policy
         self.event_dispatcher = event_dispatcher
         self.live_trading_locked = live_trading_locked
+        self.client_order_prefix = client_order_prefix
+        self.isolated_manual_symbols = set(isolated_manual_symbols) if isolated_manual_symbols else set()
 
         self.managed_positions: Dict[str, ManagedPosition] = {}
         self.active_client_order_ids: set = set()
@@ -92,6 +97,8 @@ class V3OrderLifecycleManager:
     def _generate_client_order_id(self, candidate_id: str, prefix: str) -> str:
         clean_id = candidate_id.replace("-", "").replace("_", "")[:20]
         ts = int(time.time() * 1000) % 1_000_000
+        if self.client_order_prefix:
+            return f"{self.client_order_prefix}_{prefix}_{clean_id}_{ts}"[:36]
         return f"{prefix}_{clean_id}_{ts}"[:36]
 
     def _determine_sides(self, direction: Direction) -> Tuple[str, str]:
@@ -130,8 +137,17 @@ class V3OrderLifecycleManager:
             take_profit_2_price=candidate.take_profit_2,
             initial_stop_loss_price=candidate.stop_loss,
             trailing_distance=initial_r,
+            exit_plan=getattr(candidate, "exit_plan", "PARTIAL_TP1_RUNNER_TP2"),
         )
         self.managed_positions[candidate.candidate_id] = pos
+
+        # Manual position isolation: protect manual trades (e.g. SUIUSDT)
+        if symbol in self.isolated_manual_symbols:
+            msg = f"Symbol {symbol} has an active external manual position; automated entries blocked to protect manual position."
+            logger.warning(msg)
+            pos.entry_status = "BLOCKED_MANUAL_ISOLATION"
+            pos.alerts.append(msg)
+            return pos
 
         # 1. Pre-entry risk and execution gate checks
         if self.entries_frozen:
@@ -483,6 +499,11 @@ class V3OrderLifecycleManager:
 
     def reconcile_startup_protection(self, symbol: str) -> Tuple[bool, str]:
         """Startup reconciliation: verify exchange positions have matching active protective orders."""
+        if symbol in self.isolated_manual_symbols:
+            msg = f"Symbol {symbol} is marked as an external manual position; safely isolated from automated actions."
+            logger.info(msg)
+            return True, msg
+
         try:
             positions = self.adapter.get_positions(symbol=symbol)
         except Exception as err:
@@ -606,6 +627,10 @@ class V3OrderLifecycleManager:
         Fail-safe scoped: only purges bot-owned orders (matching SL_, TP_, ENT_, or active IDs)
         to prevent accidental cancellation of external manual orders.
         """
+        if symbol in self.isolated_manual_symbols:
+            logger.info(f"Symbol {symbol} is in isolated_manual_symbols; skipping purge to protect manual orders.")
+            return []
+
         cancelled_orders: List[str] = []
         if not hasattr(self.adapter, "get_open_orders") or not hasattr(self.adapter, "cancel_order"):
             return cancelled_orders
@@ -631,7 +656,7 @@ class V3OrderLifecycleManager:
                     for p in self.managed_positions.values()
                 )
                 is_bot_owned = (
-                    client_id.startswith(("SL_", "TP_", "ENT_", "SLBE_", "SLTR_", "TP2_"))
+                    client_id.startswith(("MODEL_B_", "SL_", "TP_", "ENT_", "SLBE_", "SLTR_", "TP2_"))
                     or client_id in self.active_client_order_ids
                     or any(cand_id in client_id for cand_id in self.managed_positions)
                     or is_known_order_id
@@ -742,6 +767,11 @@ class V3OrderLifecycleManager:
         """
         if not pos.is_open:
             return False, "Position is not open."
+
+        # Support FULL_CLOSE_TP1 exit plan (100% full exit at TP1)
+        if getattr(pos, "exit_plan", None) == "FULL_CLOSE_TP1" or executed_tp1_qty >= pos.filled_quantity:
+            self.handle_bracket_fill(pos, "TAKE_PROFIT_MARKET")
+            return True, "Full position closed at TP1 (FULL_CLOSE_TP1 exit plan); brackets cleaned up."
 
         remaining_qty = round(max(0.0, pos.filled_quantity - executed_tp1_qty), 8)
         if remaining_qty <= 0:

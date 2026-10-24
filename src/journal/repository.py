@@ -277,6 +277,7 @@ class JournalRepository:
         end_time_ms: Optional[int] = None,
         limit: int = 100,
         model_id: Optional[str] = None,
+        cohort: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Retrieve trade history with rich filtering and model isolation."""
         conditions = []
@@ -385,6 +386,20 @@ class JournalRepository:
             )
             m_val = str(d.get("model_id") or "").strip().upper()
             d["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B") else ("UNKNOWN" if not m_val else m_val)
+
+            cohort_ver = details.get("cohort_version")
+            is_v2 = (cohort_ver == "MODEL_B_V2_REMEDIATED") or (entry_ts is not None and entry_ts >= 1792838400000)
+            cohort_name = "V2" if is_v2 else "V1"
+            cohort_label = "V2 (Remediated)" if is_v2 else ("V1 (Archived)" if cohort_ver == "MODEL_B_V1_ARCHIVED" else "V1 (Legacy)")
+
+            if cohort and cohort.upper() != "ALL":
+                c_req = cohort.upper().strip()
+                if cohort_name != c_req and str(cohort_ver).upper() != c_req:
+                    continue
+
+            d["cohort"] = cohort_name
+            d["cohort_version"] = cohort_ver or ("MODEL_B_V2_REMEDIATED" if is_v2 else "MODEL_B_V1")
+            d["cohort_label"] = cohort_label
             results.append(d)
 
         return results

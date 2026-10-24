@@ -91,6 +91,12 @@ model_b:
   max_open_per_direction: 3
   cohort_version: "MODEL_B_V2_REMEDIATED"
   cohort_cutover_ms: 1792838400000
+  live_target_trade_risk_usdt: 0.45
+  live_max_margin_usdt: 4.00
+  live_daily_loss_limit_usdt: 1.35
+  live_weekly_loss_limit_usdt: 3.00
+  live_max_open_positions: 2
+  live_max_open_per_direction: 1
   max_leverage: 10
   short_regime_gate_enabled: true
   diagnostic_breaker_override: false
