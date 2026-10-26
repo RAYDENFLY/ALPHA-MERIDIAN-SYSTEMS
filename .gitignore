@@ -13,8 +13,11 @@
 credentials.json
 
 # 2. Local SQLite databases, WAL/SHM journals & runtime state
+data/*.db*
 data/*.db
+data/*.db*
 data/*.db-wal
+data/*.db*
 data/*.db-shm
 *.db
 *.db-wal
@@ -29,6 +32,7 @@ tmp/
 temp/
 scratch/
 *.tmp
+*.bak*
 *.bak
 *.orig
 
