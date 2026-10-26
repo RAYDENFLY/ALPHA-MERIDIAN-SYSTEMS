@@ -519,10 +519,12 @@ class GroqAutoTrader:
         specs = self.inspector.get_symbol_specs(symbol)
         step_size = specs.step_size or 0.001
         min_notional = specs.min_notional or 5.0
+        tick_size = specs.tick_size or 0.01
 
         setup, reason = coordinator.ema_strategy.evaluate(
             symbol=symbol,
             candles_5m=candles_5m,
+            tick_size=tick_size,
             step_size=step_size,
             min_notional=min_notional,
             account_equity=coordinator.current_equity,
@@ -1004,7 +1006,7 @@ class GroqAutoTrader:
                                 side=close_side,
                                 order_type="LIMIT",
                                 quantity=fill_qty,
-                                price=round(setup_output.take_profit_price, 4),
+                                price=self.inspector.get_symbol_specs(setup_output.symbol).round_price(setup_output.take_profit_price, rounding="NEAREST"),
                                 reduce_only=True,
                                 time_in_force="GTC",
                             )

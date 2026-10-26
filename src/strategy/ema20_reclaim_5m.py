@@ -14,7 +14,7 @@ Deterministic rules:
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 from src.core.types import Candle, Direction
-from src.risk.live_micro_sizing import LiveMicroSizingEngine, LiveMicroSizingResult
+from src.risk.live_micro_sizing import LiveMicroSizingEngine, LiveMicroSizingResult, normalize_price_to_tick
 from config.settings import LiveMicroCostsConfig, LiveMicroRiskConfig
 
 
@@ -97,6 +97,7 @@ class EMA20ReclaimStrategy:
         self,
         symbol: str,
         candles_5m: List[Candle],
+        tick_size: float = 0.01,
         step_size: float = 0.001,
         min_notional: float = 5.0,
         account_equity: float = 16.0,
@@ -136,9 +137,15 @@ class EMA20ReclaimStrategy:
 
             if pullback_bars:
                 # Lowest low of the pullback below EMA20
-                pullback_low = min(c.low for c in pullback_bars)
-                entry_price = curr_candle.close
-                stop_loss = pullback_low
+                raw_pullback_low = min(c.low for c in pullback_bars)
+                raw_entry_price = curr_candle.close
+
+                # Deterministic tick-size normalization
+                entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
+                stop_loss = normalize_price_to_tick(raw_pullback_low, tick_size, rounding="FLOOR")
+
+                if stop_loss >= entry_price:
+                    return None, f"INVALID_STOP_PRICE: Normalized stop {stop_loss} >= entry {entry_price} for LONG"
 
                 stop_dist = entry_price - stop_loss
                 if stop_dist > 0:
@@ -148,9 +155,13 @@ class EMA20ReclaimStrategy:
                     max_stop = self.costs_cfg.max_stop_distance_pct
 
                     if min_stop <= stop_dist_pct <= max_stop:
-                        # Set Target Price: Default 2.2x gross RR to reliably clear expected net-RR 1.50
+                        # Set Target Price: Default 2.25x gross RR
                         target_dist = stop_dist * 2.25
-                        take_profit = entry_price + target_dist
+                        raw_tp = entry_price + target_dist
+                        take_profit = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST")
+
+                        if take_profit <= entry_price:
+                            return None, f"INVALID_TAKE_PROFIT: Normalized TP {take_profit} <= entry {entry_price} for LONG"
 
                         sizing = self.sizing_engine.size_position(
                             entry_price=entry_price,
@@ -177,7 +188,7 @@ class EMA20ReclaimStrategy:
                                 pullback_bars_count=len(pullback_bars),
                                 reasons=[
                                     f"5m EMA20 Reclaim: Close ${entry_price:.4f} > EMA20 ${curr_ema20:.4f}",
-                                    f"Pullback Low: ${pullback_low:.4f} ({stop_dist_pct * 100:.2f}% distance)",
+                                    f"Pullback Low: ${stop_loss:.4f} ({stop_dist_pct * 100:.2f}% distance)",
                                     f"Net-RR: {sizing.expected_net_rr:.2f} >= 1.50 gate (Loss: ${sizing.expected_conservative_loss_usd:.2f})",
                                 ],
                             )
@@ -207,9 +218,15 @@ class EMA20ReclaimStrategy:
                     pullback_bars.append(c)
 
             if pullback_bars:
-                pullback_high = max(c.high for c in pullback_bars)
-                entry_price = curr_candle.close
-                stop_loss = pullback_high
+                raw_pullback_high = max(c.high for c in pullback_bars)
+                raw_entry_price = curr_candle.close
+
+                # Deterministic tick-size normalization
+                entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
+                stop_loss = normalize_price_to_tick(raw_pullback_high, tick_size, rounding="CEIL")
+
+                if stop_loss <= entry_price:
+                    return None, f"INVALID_STOP_PRICE: Normalized stop {stop_loss} <= entry {entry_price} for SHORT"
 
                 stop_dist = stop_loss - entry_price
                 if stop_dist > 0:
@@ -219,7 +236,11 @@ class EMA20ReclaimStrategy:
 
                     if min_stop <= stop_dist_pct <= max_stop:
                         target_dist = stop_dist * 2.25
-                        take_profit = entry_price - target_dist
+                        raw_tp = entry_price - target_dist
+                        take_profit = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST")
+
+                        if take_profit >= entry_price:
+                            return None, f"INVALID_TAKE_PROFIT: Normalized TP {take_profit} >= entry {entry_price} for SHORT"
 
                         sizing = self.sizing_engine.size_position(
                             entry_price=entry_price,
@@ -246,7 +267,7 @@ class EMA20ReclaimStrategy:
                                 pullback_bars_count=len(pullback_bars),
                                 reasons=[
                                     f"5m EMA20 Short Reclaim: Close ${entry_price:.4f} < EMA20 ${curr_ema20:.4f}",
-                                    f"Pullback High: ${pullback_high:.4f} ({stop_dist_pct * 100:.2f}% distance)",
+                                    f"Pullback High: ${stop_loss:.4f} ({stop_dist_pct * 100:.2f}% distance)",
                                     f"Net-RR: {sizing.expected_net_rr:.2f} >= 1.50 gate (Loss: ${sizing.expected_conservative_loss_usd:.2f})",
                                 ],
                             )

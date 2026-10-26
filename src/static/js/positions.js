@@ -385,10 +385,16 @@
                     }
                 }
 
-                document.getElementById('dailyLossDisplay').innerText = `$${data.risk_limits.daily_loss_used_usdt.toFixed(2)} / $${data.risk_limits.daily_loss_limit_usdt.toFixed(2)}`;
+                const lossUsed = Number(data.risk_limits.daily_loss_used_usdt);
+                const lossState = data.risk_limits.daily_loss_status || 'UNVERIFIED';
+                document.getElementById('dailyLossDisplay').innerText = Number.isFinite(lossUsed)
+                    ? `$${lossUsed.toFixed(2)} / $${Number(data.risk_limits.daily_loss_limit_usdt).toFixed(2)}${lossState === 'VERIFIED' ? '' : ' (UNVERIFIED)'}`
+                    : `UNVERIFIED / $${Number(data.risk_limits.daily_loss_limit_usdt).toFixed(2)}`;
                 document.getElementById('weeklyLossDisplay').innerText = `$${data.risk_limits.weekly_loss_used_usdt.toFixed(2)} / $${data.risk_limits.weekly_loss_limit_usdt.toFixed(2)}`;
                 document.getElementById('capsDisplay').innerText = `${data.risk_limits.open_positions} / ${data.risk_limits.max_open_positions} Paper Pos`;
-                document.getElementById('entriesDisplay').innerText = `Entries This Week: ${data.risk_limits.weekly_entries} (Paper)`;
+                const entriesUsed = data.risk_limits.daily_entries_used;
+                const entriesCap = data.risk_limits.max_daily_entries || 3;
+                document.getElementById('entriesDisplay').innerText = `Entries Today: ${entriesUsed ?? 'UNVERIFIED'} / ${entriesCap}`;
 
                 // Scanner State & Metadata
                 if (data.scanner) {

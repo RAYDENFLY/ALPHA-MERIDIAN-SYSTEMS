@@ -441,7 +441,10 @@ class LiveAutoSessionManager:
             # Restore GlobalPositionLock if position or open order exists
             if self.coordinator:
                 if active_pos_symbol:
-                    lock_state = "PROTECTED" if len(open_orders) >= 2 else ("PARTIALLY_PROTECTED" if len(open_orders) == 1 else "FILLED")
+                    symbol_orders = [o for o in open_orders if str(o.get("symbol", "")).upper() == active_pos_symbol]
+                    has_tp = any(str(o.get("type", o.get("orderType", ""))).upper() == "LIMIT" and bool(o.get("reduceOnly", o.get("reduce_only", False))) for o in symbol_orders)
+                    has_sl = any(str(o.get("type", o.get("orderType", ""))).upper() in ("STOP_MARKET", "STOP") and bool(o.get("reduceOnly", o.get("reduce_only", False))) for o in symbol_orders)
+                    lock_state = "PROTECTED" if has_tp and has_sl else ("PARTIALLY_PROTECTED" if (has_tp or has_sl) else "FILLED")
                     if lock_state != "PROTECTED" and self.coordinator:
                         self.coordinator.entries_paused = True
                         logger.critical(
@@ -461,6 +464,11 @@ class LiveAutoSessionManager:
                         "GlobalPositionLock restored for open position %s (qty: %s, state: %s).",
                         active_pos_symbol, active_pos_qty, lock_state
                     )
+                elif self.coordinator.global_lock.is_locked:
+                    # A successful exchange query showing no position is the only
+                    # safe condition for releasing a stale process-local lock.
+                    self.coordinator.global_lock.release(reason="EXCHANGE_POSITION_CLOSED", verified_by_exchange=True)
+                    self.coordinator.entries_paused = False
                 elif open_orders:
                     # Resting entry orders held
                     first_sym = str(open_orders[0].get("symbol", "")).upper()
@@ -584,8 +592,6 @@ class LiveAutoSessionManager:
                 if not self.is_authorized_and_active():
                     break
 
-                self._last_scan_utc = datetime.now(timezone.utc).isoformat()
-
                 if self.coordinator and self.coordinator.global_lock.is_locked:
                     lock_sym = self.coordinator.global_lock.active_symbol
                     lock_st = self.coordinator.global_lock.state
@@ -612,6 +618,11 @@ class LiveAutoSessionManager:
                             automated_journal=self.automated_journal,
                             session_manager=self,
                         )
+                # This timestamp means a cycle completed, not merely that the
+                # thread woke up. Failed/skipped cycles remain observable via
+                # last_status_message and logs rather than masquerading as scans.
+                self._last_scan_utc = datetime.now(timezone.utc).isoformat()
+                self._persist_state()
             except Exception as e:
                 logger.error("Error in LIVE_AUTO background scanner loop: %s", e)
 
@@ -694,6 +705,13 @@ class LiveAutoSessionManager:
         shadow_only_ok = False
         journal_ok = False
         no_active_position_ok = False
+
+        # A process-local lock is never authoritative. Refresh it from the
+        # exchange before evaluating start/reauthorization eligibility.
+        exchange_sync_ok, exchange_sync_msg = self._refresh_lock_from_exchange()
+        requires_exchange_sync = self.mode == ExecutionMode.LIVE_AUTO or is_reauthorization
+        if requires_exchange_sync and not exchange_sync_ok:
+            errors.append(f"Exchange position reconciliation unresolved: {exchange_sync_msg}")
 
         # 0. Session Health & Recovery State Check
         if self.state == LiveSessionState.RECOVERY_REQUIRED:
@@ -809,6 +827,42 @@ class LiveAutoSessionManager:
             no_active_position_ok=no_active_position_ok,
         )
 
+    def _refresh_lock_from_exchange(self) -> Tuple[bool, str]:
+        """Read-only exchange reconciliation for the process-local position lock."""
+        if not self.coordinator:
+            return True, "No coordinator configured"
+        adapter = getattr(self, "exchange_adapter", None)
+        account_service = getattr(self, "account_service", None)
+        if not adapter and account_service:
+            adapter = getattr(account_service, "adapter", None)
+        if not adapter or not hasattr(adapter, "get_positions") or not hasattr(adapter, "get_open_orders"):
+            return False, "read-only exchange adapter unavailable"
+        try:
+            positions = adapter.get_positions() or []
+            orders = adapter.get_open_orders() or []
+        except Exception as exc:
+            return False, str(exc)
+
+        active = [p for p in positions if abs(float(p.get("positionAmt", p.get("size", 0.0)) or 0.0)) > 1e-6]
+        if not active:
+            if self.coordinator.global_lock.is_locked:
+                self.coordinator.global_lock.release(reason="EXCHANGE_POSITION_CLOSED", verified_by_exchange=True)
+            self.coordinator.entries_paused = False
+            return True, "Exchange reports no open position"
+
+        p0 = active[0]
+        symbol = str(p0.get("symbol", "")).upper()
+        symbol_orders = [o for o in orders if str(o.get("symbol", "")).upper() == symbol and str(o.get("status", "NEW")).upper() in ("NEW", "PARTIALLY_FILLED")]
+        has_tp = any(str(o.get("type", o.get("orderType", ""))).upper() == "LIMIT" and bool(o.get("reduceOnly", o.get("reduce_only", False))) for o in symbol_orders)
+        has_sl = any(str(o.get("type", o.get("orderType", ""))).upper() in ("STOP_MARKET", "STOP") and bool(o.get("reduceOnly", o.get("reduce_only", False))) for o in symbol_orders)
+        state = "PROTECTED" if has_tp and has_sl else ("PARTIALLY_PROTECTED" if has_tp or has_sl else "FILLED")
+        if not self.coordinator.global_lock.is_locked:
+            self.coordinator.global_lock.acquire("EMA20_RECLAIM_5M_V1", symbol, "EXCHANGE_RECONCILED", state=state)
+        else:
+            self.coordinator.global_lock.update_state(state)
+        self.coordinator.entries_paused = state != "PROTECTED"
+        return True, f"Exchange reports {symbol} position active ({state})"
+
     def start_session(self, operator_id: str = "OPERATOR") -> Tuple[bool, str, LiveSessionInfo]:
         """Explicit operator action: Start LIVE Auto-Execution Session after verifying pre-flight."""
         with self._mutex:
@@ -909,6 +963,7 @@ class LiveAutoSessionManager:
             self.stopped_at_utc = datetime.now(timezone.utc).isoformat()
             self.mode = ExecutionMode.PAPER  # Fallback to PAPER safely
 
+            self._refresh_lock_from_exchange()
             has_open_position = False
             position_msg = "No open position active."
             if self.coordinator and self.coordinator.global_lock.is_locked:
@@ -1013,6 +1068,7 @@ class LiveAutoSessionManager:
                 info["current_equity_usd"] = self.coordinator.current_equity
                 info["daily_filled_entries"] = self.coordinator.daily_filled_entries
                 info["daily_realized_loss_usd"] = self.coordinator.daily_realized_loss
+                info["daily_loss_snapshot"] = self.coordinator.get_daily_loss_snapshot()
                 info["global_lock_held"] = self.coordinator.global_lock.is_locked
                 info["global_lock_symbol"] = self.coordinator.global_lock.active_symbol
                 info["global_lock_state"] = self.coordinator.global_lock.state

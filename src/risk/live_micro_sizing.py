@@ -18,6 +18,7 @@ Implements the mandatory two-stage cost calculations:
 """
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_DOWN, ROUND_UP, ROUND_HALF_UP
 import math
 from typing import Optional, Tuple
 from config.settings import LiveMicroCostsConfig, LiveMicroRiskConfig
@@ -56,6 +57,44 @@ def floor_to_step(value: float, step: float) -> float:
     factor = 10 ** precision
     stepped = math.floor((value + 1e-12) / step) * step
     return round(stepped, precision)
+
+
+def normalize_price_to_tick(price: float, tick_size: float, rounding: str = "NEAREST") -> float:
+    """Normalize a price to the exact exchange tick size increment.
+    
+    Parameters:
+    - price: The raw price (must be positive).
+    - tick_size: The exchange tick size (e.g. 0.0100 for SOL, 0.01 for ETH, 0.1 for BTC).
+    - rounding: Rounding direction ("NEAREST", "FLOOR", "CEIL").
+    
+    Returns:
+    - float: Normalized price strictly conforming to tick size.
+    
+    Raises:
+    - ValueError: If price <= 0 or tick_size <= 0.
+    """
+    if price <= 0:
+        raise ValueError(f"Price must be positive, got {price}")
+    if tick_size <= 0:
+        raise ValueError(f"Tick size must be positive, got {tick_size}")
+
+    d_price = Decimal(str(price))
+    d_tick = Decimal(str(tick_size))
+
+    r_mode = rounding.upper()
+    if r_mode in ("FLOOR", "DOWN", "ROUND_DOWN"):
+        round_mode = ROUND_DOWN
+    elif r_mode in ("CEIL", "UP", "ROUND_UP"):
+        round_mode = ROUND_UP
+    else:
+        round_mode = ROUND_HALF_UP
+
+    num_ticks = (d_price / d_tick).quantize(Decimal("1"), rounding=round_mode)
+    quantized_price = num_ticks * d_tick
+
+    tick_str = f"{tick_size:.10f}".rstrip("0")
+    precision = len(tick_str.split(".")[1]) if "." in tick_str else 0
+    return float(round(quantized_price, precision))
 
 
 class LiveMicroSizingEngine:

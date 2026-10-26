@@ -2,19 +2,21 @@
 // AUTOMATED ASTER DEX TRADE JOURNAL & UNIFIED TABLE INSPECTOR
 // =========================================================================
 
-let journalModeFilter = 'LIVE'; // LIVE, PAPER, SHADOW, ALL
-let journalStrategyFilter = 'ALL';
-let journalSideFilter = 'ALL';
-let journalStatusFilter = 'ALL';
-let journalReconFilter = 'ALL';
-let journalStartDate = '';
-let journalEndDate = '';
-let journalSearchQuery = '';
-let journalSortBy = 'NEWEST';
+// State variables are declared in shared/state.js.
+// Initialize defaults if not already defined:
+if (typeof journalModeFilter === 'undefined') window.journalModeFilter = 'LIVE';
+if (typeof journalStrategyFilter === 'undefined') window.journalStrategyFilter = 'ALL';
+if (typeof journalSideFilter === 'undefined') window.journalSideFilter = 'ALL';
+if (typeof journalStatusFilter === 'undefined') window.journalStatusFilter = 'ALL';
+if (typeof journalReconFilter === 'undefined') window.journalReconFilter = 'ALL';
+if (typeof journalStartDate === 'undefined') window.journalStartDate = '';
+if (typeof journalEndDate === 'undefined') window.journalEndDate = '';
+if (typeof journalSearchQuery === 'undefined') window.journalSearchQuery = '';
+if (typeof journalSortBy === 'undefined') window.journalSortBy = 'NEWEST';
 
-let lastFetchedTrades = [];
-let cachedFillsByTrade = {};
-let expandedTrades = new Set();
+if (typeof lastFetchedTrades === 'undefined') window.lastFetchedTrades = [];
+if (typeof cachedFillsByTrade === 'undefined') window.cachedFillsByTrade = {};
+if (typeof expandedTrades === 'undefined') window.expandedTrades = new Set();
 
 function setJournalMode(mode) {
     journalModeFilter = mode;
@@ -183,7 +185,21 @@ function formatCurrency(c) {
 
 async function loadJournal() {
     const refreshBtn = document.getElementById('refreshJournalBtn');
+    const tbody = document.getElementById('journalTableBody');
+    const emptyState = document.getElementById('journalEmptyState');
+    const title = document.getElementById('journalEmptyTitle');
+    const msg = document.getElementById('journalEmptyMessage');
+    const countEl = document.getElementById('journalTableRecordCount');
+
     if (refreshBtn) refreshBtn.classList.add('opacity-75');
+
+    // Show initial loading state if table has no rows
+    if ((!lastFetchedTrades || lastFetchedTrades.length === 0) && emptyState) {
+        emptyState.classList.remove('hidden');
+        if (title) title.innerText = 'Loading Trade Records...';
+        if (msg) msg.innerText = 'Fetching verified execution and fill data from Aster DEX...';
+        if (countEl) countEl.innerText = 'Loading trades...';
+    }
 
     try {
         const params = new URLSearchParams();
@@ -208,10 +224,12 @@ async function loadJournal() {
             fetch(`/api/v1/journal/summary?mode=${journalModeFilter}`)
         ]);
 
-        if (tradesRes.ok) {
-            const data = await tradesRes.json();
-            lastFetchedTrades = data.trades || [];
+        if (!tradesRes.ok) {
+            throw new Error(`HTTP ${tradesRes.status}: Unable to retrieve trades from Aster DEX API`);
         }
+
+        const data = await tradesRes.json();
+        lastFetchedTrades = data.trades || [];
 
         if (summaryRes.ok) {
             const summary = await summaryRes.json();
@@ -221,6 +239,12 @@ async function loadJournal() {
         renderJournalTable();
     } catch (err) {
         console.error("Journal loading error:", err);
+        if (emptyState) {
+            emptyState.classList.remove('hidden');
+            if (title) title.innerText = 'Unable to Load Journal';
+            if (msg) msg.innerHTML = `Error: ${err.message || 'Failed to connect to Aster DEX trade journal API.'} <button onclick="loadJournal()" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold ml-2 shadow-sm transition">Retry</button>`;
+        }
+        if (countEl) countEl.innerText = 'Unable to load trades';
     } finally {
         if (refreshBtn) refreshBtn.classList.remove('opacity-75');
     }
@@ -366,7 +390,13 @@ function renderJournalTable() {
 
     if (!trades || trades.length === 0) {
         if (tbody) tbody.innerHTML = '';
-        if (emptyState) emptyState.classList.remove('hidden');
+        if (emptyState) {
+            emptyState.classList.remove('hidden');
+            const title = document.getElementById('journalEmptyTitle');
+            const msg = document.getElementById('journalEmptyMessage');
+            if (title) title.innerText = 'No Trade Records Found';
+            if (msg) msg.innerHTML = 'No automated trade executions found matching the selected filters. <button onclick="resetJournalFilters()" class="text-indigo-400 hover:text-indigo-300 underline font-semibold ml-1 cursor-pointer">Reset Filters</button>';
+        }
         return;
     }
 
@@ -705,5 +735,41 @@ async function triggerReconciliation() {
             btn.disabled = false;
             btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Reconcile AsterDEX</span>';
         }
+    }
+}
+
+// =========================================================================
+// GLOBAL EXPORTS & INITIALIZATION
+// =========================================================================
+window.setJournalMode = setJournalMode;
+window.updateExportLinks = updateExportLinks;
+window.handleJournalSearchInput = handleJournalSearchInput;
+window.handleJournalStrategyChange = handleJournalStrategyChange;
+window.handleJournalSideChange = handleJournalSideChange;
+window.handleJournalStatusChange = handleJournalStatusChange;
+window.handleJournalReconChange = handleJournalReconChange;
+window.handleJournalDateChange = handleJournalDateChange;
+window.handleJournalSortChange = handleJournalSortChange;
+window.resetJournalFilters = resetJournalFilters;
+window.loadJournal = loadJournal;
+window.renderJournalTable = renderJournalTable;
+window.renderJournalSummary = renderJournalSummary;
+window.toggleTradeDetails = toggleTradeDetails;
+window.triggerReconciliation = triggerReconciliation;
+
+// Initialize on DOM ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        updateExportLinks();
+        const tabParam = new URLSearchParams(window.location.search).get('tab');
+        if (tabParam === 'journal' || window.location.hash === '#tab-journal') {
+            loadJournal();
+        }
+    });
+} else {
+    updateExportLinks();
+    const tabParam = new URLSearchParams(window.location.search).get('tab');
+    if (tabParam === 'journal' || window.location.hash === '#tab-journal') {
+        loadJournal();
     }
 }

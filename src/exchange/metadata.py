@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 import math
 from typing import Any, Dict, Optional
+from src.risk.live_micro_sizing import normalize_price_to_tick
 
 
 @dataclass
@@ -24,14 +25,13 @@ class SymbolSpecs:
     min_notional: float
     maint_margin_percent: float
 
-    def round_price(self, price: float) -> float:
-        """Round price to tick size and price precision."""
+    def round_price(self, price: float, rounding: str = "NEAREST") -> float:
+        """Round price to tick size and price precision using specified rounding mode."""
+        if price <= 0:
+            return 0.0
         if self.tick_size <= 0:
             return round(price, self.price_precision)
-        d_price = Decimal(str(price))
-        d_tick = Decimal(str(self.tick_size))
-        rounded = (d_price / d_tick).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * d_tick
-        return float(rounded)
+        return normalize_price_to_tick(price, self.tick_size, rounding=rounding)
 
     def round_quantity(self, quantity: float) -> float:
         """Round quantity down to step size and quantity precision to avoid exceeding budget."""

@@ -763,6 +763,8 @@ def get_system_status() -> Dict[str, Any]:
     from src.risk.tier import resolve_equity_tier
     tier_res = resolve_equity_tier(active_equity_for_tier, cfg.risk.equity_tier)
 
+    live_info = live_auto_session_manager.get_session_info()
+    live_loss = live_info.get("daily_loss_snapshot", {})
     return {
         "app_name": cfg.app_name,
         "version": cfg.version,
@@ -788,12 +790,16 @@ def get_system_status() -> Dict[str, Any]:
             "configured_trade_risk_usdt": cfg.risk.risk_per_trade_usdt,
             "effective_trade_risk_usdt": effective_risk,
             "daily_loss_limit_usdt": cfg.risk.daily_loss_limit_usdt,
-            "daily_loss_used_usdt": round(risk_mgr.daily_loss_usdt, 4),
+            "daily_loss_used_usdt": live_loss.get("used_usdt"),
+            "daily_loss_status": live_loss.get("status", "UNVERIFIED"),
+            "daily_loss_reason": live_loss.get("reason"),
             "weekly_loss_limit_usdt": cfg.risk.weekly_loss_limit_usdt,
             "weekly_loss_used_usdt": round(risk_mgr.weekly_loss_usdt, 4),
             "open_positions": len(risk_mgr.open_trades),
             "max_open_positions": cfg.risk.max_open_positions,
-            "weekly_entries": risk_mgr.weekly_entries_count,
+            "weekly_entries": live_info.get("daily_filled_entries"),
+            "daily_entries_used": live_info.get("daily_filled_entries"),
+            "max_daily_entries": live_info.get("daily_loss_snapshot", {}).get("max_daily_entries", getattr(live_auto_session_manager.coordinator.config.risk, "max_filled_entries_per_day", 3)) if live_auto_session_manager.coordinator else 3,
             "max_weekly_entries": cfg.risk.max_entries_per_week,
             "can_open_position": can_open,
             "block_reason": block_reason,
@@ -811,7 +817,7 @@ def get_system_status() -> Dict[str, Any]:
             "has_completed_scan": bool(getattr(runner, "has_completed_scan", False)) if runner else False,
             "scan_count": int(getattr(runner, "scan_count", 0)) if runner else 0,
             "last_scan_status": getattr(runner, "last_scan_status", "NEVER_RUN") if runner else "NEVER_RUN",
-            "last_scan_utc": runner.last_scan_utc if runner else None,
+            "last_scan_utc": live_info.get("last_scan_utc") or (runner.last_scan_utc if runner else None),
             "last_scan_age_seconds": last_scan_age_sec,
             "last_successful_scan_utc": runner.last_successful_scan_utc if runner else None,
             "latest_candle_time_utc": runner.latest_candle_time_utc if runner else None,

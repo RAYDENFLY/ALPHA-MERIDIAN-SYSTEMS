@@ -16,6 +16,7 @@ import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.data.database import DatabaseManager
+from src.risk.live_micro_sizing import normalize_price_to_tick
 from src.journal.models import (
     AutomatedTradeRecord,
     DataQualityFlag,
@@ -640,37 +641,60 @@ class AutomatedTradeJournal:
 
             # D. Place Exchange-Side LIMIT TP order if entry is filled and TP not yet placed
             effective_pos_qty = actual_open_qty if exchange_positions is not None else tr.filled_quantity
-            if allow_tp_submission and effective_pos_qty > 0 and (not tr.tp_order_id or tr.tp_status in ("NOT_PLACED", "REJECTED")):
+            if allow_tp_submission and effective_pos_qty > 0 and not tr.tp_order_id and (tr.tp_status == "NOT_PLACED" or not tr.tp_status):
                 # Ensure no duplicate TP limit order exists in sym_orders
                 if not open_tp_orders and exchange_adapter and hasattr(exchange_adapter, "create_order"):
                     close_side = "SELL" if tr.side == "LONG" else "BUY"
                     tp_qty = effective_pos_qty
-                    tp_price = round(tr.planned_take_profit_price, 4) if tr.planned_take_profit_price else 0.0
-                    try:
-                        logger.info("Placing exchange LIMIT TP order for %s: %s %s @ %s", tr.symbol, close_side, tp_qty, tp_price)
-                        tp_resp = exchange_adapter.create_order(
-                            symbol=tr.symbol,
-                            side=close_side,
-                            order_type="LIMIT",
-                            quantity=tp_qty,
-                            price=tp_price,
-                            reduce_only=True,
-                            time_in_force="GTC",
-                        )
-                        if tp_resp and "orderId" in tp_resp:
-                            tr.tp_order_id = str(tp_resp["orderId"])
-                            tr.tp_order_type = "LIMIT"
-                            tr.tp_status = "PLACED"
-                            tr.tp_price = tp_price
-                            tr.tp_quantity = tp_qty
-                            reconciliation_summary["details"].append(
-                                f"Placed exchange LIMIT TP for {tr.trade_id} ({tr.symbol}): orderId={tr.tp_order_id}"
-                            )
-                    except Exception as tp_place_err:
-                        logger.warning("Could not lodge exchange LIMIT TP: %s", tp_place_err)
-                        tr.tp_status = "REJECTED"
-                        tr.notes = f"{tr.notes}; TP submission failed: {tp_place_err}".strip("; ")
+
+                    # Normalize TP price to instrument tick_size
+                    tick_size = 0.01
+                    if exchange_adapter:
+                        if hasattr(exchange_adapter, "_catalog_cache") and exchange_adapter._catalog_cache:
+                            inst = exchange_adapter._catalog_cache.get(tr.symbol.upper())
+                            if inst and getattr(inst, "tick_size", None):
+                                tick_size = float(inst.tick_size)
+                    raw_tp = float(tr.planned_take_profit_price or 0.0)
+                    tp_price = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST") if raw_tp > 0 else 0.0
+
+                    entry_px = float(tr.average_entry_price or tr.planned_entry_price or 0.0)
+                    is_valid_tp = False
+                    if tp_price > 0:
+                        if tr.side == "LONG" and (entry_px <= 0 or tp_price > entry_px):
+                            is_valid_tp = True
+                        elif tr.side == "SHORT" and (entry_px <= 0 or tp_price < entry_px):
+                            is_valid_tp = True
+
+                    if not is_valid_tp:
+                        logger.warning("TP price %s violates directional bounds relative to entry %s for %s (%s)", tp_price, entry_px, tr.trade_id, tr.side)
                         tr.reconciliation_status = ReconciliationStatus.REQUIRES_RECONCILIATION.value
+                        tr.notes = f"{tr.notes}; Invalid TP price {tp_price} vs entry {entry_px}".strip("; ")
+                    else:
+                        try:
+                            logger.info("Placing exchange LIMIT TP order for %s: %s %s @ %s", tr.symbol, close_side, tp_qty, tp_price)
+                            tp_resp = exchange_adapter.create_order(
+                                symbol=tr.symbol,
+                                side=close_side,
+                                order_type="LIMIT",
+                                quantity=tp_qty,
+                                price=tp_price,
+                                reduce_only=True,
+                                time_in_force="GTC",
+                            )
+                            if tp_resp and "orderId" in tp_resp:
+                                tr.tp_order_id = str(tp_resp["orderId"])
+                                tr.tp_order_type = "LIMIT"
+                                tr.tp_status = "PLACED"
+                                tr.tp_price = tp_price
+                                tr.tp_quantity = tp_qty
+                                reconciliation_summary["details"].append(
+                                    f"Placed exchange LIMIT TP for {tr.trade_id} ({tr.symbol}): orderId={tr.tp_order_id}"
+                                )
+                        except Exception as tp_place_err:
+                            logger.warning("Could not lodge exchange LIMIT TP: %s", tp_place_err)
+                            tr.tp_status = "REJECTED"
+                            tr.notes = f"{tr.notes}; TP submission failed: {tp_place_err}".strip("; ")
+                            tr.reconciliation_status = ReconciliationStatus.REQUIRES_RECONCILIATION.value
             elif effective_pos_qty > 0 and not tr.tp_order_id:
                 tr.reconciliation_status = ReconciliationStatus.REQUIRES_RECONCILIATION.value
                 tr.notes = (

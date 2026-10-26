@@ -187,6 +187,51 @@ class LiveMicroCoordinator:
         # Re-evaluate kill switch
         self.check_risk_limits()
 
+    def get_daily_loss_snapshot(self) -> Dict[str, Any]:
+        """Return the persistent LIVE ledger loss for the current UTC day.
+
+        The in-memory counter is intentionally not authoritative: it disappears
+        on restart and can diverge from exchange-reconciled fills.
+        """
+        day = datetime.now(timezone.utc).date().isoformat()
+        daily_limit = getattr(self.config.risk, "daily_loss_limit_usdt", getattr(self.config.risk, "daily_loss_limit_usd", 0.45))
+        result: Dict[str, Any] = {
+            "used_usdt": None,
+            "limit_usdt": float(daily_limit),
+            "status": "UNVERIFIED",
+            "timezone": "UTC",
+            "trades_count": 0,
+            "reason": "LIVE journal unavailable",
+        }
+        if not self.db:
+            return result
+        try:
+            with self.db.get_connection() as conn:
+                rows = conn.execute(
+                    """SELECT net_pnl_usd, status, reconciliation_status, exit_timestamp_utc
+                       FROM automated_trade_journal
+                       WHERE mode = 'LIVE' AND status = 'CLOSED'
+                         AND exit_timestamp_utc IS NOT NULL
+                         AND substr(exit_timestamp_utc, 1, 10) = ?""",
+                    (day,),
+                ).fetchall()
+                open_unreconciled = conn.execute(
+                    """SELECT COUNT(*) FROM automated_trade_journal
+                       WHERE mode = 'LIVE' AND status IN ('OPEN','PENDING')
+                         AND reconciliation_status != 'RECONCILED'"""
+                ).fetchone()[0]
+            used = sum(max(0.0, -float(row[0] or 0.0)) for row in rows)
+            result.update({
+                "used_usdt": round(used, 6),
+                "status": "UNVERIFIED" if open_unreconciled else "VERIFIED",
+                "trades_count": len(rows),
+                "reason": "Open LIVE trade reconciliation incomplete" if open_unreconciled else "Exchange-reconciled closed LIVE journal",
+            })
+            return result
+        except Exception as exc:
+            result["reason"] = f"LIVE journal query failed: {exc}"
+            return result
+
     def run_5m_scan_cycle(
         self,
         universe_symbols: List[str],
