@@ -765,15 +765,22 @@ def get_system_status() -> Dict[str, Any]:
 
     live_info = live_auto_session_manager.get_session_info()
     live_loss = live_info.get("daily_loss_snapshot", {})
+    live_mode = live_info.get("mode") in ("LIVE_AUTO", "LIVE_MANUAL")
+    live_equity = live_info.get("current_equity_usd") if live_mode else None
+    active_mode = live_info.get("mode") if (live_mode and live_info.get("state") in ("ACTIVE", "PAUSED", "REAUTHORIZATION_REQUIRED")) else cfg.mode.value
     return {
         "app_name": cfg.app_name,
         "version": cfg.version,
-        "mode": cfg.mode.value,
+        "mode": active_mode,
+        "base_mode": cfg.mode.value,
+        "session_state": live_info.get("state", "INACTIVE"),
+        "session_id": live_info.get("session_id"),
         "live_trading_locked": cfg.live_trading_locked,
         "account": account_data,
         "capital": {
             "initial_equity_usdt": cfg.risk.initial_equity_usdt,
-            "current_equity_usdt": round(risk_mgr.equity_usdt, 4),
+            "current_equity_usdt": round(live_equity, 4) if live_equity is not None else (round(risk_mgr.equity_usdt, 4) if not live_mode else None),
+            "current_equity_source": live_info.get("current_equity_source") if live_mode else "LOCAL_RISK_MANAGER_PAPER",
             "verified_live_equity_usdt": account_snapshot.total_equity_usdt if (account_snapshot and account_snapshot.status == AccountConnectionStatus.CONNECTED) else None,
             "margin_mode": cfg.risk.margin_mode,
             "max_leverage": cfg.risk.max_leverage,
@@ -803,6 +810,12 @@ def get_system_status() -> Dict[str, Any]:
             "max_weekly_entries": cfg.risk.max_entries_per_week,
             "can_open_position": can_open,
             "block_reason": block_reason,
+            "reconciliation_status": live_info.get("reconciliation_status", "UNVERIFIED"),
+            "reconciliation_timestamp_utc": live_info.get("reconciliation_timestamp_utc"),
+            "position_amt": live_info.get("position_amt"),
+            "active_protective_order_count": live_info.get("active_protective_order_count"),
+            "lock_state": live_info.get("lock_state", live_info.get("global_lock_state")),
+            "lock_symbol": live_info.get("lock_symbol", live_info.get("global_lock_symbol")),
             "target_isolated_margin_usdt": cfg.risk.target_isolated_margin_usdt,
             "target_isolated_margin_max_usdt": cfg.risk.target_isolated_margin_max_usdt,
             "hard_risk_limit_usdt": cfg.risk.hard_risk_limit_usdt,
@@ -826,6 +839,7 @@ def get_system_status() -> Dict[str, Any]:
             "last_error": runner.last_error if runner else None,
             "background_worker_active": is_worker_alive,
             "is_stale": is_stale,
+            "cycle_telemetry": live_info.get("cycle_telemetry", {}),
         },
         "paper": {
             "enabled": cfg.paper.enabled,

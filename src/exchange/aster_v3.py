@@ -8,6 +8,7 @@ Guarded by live_trading_locked safety constraints.
 import os
 import time
 import urllib.parse
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 import requests
 from requests.adapters import HTTPAdapter
@@ -142,7 +143,8 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
 
         query_string = urllib.parse.urlencode(signed_params)
 
-        for attempt in range(1, self.max_retries + 1):
+        # max_retries=0 means one request with no retry, not zero requests.
+        for attempt in range(1, max(1, self.max_retries + 1)):
             try:
                 if method.upper() == "GET":
                     response = self.session.get(f"{url}?{query_string}", headers=headers, timeout=self.request_timeout)
@@ -163,8 +165,13 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
                         pass
                     msg = res_json.get("msg", response.text)
                     code = res_json.get("code", response.status_code)
+                    safe_symbol = str((params or {}).get("symbol", ""))[:32]
+                    logger.error(
+                        "Aster V3 signed read/write failure endpoint=%s status=%s code=%s message=%s symbol=%s timestamp_utc=%s",
+                        endpoint, response.status_code, code, str(msg)[:300], safe_symbol,
+                        datetime.now(timezone.utc).isoformat(),
+                    )
                     error_msg = f"HTTP {response.status_code} on {endpoint}: {msg} (code={code})"
-                    logger.error(error_msg)
                     raise ExchangeAPIError(error_msg)
                 elif response.status_code == 429:
                     retry_after = float(response.headers.get("Retry-After", self.retry_delay_sec * attempt))
@@ -174,12 +181,24 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
                     time.sleep(self.retry_delay_sec * attempt)
                     continue
                 else:
+                    safe_symbol = str((params or {}).get("symbol", ""))[:32]
+                    logger.error(
+                        "Aster V3 signed failure endpoint=%s status=%s code=%s message=%s symbol=%s timestamp_utc=%s",
+                        endpoint, response.status_code, response.status_code, response.text[:300], safe_symbol,
+                        datetime.now(timezone.utc).isoformat(),
+                    )
                     raise ExchangeAPIError(f"HTTP {response.status_code} on {endpoint}: {response.text}")
             except requests.RequestException as e:
                 if attempt == self.max_retries:
                     raise ExchangeAPIError(f"Network error on {endpoint}: {e}") from e
                 time.sleep(self.retry_delay_sec * attempt)
 
+        safe_symbol = str((params or {}).get("symbol", ""))[:32]
+        logger.error(
+            "Aster V3 signed request unresolved endpoint=%s status=%s code=%s message=%s symbol=%s timestamp_utc=%s",
+            endpoint, "UNAVAILABLE", "UNAVAILABLE", "request failed or retry exhausted", safe_symbol,
+            datetime.now(timezone.utc).isoformat(),
+        )
         raise ExchangeAPIError(f"Signed request failed for {endpoint}")
 
     # Public Market Data

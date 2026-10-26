@@ -216,8 +216,15 @@ class LiveAutoSessionManager:
         self._scanner_running: bool = False
         self._scanner_stop_event = threading.Event()
         self._scanner_thread: Optional[threading.Thread] = None
+        self._reconciliation_thread: Optional[threading.Thread] = None
+        self._reconciliation_stop_event = threading.Event()
+        self._reconciliation_mutex = threading.Lock()
+        self._reconciliation_interval_sec: float = 15.0
         self._scan_interval_sec: float = 60.0
         self._last_scan_utc: Optional[str] = None
+        self._cycle_status: str = "IDLE"
+        self._next_cycle_due_utc: Optional[str] = None
+        self._last_reconciliation: Dict[str, Any] = {"reconciliation_status": "UNVERIFIED", "reconciliation_timestamp_utc": None, "position_amt": None, "active_protective_order_count": None, "lock_state": "IDLE", "lock_symbol": None}
 
         self._ensure_storage_schema()
 
@@ -573,6 +580,13 @@ class LiveAutoSessionManager:
                 daemon=True,
             )
             self._scanner_thread.start()
+            self._reconciliation_stop_event.clear()
+            self._reconciliation_thread = threading.Thread(
+                target=self._reconciliation_loop,
+                name="LiveProtectionReconciliationThread",
+                daemon=True,
+            )
+            self._reconciliation_thread.start()
             logger.info("LIVE_AUTO background scanner thread started (interval: %.1fs).", interval_seconds)
 
     def stop_scanner(self) -> None:
@@ -582,7 +596,63 @@ class LiveAutoSessionManager:
                 return
             self._scanner_running = False
             self._scanner_stop_event.set()
+            self._reconciliation_stop_event.set()
             logger.info("LIVE_AUTO background scanner thread stopping...")
+
+    def _run_reconciliation_once(self) -> Dict[str, Any]:
+        """Reconcile live entries/protection and authorize deferred TP placement once.
+
+        Exchange responses are authoritative. A failed query never triggers order
+        submission and never changes a protection state to confirmed.
+        """
+        if not self._reconciliation_mutex.acquire(blocking=False):
+            return {"status": "SKIPPED_OVERLAP"}
+        try:
+            if not self.is_authorized_and_active() or self.mode not in (ExecutionMode.LIVE_AUTO, ExecutionMode.LIVE_MANUAL):
+                return {"status": "SKIPPED_SESSION_INACTIVE"}
+            adapter = getattr(self, "exchange_adapter", None)
+            journal = getattr(self, "automated_journal", None)
+            if not adapter or not journal:
+                raise RuntimeError("Live reconciliation dependencies unavailable")
+            positions = adapter.get_positions() or []
+            orders = adapter.get_open_orders() or []
+            summary = journal.reconcile_with_exchange(
+                exchange_positions=positions,
+                exchange_orders=orders,
+                exchange_adapter=adapter,
+                allow_tp_submission=True,
+            )
+            self._last_reconciliation = {
+                "reconciliation_status": "SUCCESS",
+                "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "position_amt": sum(float(p.get("positionAmt", p.get("size", 0.0)) or 0.0) for p in positions),
+                "active_protective_order_count": sum(1 for o in orders if bool(o.get("reduceOnly", o.get("reduce_only", False))) and str(o.get("type", o.get("orderType", ""))).upper() in ("LIMIT", "STOP", "STOP_MARKET")),
+                "lock_state": self.coordinator.global_lock.state if self.coordinator else "IDLE",
+                "lock_symbol": self.coordinator.global_lock.active_symbol if self.coordinator else None,
+            }
+            return summary
+        except Exception as exc:
+            self._last_reconciliation = {
+                "reconciliation_status": "UNVERIFIED",
+                "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "position_amt": None,
+                "active_protective_order_count": None,
+                "lock_state": self.coordinator.global_lock.state if self.coordinator else "UNVERIFIED",
+                "lock_symbol": self.coordinator.global_lock.active_symbol if self.coordinator else None,
+                "reconciliation_error": str(exc)[:300],
+            }
+            logger.warning("Deferred TP reconciliation unavailable: %s", exc)
+            return {"status": "UNVERIFIED", "error": str(exc)[:300]}
+        finally:
+            self._reconciliation_mutex.release()
+
+    def _reconciliation_loop(self) -> None:
+        """Periodically reconcile filled entries and deferred protection."""
+        while not self._reconciliation_stop_event.is_set():
+            if not self.is_authorized_and_active():
+                break
+            self._run_reconciliation_once()
+            self._reconciliation_stop_event.wait(timeout=self._reconciliation_interval_sec)
 
     def _scanner_loop(self) -> None:
         """Background scanning loop: periodically discovers candidates and auto-executes in LIVE_AUTO."""
@@ -599,6 +669,7 @@ class LiveAutoSessionManager:
                 elif self.coordinator and getattr(self.coordinator, "entries_paused", False):
                     logger.critical("Scan cycle skipped: new LIVE entries are paused pending protection reconciliation.")
                 elif self.autotrader:
+                    self._cycle_status = "RUNNING"
                     risk_ok, risk_msg = (True, "")
                     if self.coordinator:
                         risk_ok, risk_msg = self.coordinator.check_risk_limits()
@@ -618,15 +689,19 @@ class LiveAutoSessionManager:
                             automated_journal=self.automated_journal,
                             session_manager=self,
                         )
+                        self._cycle_status = "SUCCESS"
                 # This timestamp means a cycle completed, not merely that the
                 # thread woke up. Failed/skipped cycles remain observable via
                 # last_status_message and logs rather than masquerading as scans.
                 self._last_scan_utc = datetime.now(timezone.utc).isoformat()
                 self._persist_state()
             except Exception as e:
+                self._cycle_status = "ERROR"
                 logger.error("Error in LIVE_AUTO background scanner loop: %s", e)
 
             # Wait for next scan cycle or immediate stop
+            self._cycle_status = "WAITING_FOR_INTERVAL"
+            self._next_cycle_due_utc = (datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=self._scan_interval_sec)).isoformat()
             self._scanner_stop_event.wait(timeout=self._scan_interval_sec)
 
         self._scanner_running = False
@@ -841,13 +916,25 @@ class LiveAutoSessionManager:
             positions = adapter.get_positions() or []
             orders = adapter.get_open_orders() or []
         except Exception as exc:
+            self._last_reconciliation = {"reconciliation_status": "UNVERIFIED", "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(), "position_amt": None, "active_protective_order_count": None, "lock_state": self.coordinator.global_lock.state, "lock_symbol": self.coordinator.global_lock.active_symbol}
             return False, str(exc)
 
         active = [p for p in positions if abs(float(p.get("positionAmt", p.get("size", 0.0)) or 0.0)) > 1e-6]
         if not active:
+            orphan_orders = [o for o in orders if str(o.get("status", "NEW")).upper() in ("NEW", "PARTIALLY_FILLED") and bool(o.get("reduceOnly", o.get("reduce_only", False)))]
+            if orphan_orders:
+                orphan_symbol = str(orphan_orders[0].get("symbol", "UNKNOWN")).upper()
+                if not self.coordinator.global_lock.is_locked:
+                    self.coordinator.global_lock.acquire("EMA20_RECLAIM_5M_V1", orphan_symbol, "ORPHAN_PROTECTIVE_ORDER", state="RECONCILIATION_REQUIRED")
+                else:
+                    self.coordinator.global_lock.update_state("RECONCILIATION_REQUIRED")
+                self.coordinator.entries_paused = True
+                self._last_reconciliation = {"reconciliation_status": "RECONCILIATION_REQUIRED", "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(), "position_amt": 0.0, "active_protective_order_count": len(orphan_orders), "lock_state": "RECONCILIATION_REQUIRED", "lock_symbol": orphan_symbol}
+                return False, f"Exchange reports no position but orphan protective order remains for {orphan_symbol}"
             if self.coordinator.global_lock.is_locked:
                 self.coordinator.global_lock.release(reason="EXCHANGE_POSITION_CLOSED", verified_by_exchange=True)
             self.coordinator.entries_paused = False
+            self._last_reconciliation = {"reconciliation_status": "SUCCESS", "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(), "position_amt": 0.0, "active_protective_order_count": 0, "lock_state": self.coordinator.global_lock.state, "lock_symbol": None}
             return True, "Exchange reports no open position"
 
         p0 = active[0]
@@ -861,6 +948,7 @@ class LiveAutoSessionManager:
         else:
             self.coordinator.global_lock.update_state(state)
         self.coordinator.entries_paused = state != "PROTECTED"
+        self._last_reconciliation = {"reconciliation_status": "SUCCESS", "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(), "position_amt": float(p0.get("positionAmt", p0.get("size", 0.0)) or 0.0), "active_protective_order_count": len(symbol_orders), "lock_state": state, "lock_symbol": symbol}
         return True, f"Exchange reports {symbol} position active ({state})"
 
     def start_session(self, operator_id: str = "OPERATOR") -> Tuple[bool, str, LiveSessionInfo]:
@@ -1064,8 +1152,32 @@ class LiveAutoSessionManager:
             info["is_authorized_and_active"] = self.is_authorized_and_active()
             info["scanner_active"] = self._scanner_running
             info["last_scan_utc"] = self._last_scan_utc
+            autotrader = getattr(self, "autotrader", None)
+            telemetry = autotrader.get_cycle_telemetry() if autotrader and hasattr(autotrader, "get_cycle_telemetry") else {}
+            cycle_status = getattr(self, "_cycle_status", "IDLE")
+            telemetry["current_stage"] = telemetry.get("current_stage", cycle_status)
+            telemetry["current_stage_started_utc"] = telemetry.get("current_stage_started_utc")
+            telemetry["next_cycle_due_utc"] = getattr(self, "_next_cycle_due_utc", None)
+            telemetry["last_cycle_status"] = telemetry.get("last_cycle_status", cycle_status)
+            info["cycle_telemetry"] = telemetry
             if self.coordinator:
-                info["current_equity_usd"] = self.coordinator.current_equity
+                is_live_mode = self.mode in (ExecutionMode.LIVE_AUTO, ExecutionMode.LIVE_MANUAL)
+                live_snapshot = None
+                if is_live_mode and self.account_service:
+                    try:
+                        live_snapshot = self.account_service.get_snapshot()
+                    except Exception as exc:
+                        logger.warning("Live equity refresh failed: %s", exc)
+                if is_live_mode:
+                    info["current_equity_usd"] = (
+                        float(live_snapshot.total_equity_usdt)
+                        if live_snapshot and str(getattr(live_snapshot, "status", "")).upper() in ("CONNECTED", "ACCOUNTCONNECTIONSTATUS.CONNECTED") and live_snapshot.total_equity_usdt is not None
+                        else None
+                    )
+                    info["current_equity_source"] = "ASTERDEX_ACCOUNT_SNAPSHOT" if info["current_equity_usd"] is not None else "UNVERIFIED"
+                else:
+                    info["current_equity_usd"] = self.coordinator.current_equity
+                    info["current_equity_source"] = "LIVE_MICRO_LOCAL_PAPER"
                 info["daily_filled_entries"] = self.coordinator.daily_filled_entries
                 info["daily_realized_loss_usd"] = self.coordinator.daily_realized_loss
                 info["daily_loss_snapshot"] = self.coordinator.get_daily_loss_snapshot()
@@ -1073,4 +1185,5 @@ class LiveAutoSessionManager:
                 info["global_lock_symbol"] = self.coordinator.global_lock.active_symbol
                 info["global_lock_state"] = self.coordinator.global_lock.state
                 info["kill_switch_triggered"] = self.coordinator.kill_switch_triggered
+            info.update(self._last_reconciliation)
             return info

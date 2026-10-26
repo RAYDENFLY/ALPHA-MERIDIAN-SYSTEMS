@@ -18,7 +18,9 @@ import logging
 import math
 import os
 import re
+import threading
 import time
+import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 import requests
@@ -175,6 +177,65 @@ class GroqAutoTrader:
             exchange_adapter=self.adapter,
             automated_journal=self.automated_journal,
         )
+        self._telemetry_lock = threading.RLock()
+        self._active_cycle_telemetry: Optional[Dict[str, Any]] = None
+        self._last_cycle_telemetry: Optional[Dict[str, Any]] = None
+
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def _cycle_start(self) -> Dict[str, Any]:
+        cycle = {
+            "cycle_id": f"cycle-{uuid.uuid4().hex}",
+            "start_utc": self._utc_now(), "end_utc": None,
+            "status": "RUNNING", "current_stage": "pipeline",
+            "current_stage_started_utc": self._utc_now(),
+            "stages": {}, "model_requests": [], "_started_mono": time.monotonic(),
+        }
+        with self._telemetry_lock:
+            self._active_cycle_telemetry = cycle
+        return cycle
+
+    def _stage_start(self, name: str) -> float:
+        cycle = self._active_cycle_telemetry
+        started = time.monotonic()
+        if cycle is not None:
+            cycle["current_stage"] = name
+            cycle["current_stage_started_utc"] = self._utc_now()
+            cycle["stages"].setdefault(name, {})["start_utc"] = cycle["current_stage_started_utc"]
+        return started
+
+    def _stage_end(self, name: str, started: float) -> None:
+        cycle = self._active_cycle_telemetry
+        if cycle is not None:
+            entry = cycle["stages"].setdefault(name, {})
+            entry["end_utc"] = self._utc_now()
+            entry["duration_ms"] = round((time.monotonic() - started) * 1000, 1)
+
+    def _finish_cycle(self, cycle: Dict[str, Any], status: str) -> None:
+        cycle["status"] = status
+        cycle["end_utc"] = self._utc_now()
+        cycle["duration_ms"] = round((time.monotonic() - cycle["_started_mono"]) * 1000, 1)
+        cycle["stages"].setdefault("total_pipeline", {})["start_utc"] = cycle["start_utc"]
+        cycle["stages"]["total_pipeline"].update(end_utc=cycle["end_utc"], duration_ms=cycle["duration_ms"])
+        cycle.pop("_started_mono", None)
+        with self._telemetry_lock:
+            self._active_cycle_telemetry = None
+            self._last_cycle_telemetry = cycle
+
+    def get_cycle_telemetry(self) -> Dict[str, Any]:
+        with self._telemetry_lock:
+            cycle = self._active_cycle_telemetry or self._last_cycle_telemetry
+            if not cycle:
+                return {"last_cycle_status": "IDLE", "current_stage": "IDLE"}
+            out = {k: v for k, v in cycle.items() if k != "_started_mono"}
+            out["current_stage"] = cycle.get("current_stage", "IDLE") if self._active_cycle_telemetry else "IDLE"
+            out["last_completed_cycle_id"] = self._last_cycle_telemetry.get("cycle_id") if self._last_cycle_telemetry else None
+            out["last_completed_cycle_utc"] = self._last_cycle_telemetry.get("end_utc") if self._last_cycle_telemetry else None
+            out["last_cycle_duration_ms"] = self._last_cycle_telemetry.get("duration_ms") if self._last_cycle_telemetry else None
+            out["last_cycle_status"] = self._last_cycle_telemetry.get("status", "IDLE") if self._last_cycle_telemetry else ("RUNNING" if self._active_cycle_telemetry else "IDLE")
+            return out
 
     def _call_groq_json(self, messages: List[Dict[str, str]], model_override: Optional[str] = None, max_tokens: int = 400) -> Dict[str, Any]:
         """Make an OpenAI-compatible JSON completion call to Groq with rate-limit backoff and model fallback."""
@@ -191,6 +252,7 @@ class GroqAutoTrader:
         last_error = None
         for model in models_to_try:
             for attempt in range(2):
+                request_started = time.monotonic()
                 try:
                     payload = {
                         "model": model,
@@ -206,6 +268,7 @@ class GroqAutoTrader:
                         timeout=25.0,
                     )
                     if resp.status_code == 200:
+                        self._record_model_request(model, attempt + 1, resp.status_code, request_started, None, model != models_to_try[0])
                         data = resp.json()
                         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                         clean_content = content.strip()
@@ -214,6 +277,7 @@ class GroqAutoTrader:
                             clean_content = re.sub(r"\n?```$", "", clean_content).strip()
                         return json.loads(clean_content)
                     elif resp.status_code == 429 and attempt == 0:
+                        self._record_model_request(model, attempt + 1, resp.status_code, request_started, "HTTP_429_RATE_LIMIT", model != models_to_try[0])
                         wait_sec = 3.5
                         match = re.search(r"try again in ([\d\.]+)s", resp.text)
                         if match:
@@ -222,21 +286,35 @@ class GroqAutoTrader:
                         time.sleep(wait_sec)
                         continue
                     else:
+                        self._record_model_request(model, attempt + 1, resp.status_code, request_started, f"HTTP_{resp.status_code}", model != models_to_try[0])
                         last_error = f"Groq {model} HTTP {resp.status_code}: {resp.text[:250]}"
                         logger.warning(last_error)
                         break
                 except Exception as e:
+                    self._record_model_request(model, attempt + 1, None, request_started, type(e).__name__, model != models_to_try[0])
                     last_error = str(e)
                     logger.warning(f"Groq API call error with model {model} (attempt {attempt}): {e}")
                     break
 
         raise RuntimeError(f"All Groq API attempts failed. Last error: {last_error}")
 
+    def _record_model_request(self, model: str, attempt: int, http_status: Optional[int], started: float, retry_reason: Optional[str], fallback: bool) -> None:
+        cycle = self._active_cycle_telemetry
+        if cycle is not None:
+            cycle["model_requests"].append({"model": model, "attempt": attempt, "retry_reason": retry_reason,
+                "fallback_used": fallback, "http_status": http_status,
+                "latency_ms": round((time.monotonic() - started) * 1000, 1)})
+
     def run_stage1_prescreen(self) -> Stage1Result:
         """Stage 1: Deterministic Python Pre-Screener (All Aster DEX Pairs -> Top 10 Candidates)."""
         t0 = time.time()
+        total_started = self._stage_start("stage1_total")
+        started = self._stage_start("market_snapshot")
         snapshots = self.adapter.get_bulk_market_snapshot()
+        self._stage_end("market_snapshot", started)
+        started = self._stage_start("instrument_discovery")
         instruments = self.adapter.discover_instruments()
+        self._stage_end("instrument_discovery", started)
         inst_map = {getattr(i, "symbol", i.get("symbol") if isinstance(i, dict) else ""): i for i in instruments}
 
         # 1. Macro Anchor Analysis (BTC & ETH)
@@ -389,18 +467,22 @@ class GroqAutoTrader:
                 logger.warning(f"Error computing metrics for {s}: {e}")
                 return None
 
+        started = self._stage_start("metric_extraction")
         with ThreadPoolExecutor(max_workers=8) as executor:
             metric_results = list(executor.map(compute_coin_metrics, top_slice))
+        self._stage_end("metric_extraction", started)
 
         valid_top10 = [m for m in metric_results if m is not None][:10]
         exec_time = round((time.time() - t0) * 1000, 1)
 
-        return Stage1Result(
+        result = Stage1Result(
             market_regime=market_regime,
             top_10=valid_top10,
             total_screened_pairs=len(snapshots),
             execution_time_ms=exec_time,
         )
+        self._stage_end("stage1_total", total_started)
+        return result
 
     def run_stage2_rank_top3(self, stage1: Stage1Result, model_override: Optional[str] = None) -> Stage2Result:
         """Stage 2: Groq LLM Call #1 (Narrow Top 10 -> Top 3 Finalists)."""
@@ -446,8 +528,10 @@ class GroqAutoTrader:
         ]
 
         active_model = model_override or self.model_id
+        stage2_started = self._stage_start("stage2_groq_request")
         try:
             raw_json = self._call_groq_json(messages, model_override=active_model, max_tokens=350)
+            self._stage_end("stage2_groq_request", stage2_started)
             top_3_raw = raw_json.get("top_3", [])
             eliminated = raw_json.get("eliminated_summary", {})
 
@@ -467,6 +551,7 @@ class GroqAutoTrader:
             if len(finalists) == 3:
                 return Stage2Result(top_3=finalists, eliminated_summary=eliminated, model_used=active_model)
         except Exception as e:
+            self._stage_end("stage2_groq_request", stage2_started)
             logger.warning(f"Groq Stage 2 call failed ({e}); invoking deterministic fallback.")
 
         # Deterministic Algorithmic Fallback for Stage 2
@@ -1243,6 +1328,7 @@ class GroqAutoTrader:
         selected_setup: Optional[Dict[str, Any]] = None,
     ) -> GroqAutoTradePipelineResult:
         """Run the complete 10 -> 3 -> 1 Pipeline end-to-end with session-authorized LIVE auto-execution."""
+        cycle = self._cycle_start()
         coord = coordinator or self.coordinator
         sess_mgr = session_manager or self.session_manager
         effective_venue = execution_mode or execution_venue
@@ -1263,6 +1349,7 @@ class GroqAutoTrader:
         time.sleep(1.0)
 
         # Stage 3 & 4: Groq LLM Call #2 + Strategy Evaluation (EMA20_RECLAIM_5M_V1) + Supervised Execution
+        stage3_started = self._stage_start("stage3_total")
         stage3, receipt, confirmation = self.run_stage3_finalist_and_order(
             stage1=stage1,
             stage2=stage2,
@@ -1280,6 +1367,7 @@ class GroqAutoTrader:
             session_manager=sess_mgr,
             selected_setup=selected_setup,
         )
+        self._stage_end("stage3_total", stage3_started)
 
         # Collect live risk gate diagnostics
         risk_ok, risk_reason = coord.check_risk_limits()
@@ -1300,7 +1388,7 @@ class GroqAutoTrader:
 
         pipeline_status = stage3.status
 
-        return GroqAutoTradePipelineResult(
+        result = GroqAutoTradePipelineResult(
             status=pipeline_status,
             risk_preset=risk_preset.value if hasattr(risk_preset, "value") else str(risk_preset),
             execution_venue=execution_venue.value if hasattr(execution_venue, "value") else str(execution_venue),
@@ -1313,3 +1401,5 @@ class GroqAutoTrader:
             risk_gate_status=risk_gate_status,
             timestamp_utc=datetime.now(timezone.utc).isoformat(),
         )
+        self._finish_cycle(cycle, "SUCCESS")
+        return result

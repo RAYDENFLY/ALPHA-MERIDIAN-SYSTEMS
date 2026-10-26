@@ -211,21 +211,32 @@ class LiveMicroCoordinator:
                     """SELECT net_pnl_usd, status, reconciliation_status, exit_timestamp_utc
                        FROM automated_trade_journal
                        WHERE mode = 'LIVE' AND status = 'CLOSED'
+                         AND reconciliation_status = 'RECONCILED'
                          AND exit_timestamp_utc IS NOT NULL
                          AND substr(exit_timestamp_utc, 1, 10) = ?""",
                     (day,),
                 ).fetchall()
                 open_unreconciled = conn.execute(
                     """SELECT COUNT(*) FROM automated_trade_journal
-                       WHERE mode = 'LIVE' AND status IN ('OPEN','PENDING')
+                       WHERE mode = 'LIVE'
+                         AND status IN ('OPEN','PENDING')
                          AND reconciliation_status != 'RECONCILED'"""
                 ).fetchone()[0]
+                closed_unreconciled = conn.execute(
+                    """SELECT COUNT(*) FROM automated_trade_journal
+                       WHERE mode = 'LIVE' AND status = 'CLOSED'
+                         AND exit_timestamp_utc IS NOT NULL
+                         AND substr(exit_timestamp_utc, 1, 10) = ?
+                         AND reconciliation_status != 'RECONCILED'""",
+                    (day,),
+                ).fetchone()[0]
             used = sum(max(0.0, -float(row[0] or 0.0)) for row in rows)
+            unresolved = bool(open_unreconciled or closed_unreconciled)
             result.update({
                 "used_usdt": round(used, 6),
-                "status": "UNVERIFIED" if open_unreconciled else "VERIFIED",
+                "status": "UNVERIFIED" if unresolved else "VERIFIED",
                 "trades_count": len(rows),
-                "reason": "Open LIVE trade reconciliation incomplete" if open_unreconciled else "Exchange-reconciled closed LIVE journal",
+                "reason": "LIVE trade reconciliation incomplete" if unresolved else "Exchange-reconciled closed LIVE journal",
             })
             return result
         except Exception as exc:

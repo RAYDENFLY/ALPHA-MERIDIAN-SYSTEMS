@@ -302,7 +302,17 @@
                 if (!res.ok) return;
                 const data = await res.json();
                 
-                document.getElementById('modeBadge').innerText = data.mode;
+                const modeEl = document.getElementById('modeBadge');
+                if (modeEl) {
+                    modeEl.innerText = data.mode;
+                    if (data.mode === 'LIVE_AUTO') {
+                        modeEl.className = 'px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-purple-950 text-purple-300 border border-purple-700 tracking-wide';
+                    } else if (data.mode === 'LIVE_MANUAL') {
+                        modeEl.className = 'px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-amber-950 text-amber-300 border border-amber-700 tracking-wide';
+                    } else {
+                        modeEl.className = 'px-2 py-0.5 text-[10px] font-bold uppercase rounded badge-blue tracking-wide';
+                    }
+                }
 
                 // Account Equity & AsterDEX Live Balance Card
                 const acc = data.account;

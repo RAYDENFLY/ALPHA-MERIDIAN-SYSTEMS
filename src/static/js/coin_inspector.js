@@ -10,6 +10,7 @@ function loadInspectorTab() {
     if (allInspectorSymbols.length === 0) {
         fetchInspectorSymbols();
     }
+    fetchLiveSessionState();
 }
 
 async function fetchInspectorSymbols() {
@@ -659,15 +660,31 @@ let currentPendingGroqLiveSetup = null;
 // --- LIVE AUTO-EXECUTION SESSION CONTROLLER ---
 let liveSessionPollTimer = null;
 
+function handleLiveSessionConnectionIssue(reason) {
+    const stateBadge = document.getElementById('groqSessionStateBadge');
+    if (stateBadge && (stateBadge.textContent === 'INACTIVE' || stateBadge.textContent === 'CONNECTING...')) {
+        stateBadge.textContent = 'CONNECTING...';
+        stateBadge.className = 'px-2.5 py-0.5 rounded text-xs font-bold bg-amber-950 text-amber-300 border border-amber-700 animate-pulse';
+    }
+    const statusMsg = document.getElementById('groqSessionStatusMessage');
+    if (statusMsg) {
+        statusMsg.textContent = `Syncing live session state (${reason})...`;
+    }
+}
+
 async function fetchLiveSessionState() {
     try {
         const resp = await fetch('/api/inspector/live-session');
-        if (!resp.ok) return;
+        if (!resp.ok) {
+            handleLiveSessionConnectionIssue(`HTTP ${resp.status}`);
+            return;
+        }
         const json = await resp.json();
         const data = json.data || {};
         updateLiveSessionUI(data);
     } catch (e) {
         console.warn('Failed to fetch live session state:', e);
+        handleLiveSessionConnectionIssue('Server Offline');
     }
 }
 
@@ -787,7 +804,7 @@ function updateLiveSessionUI(data) {
     }
 
     // Duration
-    if (data.started_at_utc && state === 'ACTIVE') {
+    if (data.started_at_utc && (state === 'ACTIVE' || state === 'PAUSED' || state === 'REAUTHORIZATION_REQUIRED')) {
         const startMs = new Date(data.started_at_utc).getTime();
         const nowMs = Date.now();
         const diffSec = Math.max(0, Math.floor((nowMs - startMs) / 1000));
@@ -801,19 +818,27 @@ function updateLiveSessionUI(data) {
 
     // Metrics
     if (metricEquity) {
-        metricEquity.textContent = data.current_equity_usd !== undefined ? `$${Number(data.current_equity_usd).toFixed(2)}` : '--';
+        const equityValue = Number(data.current_equity_usd);
+        metricEquity.textContent = Number.isFinite(equityValue) && data.current_equity_source !== 'UNVERIFIED'
+            ? `$${equityValue.toFixed(2)}`
+            : 'UNVERIFIED';
     }
     if (metricDailyLoss) {
-        const lossVal = data.daily_realized_loss_usd !== undefined ? Number(data.daily_realized_loss_usd).toFixed(2) : '0.00';
-        metricDailyLoss.textContent = `$${lossVal} / $0.45`;
+        const lossSnapshot = data.daily_loss_snapshot || {};
+        const lossVal = Number(lossSnapshot.used_usdt);
+        metricDailyLoss.textContent = Number.isFinite(lossVal) && lossSnapshot.status === 'VERIFIED'
+            ? `$${lossVal.toFixed(2)} / $${Number(lossSnapshot.limit_usdt || 0.45).toFixed(2)}`
+            : `UNVERIFIED / $${Number(lossSnapshot.limit_usdt || 0.45).toFixed(2)}`;
     }
     if (metricEntries) {
         const entriesVal = data.daily_filled_entries !== undefined ? data.daily_filled_entries : 0;
         metricEntries.textContent = `${entriesVal} / 3`;
     }
     if (metricLock) {
+        const recStatus = data.reconciliation_status || 'UNVERIFIED';
         if (data.global_lock_held) {
-            metricLock.textContent = `HELD (${data.global_lock_symbol || 'POS'}: ${data.global_lock_state || 'ACTIVE'})`;
+            const displayState = recStatus === 'SUCCESS' ? (data.lock_state || data.global_lock_state || 'ACTIVE') : recStatus;
+            metricLock.textContent = `HELD (${data.lock_symbol || data.global_lock_symbol || 'POS'}: ${displayState})`;
             metricLock.className = 'font-bold text-amber-400';
         } else {
             metricLock.textContent = 'AVAILABLE (IDLE)';
