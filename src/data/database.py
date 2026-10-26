@@ -315,6 +315,147 @@ CREATE TABLE IF NOT EXISTS research_sync_state (
     sync_status TEXT NOT NULL DEFAULT 'NEVER_RUN',
     PRIMARY KEY(source_id, dataset_id)
 );
+
+CREATE TABLE IF NOT EXISTS shadow_counterfactual_journal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    strategy_id TEXT NOT NULL,
+    config_version TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    market_regime TEXT DEFAULT 'UNKNOWN',
+    llm_selected INTEGER DEFAULT 0,
+    llm_veto INTEGER DEFAULT 0,
+    llm_veto_reason TEXT DEFAULT '',
+    deterministic_trigger TEXT NOT NULL,
+    hypothetical_entry REAL NOT NULL,
+    hypothetical_stop REAL NOT NULL,
+    hypothetical_target REAL NOT NULL,
+    stop_distance_pct REAL NOT NULL,
+    ttl_bars INTEGER NOT NULL,
+    fill_status TEXT NOT NULL,
+    counterfactual_r REAL DEFAULT 0.0,
+    blocked_by_global_lock INTEGER DEFAULT 0,
+    price_path_json TEXT DEFAULT '[]',
+    outcome_summary TEXT DEFAULT '',
+    details_json TEXT DEFAULT '{}',
+    created_at_utc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_strat_sym ON shadow_counterfactual_journal (strategy_id, symbol);
+
+CREATE TABLE IF NOT EXISTS scan_attrition_reports (
+    report_id TEXT PRIMARY KEY,
+    cycle_id TEXT NOT NULL,
+    started_at_utc TEXT NOT NULL,
+    completed_at_utc TEXT,
+    zero_signal_diagnosis TEXT NOT NULL DEFAULT '',
+    attrition_table_markdown TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at_utc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_attrition_cycle ON scan_attrition_reports (cycle_id);
+
+CREATE TABLE IF NOT EXISTS automated_trade_journal (
+    journal_id TEXT PRIMARY KEY,
+    trade_id TEXT UNIQUE NOT NULL,
+    exchange TEXT NOT NULL DEFAULT 'Aster DEX',
+    symbol TEXT NOT NULL,
+    strategy_id TEXT NOT NULL,
+    config_version TEXT NOT NULL DEFAULT 'LIVE_MICRO_V1',
+    signal_id TEXT DEFAULT '',
+    order_id TEXT DEFAULT '',
+    client_order_id TEXT DEFAULT '',
+    position_id TEXT DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'LIVE',
+    side TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+
+    signal_timestamp_utc TEXT,
+    signal_price REAL,
+    planned_entry_price REAL,
+    planned_stop_price REAL,
+    planned_take_profit_price REAL,
+    planned_stop_pct REAL,
+    planned_rr_gross REAL,
+    planned_rr_net_expected REAL,
+    planned_risk_usd REAL NOT NULL DEFAULT 0.20,
+    planned_quantity REAL,
+    planned_notional_usd REAL,
+    planned_margin_usd REAL,
+    leverage INTEGER DEFAULT 10,
+    margin_mode TEXT DEFAULT 'ISOLATED',
+    entry_order_type TEXT DEFAULT 'LIMIT',
+    entry_ttl_seconds INTEGER DEFAULT 1500,
+
+    first_fill_timestamp_utc TEXT,
+    last_fill_timestamp_utc TEXT,
+    average_entry_price REAL,
+    filled_quantity REAL DEFAULT 0.0,
+    entry_fill_count INTEGER DEFAULT 0,
+    entry_fill_type TEXT DEFAULT 'UNKNOWN',
+    entry_fee_usd REAL DEFAULT 0.0,
+    entry_slippage_pct REAL DEFAULT 0.0,
+    exit_timestamp_utc TEXT,
+    average_exit_price REAL,
+    exit_quantity REAL DEFAULT 0.0,
+    exit_fill_count INTEGER DEFAULT 0,
+    exit_fill_type TEXT DEFAULT 'UNKNOWN',
+    exit_fee_usd REAL DEFAULT 0.0,
+    exit_slippage_pct REAL DEFAULT 0.0,
+    exit_reason TEXT DEFAULT '',
+
+    gross_pnl_usd REAL DEFAULT 0.0,
+    funding_usd REAL DEFAULT 0.0,
+    total_fees_usd REAL DEFAULT 0.0,
+    net_pnl_usd REAL DEFAULT 0.0,
+    realized_r REAL DEFAULT 0.0,
+    equity_before_usd REAL,
+    equity_after_usd REAL,
+    max_favorable_excursion_r REAL DEFAULT 0.0,
+    max_adverse_excursion_r REAL DEFAULT 0.0,
+    holding_duration_seconds REAL DEFAULT 0.0,
+
+    llm_selected INTEGER DEFAULT 0,
+    llm_vetoed INTEGER DEFAULT 0,
+    llm_reason TEXT DEFAULT '',
+    trigger_reason TEXT DEFAULT '',
+    risk_gate_result TEXT DEFAULT 'PASSED',
+    cost_gate_result TEXT DEFAULT 'PASSED',
+    rejection_reason TEXT DEFAULT '',
+    reconciliation_status TEXT DEFAULT 'RECONCILED',
+    data_quality_flags TEXT DEFAULT 'EXCHANGE_VERIFIED',
+    notes TEXT DEFAULT '',
+    created_at_utc TEXT NOT NULL,
+    updated_at_utc TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_autojournal_sym_time ON automated_trade_journal (symbol, created_at_utc);
+CREATE INDEX IF NOT EXISTS idx_autojournal_strat_mode ON automated_trade_journal (strategy_id, mode, status);
+
+CREATE TABLE IF NOT EXISTS fill_ledger (
+    fill_id TEXT PRIMARY KEY,
+    trade_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    timestamp_utc TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    side TEXT NOT NULL,
+    fill_role TEXT NOT NULL,
+    fill_price REAL NOT NULL,
+    fill_quantity REAL NOT NULL,
+    fill_notional_usd REAL NOT NULL,
+    fee_amount REAL NOT NULL DEFAULT 0.0,
+    fee_asset TEXT NOT NULL DEFAULT 'USDT',
+    fee_usd REAL NOT NULL DEFAULT 0.0,
+    liquidity_type TEXT NOT NULL DEFAULT 'UNKNOWN',
+    slippage_pct REAL DEFAULT 0.0,
+    exchange_trade_id TEXT NOT NULL DEFAULT '',
+    created_at_utc TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_fill_trade_id ON fill_ledger (trade_id);
+CREATE INDEX IF NOT EXISTS idx_fill_sym_time ON fill_ledger (symbol, timestamp_ms);
+CREATE INDEX IF NOT EXISTS idx_fill_exch_trade ON fill_ledger (exchange_trade_id);
 """
 
 
@@ -902,141 +1043,279 @@ class DatabaseManager:
                 return [dict(r) for r in cur.fetchall()]
         except Exception as err:
             logger.error(f"DatabaseManager: Failed to get unresolved whale events: {err}")
-            return []
-
-    def save_chart_drawing(self, drawing: Dict[str, Any]) -> Dict[str, Any]:
-        """Persist or update a chart drawing in SQLite."""
-        now_utc = datetime.now(timezone.utc).isoformat()
-        drawing_id = str(drawing["drawing_id"])
-        user_profile = str(drawing.get("user_profile") or "default").strip()
-        symbol = str(drawing["symbol"]).strip().upper().replace(".P", "")
-        timeframe = str(drawing["timeframe"]).strip().lower()
-        tool_type = str(drawing["tool_type"]).strip()
-        points = drawing.get("points") if isinstance(drawing.get("points"), list) else []
-        style = drawing.get("style") if isinstance(drawing.get("style"), dict) else {}
-        is_visible = 1 if drawing.get("is_visible", True) else 0
-        created_at = str(drawing.get("created_at_utc") or now_utc)
-
-        query = """
-        INSERT INTO chart_drawings (
-            drawing_id, user_profile, symbol, timeframe, tool_type,
-            points_json, style_json, is_visible, created_at_utc, updated_at_utc
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(drawing_id) DO UPDATE SET
-            user_profile = excluded.user_profile,
-            symbol = excluded.symbol,
-            timeframe = excluded.timeframe,
-            tool_type = excluded.tool_type,
-            points_json = excluded.points_json,
-            style_json = excluded.style_json,
-            is_visible = excluded.is_visible,
-            updated_at_utc = excluded.updated_at_utc;
-        """
-        with self.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                query,
-                (
-                    drawing_id,
-                    user_profile,
-                    symbol,
-                    timeframe,
-                    tool_type,
-                    json.dumps(points),
-                    json.dumps(style),
-                    is_visible,
-                    created_at,
-                    now_utc,
-                ),
-            )
-            conn.commit()
-        return {
-            "drawing_id": drawing_id,
-            "user_profile": user_profile,
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "tool_type": tool_type,
-            "points": points,
-            "style": style,
-            "is_visible": bool(is_visible),
-            "created_at_utc": created_at,
-            "updated_at_utc": now_utc,
-        }
-
-    def get_chart_drawings(
-        self,
-        symbol: str,
-        timeframe: str,
-        user_profile: str = "default",
-    ) -> List[Dict[str, Any]]:
-        """Retrieve all persisted chart drawings for (user_profile, symbol, timeframe)."""
-        clean_sym = symbol.strip().upper().replace(".P", "")
-        clean_tf = timeframe.strip().lower()
-        clean_prof = (user_profile or "default").strip()
-        query = """
-        SELECT drawing_id, user_profile, symbol, timeframe, tool_type,
-               points_json, style_json, is_visible, created_at_utc, updated_at_utc
-        FROM chart_drawings
-        WHERE user_profile = ? AND symbol = ? AND timeframe = ?
-        ORDER BY created_at_utc ASC;
-        """
-        with self.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(query, (clean_prof, clean_sym, clean_tf))
-            rows = cur.fetchall()
-            results: List[Dict[str, Any]] = []
-            for r in rows:
-                try:
-                    pts = json.loads(r["points_json"] or "[]")
-                except Exception:
-                    pts = []
-                try:
-                    st = json.loads(r["style_json"] or "{}")
-                except Exception:
-                    st = {}
-                results.append(
-                    {
-                        "drawing_id": r["drawing_id"],
-                        "user_profile": r["user_profile"],
-                        "symbol": r["symbol"],
-                        "timeframe": r["timeframe"],
-                        "tool_type": r["tool_type"],
-                        "points": pts,
-                        "style": st,
-                        "is_visible": bool(r["is_visible"]),
-                        "created_at_utc": r["created_at_utc"],
-                        "updated_at_utc": r["updated_at_utc"],
-                    }
-                )
-            return results
-
-    def delete_chart_drawing(
-        self,
-        drawing_id: str,
-        user_profile: str = "default",
-    ) -> bool:
-        """Delete a single persisted chart drawing by drawing_id."""
-        query = "DELETE FROM chart_drawings WHERE drawing_id = ? AND user_profile = ?;"
-        with self.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(query, (drawing_id, (user_profile or "default").strip()))
-            conn.commit()
-            return cur.rowcount > 0
-
-    def clear_chart_drawings(
-        self,
-        symbol: str,
-        timeframe: str,
-        user_profile: str = "default",
-    ) -> int:
-        """Delete all persisted chart drawings for (user_profile, symbol, timeframe)."""
-        clean_sym = symbol.strip().upper().replace(".P", "")
-        clean_tf = timeframe.strip().lower()
-        clean_prof = (user_profile or "default").strip()
-        query = "DELETE FROM chart_drawings WHERE user_profile = ? AND symbol = ? AND timeframe = ?;"
-        with self.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(query, (clean_prof, clean_sym, clean_tf))
-            conn.commit()
-            return cur.rowcount
-
+            return []
+
+
+
+    def save_chart_drawing(self, drawing: Dict[str, Any]) -> Dict[str, Any]:
+
+        """Persist or update a chart drawing in SQLite."""
+
+        now_utc = datetime.now(timezone.utc).isoformat()
+
+        drawing_id = str(drawing["drawing_id"])
+
+        user_profile = str(drawing.get("user_profile") or "default").strip()
+
+        symbol = str(drawing["symbol"]).strip().upper().replace(".P", "")
+
+        timeframe = str(drawing["timeframe"]).strip().lower()
+
+        tool_type = str(drawing["tool_type"]).strip()
+
+        points = drawing.get("points") if isinstance(drawing.get("points"), list) else []
+
+        style = drawing.get("style") if isinstance(drawing.get("style"), dict) else {}
+
+        is_visible = 1 if drawing.get("is_visible", True) else 0
+
+        created_at = str(drawing.get("created_at_utc") or now_utc)
+
+
+
+        query = """
+
+        INSERT INTO chart_drawings (
+
+            drawing_id, user_profile, symbol, timeframe, tool_type,
+
+            points_json, style_json, is_visible, created_at_utc, updated_at_utc
+
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+        ON CONFLICT(drawing_id) DO UPDATE SET
+
+            user_profile = excluded.user_profile,
+
+            symbol = excluded.symbol,
+
+            timeframe = excluded.timeframe,
+
+            tool_type = excluded.tool_type,
+
+            points_json = excluded.points_json,
+
+            style_json = excluded.style_json,
+
+            is_visible = excluded.is_visible,
+
+            updated_at_utc = excluded.updated_at_utc;
+
+        """
+
+        with self.get_connection() as conn:
+
+            cur = conn.cursor()
+
+            cur.execute(
+
+                query,
+
+                (
+
+                    drawing_id,
+
+                    user_profile,
+
+                    symbol,
+
+                    timeframe,
+
+                    tool_type,
+
+                    json.dumps(points),
+
+                    json.dumps(style),
+
+                    is_visible,
+
+                    created_at,
+
+                    now_utc,
+
+                ),
+
+            )
+
+            conn.commit()
+
+        return {
+
+            "drawing_id": drawing_id,
+
+            "user_profile": user_profile,
+
+            "symbol": symbol,
+
+            "timeframe": timeframe,
+
+            "tool_type": tool_type,
+
+            "points": points,
+
+            "style": style,
+
+            "is_visible": bool(is_visible),
+
+            "created_at_utc": created_at,
+
+            "updated_at_utc": now_utc,
+
+        }
+
+
+
+    def get_chart_drawings(
+
+        self,
+
+        symbol: str,
+
+        timeframe: str,
+
+        user_profile: str = "default",
+
+    ) -> List[Dict[str, Any]]:
+
+        """Retrieve all persisted chart drawings for (user_profile, symbol, timeframe)."""
+
+        clean_sym = symbol.strip().upper().replace(".P", "")
+
+        clean_tf = timeframe.strip().lower()
+
+        clean_prof = (user_profile or "default").strip()
+
+        query = """
+
+        SELECT drawing_id, user_profile, symbol, timeframe, tool_type,
+
+               points_json, style_json, is_visible, created_at_utc, updated_at_utc
+
+        FROM chart_drawings
+
+        WHERE user_profile = ? AND symbol = ? AND timeframe = ?
+
+        ORDER BY created_at_utc ASC;
+
+        """
+
+        with self.get_connection() as conn:
+
+            cur = conn.cursor()
+
+            cur.execute(query, (clean_prof, clean_sym, clean_tf))
+
+            rows = cur.fetchall()
+
+            results: List[Dict[str, Any]] = []
+
+            for r in rows:
+
+                try:
+
+                    pts = json.loads(r["points_json"] or "[]")
+
+                except Exception:
+
+                    pts = []
+
+                try:
+
+                    st = json.loads(r["style_json"] or "{}")
+
+                except Exception:
+
+                    st = {}
+
+                results.append(
+
+                    {
+
+                        "drawing_id": r["drawing_id"],
+
+                        "user_profile": r["user_profile"],
+
+                        "symbol": r["symbol"],
+
+                        "timeframe": r["timeframe"],
+
+                        "tool_type": r["tool_type"],
+
+                        "points": pts,
+
+                        "style": st,
+
+                        "is_visible": bool(r["is_visible"]),
+
+                        "created_at_utc": r["created_at_utc"],
+
+                        "updated_at_utc": r["updated_at_utc"],
+
+                    }
+
+                )
+
+            return results
+
+
+
+    def delete_chart_drawing(
+
+        self,
+
+        drawing_id: str,
+
+        user_profile: str = "default",
+
+    ) -> bool:
+
+        """Delete a single persisted chart drawing by drawing_id."""
+
+        query = "DELETE FROM chart_drawings WHERE drawing_id = ? AND user_profile = ?;"
+
+        with self.get_connection() as conn:
+
+            cur = conn.cursor()
+
+            cur.execute(query, (drawing_id, (user_profile or "default").strip()))
+
+            conn.commit()
+
+            return cur.rowcount > 0
+
+
+
+    def clear_chart_drawings(
+
+        self,
+
+        symbol: str,
+
+        timeframe: str,
+
+        user_profile: str = "default",
+
+    ) -> int:
+
+        """Delete all persisted chart drawings for (user_profile, symbol, timeframe)."""
+
+        clean_sym = symbol.strip().upper().replace(".P", "")
+
+        clean_tf = timeframe.strip().lower()
+
+        clean_prof = (user_profile or "default").strip()
+
+        query = "DELETE FROM chart_drawings WHERE user_profile = ? AND symbol = ? AND timeframe = ?;"
+
+        with self.get_connection() as conn:
+
+            cur = conn.cursor()
+
+            cur.execute(query, (clean_prof, clean_sym, clean_tf))
+
+            conn.commit()
+
+            return cur.rowcount
+
+
+

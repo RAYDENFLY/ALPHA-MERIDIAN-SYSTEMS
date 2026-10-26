@@ -29,7 +29,7 @@ if (typeof startModelBAutoRefresh === 'function' && typeof isModelBTabActive ===
 
 // 5. Initialize tab from URL parameter/hash if provided, strictly defaulting to 'setups'
 const urlParams = new URLSearchParams(window.location.search);
-const initialTab = urlParams.get('tab') || window.location.hash.replace('#', '') || 'setups';
+const initialTab = urlParams.get('tab') || window.location.hash.replace('#', '') || (window.location.pathname.includes('/inspector') ? 'inspector' : 'setups');
 if (typeof switchTab === 'function') {
     switchTab(initialTab);
 }

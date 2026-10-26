@@ -30,7 +30,8 @@ def get_all_modular_javascript() -> str:
     
     combined_code = []
     for s in local_scripts:
-        rel_path = s.replace("/static/", "")
+        clean_s = s.split("?")[0]
+        rel_path = clean_s.replace("/static/", "")
         file_path = STATIC_DIR / rel_path
         assert file_path.exists(), f"Script file missing on disk: {file_path}"
         combined_code.append(file_path.read_text(encoding="utf-8"))
@@ -69,7 +70,8 @@ class TestDashboardJavaScriptSyntax:
 
         # Validate each individual modular script file
         for s in local_scripts:
-            rel_path = s.replace("/static/", "")
+            clean_s = s.split("?")[0]
+            rel_path = clean_s.replace("/static/", "")
             file_path = STATIC_DIR / rel_path
             code = file_path.read_text(encoding="utf-8")
             proc = subprocess.run(
@@ -158,7 +160,8 @@ class TestDashboardJavaScriptSyntax:
         assert len(script_srcs) >= 14, "Expected modular script tags in dashboard HTML"
         for src in script_srcs:
             if src.startswith("/static/"):
-                rel_path = src.replace("/static/", "")
+                clean_src = src.split("?")[0]
+                rel_path = clean_src.replace("/static/", "")
                 file_path = STATIC_DIR / rel_path
                 assert file_path.exists(), f"Local script file not found on disk: {file_path}"
                 resp = client.get(src)
@@ -171,7 +174,8 @@ class TestDashboardJavaScriptSyntax:
         assert len(link_hrefs) >= 3, "Expected modular stylesheet links in dashboard HTML"
         for href in link_hrefs:
             if href.startswith("/static/"):
-                rel_path = href.replace("/static/", "")
+                clean_href = href.split("?")[0]
+                rel_path = clean_href.replace("/static/", "")
                 file_path = STATIC_DIR / rel_path
                 assert file_path.exists(), f"Local stylesheet file not found on disk: {file_path}"
                 resp = client.get(href)

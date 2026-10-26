@@ -20,21 +20,26 @@ class PaperOrderStatus(str, Enum):
     EXPIRED = "EXPIRED"
     REJECTED = "REJECTED"
     INVALIDATED = "INVALIDATED"
+    MISS = "MISS"
+    ERROR = "ERROR"
 
 
 # Valid state machine transitions
 ALLOWED_TRANSITIONS: Dict[PaperOrderStatus, Set[PaperOrderStatus]] = {
-    PaperOrderStatus.CREATED: {PaperOrderStatus.PENDING, PaperOrderStatus.REJECTED},
+    PaperOrderStatus.CREATED: {PaperOrderStatus.PENDING, PaperOrderStatus.REJECTED, PaperOrderStatus.ERROR},
     PaperOrderStatus.PENDING: {
         PaperOrderStatus.PARTIALLY_FILLED,
         PaperOrderStatus.FILLED,
         PaperOrderStatus.CANCELLED,
         PaperOrderStatus.EXPIRED,
         PaperOrderStatus.INVALIDATED,
+        PaperOrderStatus.MISS,
+        PaperOrderStatus.ERROR,
     },
     PaperOrderStatus.PARTIALLY_FILLED: {
         PaperOrderStatus.FILLED,
         PaperOrderStatus.CANCELLED,
+        PaperOrderStatus.ERROR,
     },
     # Terminal states (no transitions allowed)
     PaperOrderStatus.FILLED: set(),
@@ -42,6 +47,50 @@ ALLOWED_TRANSITIONS: Dict[PaperOrderStatus, Set[PaperOrderStatus]] = {
     PaperOrderStatus.EXPIRED: set(),
     PaperOrderStatus.REJECTED: set(),
     PaperOrderStatus.INVALIDATED: set(),
+    PaperOrderStatus.MISS: set(),
+    PaperOrderStatus.ERROR: set(),
+}
+
+
+class OrderLifecycleStatus(str, Enum):
+    """Unified 9-status order lifecycle model conforming to Section 7."""
+    WATCHLIST = "WATCHLIST"
+    PENDING = "PENDING"
+    FILLED = "FILLED"
+    CLOSED = "CLOSED"
+    EXPIRED = "EXPIRED"
+    MISS = "MISS"
+    CANCELLED = "CANCELLED"
+    INVALIDATED = "INVALIDATED"
+    ERROR = "ERROR"
+
+
+LIFECYCLE_TRANSITIONS: Dict[OrderLifecycleStatus, Set[OrderLifecycleStatus]] = {
+    OrderLifecycleStatus.WATCHLIST: {
+        OrderLifecycleStatus.PENDING,
+        OrderLifecycleStatus.INVALIDATED,
+        OrderLifecycleStatus.CANCELLED,
+        OrderLifecycleStatus.ERROR,
+    },
+    OrderLifecycleStatus.PENDING: {
+        OrderLifecycleStatus.FILLED,
+        OrderLifecycleStatus.EXPIRED,
+        OrderLifecycleStatus.MISS,
+        OrderLifecycleStatus.CANCELLED,
+        OrderLifecycleStatus.INVALIDATED,
+        OrderLifecycleStatus.ERROR,
+    },
+    OrderLifecycleStatus.FILLED: {
+        OrderLifecycleStatus.CLOSED,
+        OrderLifecycleStatus.ERROR,
+    },
+    # Terminal states
+    OrderLifecycleStatus.CLOSED: set(),
+    OrderLifecycleStatus.EXPIRED: set(),
+    OrderLifecycleStatus.MISS: set(),
+    OrderLifecycleStatus.CANCELLED: set(),
+    OrderLifecycleStatus.INVALIDATED: set(),
+    OrderLifecycleStatus.ERROR: set(),
 }
 
 
@@ -292,3 +341,100 @@ class PaperPosition:
         }
 
 
+
+
+@dataclass
+class OrderLifecycleRecord:
+    """Unified lifecycle tracking record enforcing Section 7 rules."""
+    order_id: str
+    strategy_id: str
+    symbol: str
+    direction: Direction
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    requested_qty: float
+    filled_qty: float = 0.0
+    status: OrderLifecycleStatus = OrderLifecycleStatus.WATCHLIST
+    ttl_bars: int = 3
+    bars_elapsed: int = 0
+    is_partial_fill: bool = False
+    miss_detected: bool = False
+    status_reason: str = ""
+    created_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def transition_to(self, new_status: OrderLifecycleStatus, reason: str = "") -> None:
+        if new_status == self.status:
+            return
+        valid_targets = LIFECYCLE_TRANSITIONS.get(self.status, set())
+        if new_status not in valid_targets:
+            raise InvalidOrderStateTransitionError(
+                f"Illegal lifecycle transition for {self.order_id}: {self.status.value} -> {new_status.value}"
+            )
+        self.status = new_status
+        self.status_reason = reason
+        self.updated_at_utc = datetime.now(timezone.utc).isoformat()
+
+    def handle_fill(self, fill_price: float, filled_qty: float) -> None:
+        self.filled_qty += filled_qty
+        if self.filled_qty < self.requested_qty:
+            self.is_partial_fill = True
+        self.transition_to(OrderLifecycleStatus.FILLED, f"Filled qty: {self.filled_qty}/{self.requested_qty}")
+
+    def handle_partial_expiration_or_cancellation(self, reason: str = "TTL expired") -> None:
+        """If partial fill occurred, filled portion is active FILLED, remaining cancelled."""
+        if self.filled_qty > 0:
+            self.is_partial_fill = True
+            self.status_reason = f"Partial fill: {self.filled_qty} active, {self.requested_qty - self.filled_qty} cancelled ({reason})"
+        else:
+            self.transition_to(OrderLifecycleStatus.EXPIRED, reason)
+
+    def evaluate_bar_for_pending(self, bar_high: float, bar_low: float) -> OrderLifecycleStatus:
+        """Evaluate a pending order against a new bar.
+        Checks for:
+        1. Fill
+        2. MISS (+0.5R reached before entry fill)
+        3. Expiration if TTL reached
+        """
+        if self.status != OrderLifecycleStatus.PENDING:
+            return self.status
+
+        stop_dist = abs(self.entry_price - self.stop_loss)
+        half_r_dist = 0.5 * stop_dist
+
+        if self.direction == Direction.LONG:
+            half_r_price = self.entry_price + half_r_dist
+            entry_touched = bar_low <= self.entry_price
+            miss_touched = bar_high >= half_r_price
+
+            if miss_touched and not entry_touched:
+                self.miss_detected = True
+                self.transition_to(OrderLifecycleStatus.MISS, f"Price touched +0.5R ({half_r_price:.4f}) before entry fill")
+                return self.status
+
+            if entry_touched:
+                self.handle_fill(self.entry_price, self.requested_qty)
+                return self.status
+        else:
+            half_r_price = self.entry_price - half_r_dist
+            entry_touched = bar_high >= self.entry_price
+            miss_touched = bar_low <= half_r_price
+
+            if miss_touched and not entry_touched:
+                self.miss_detected = True
+                self.transition_to(OrderLifecycleStatus.MISS, f"Price touched +0.5R ({half_r_price:.4f}) before entry fill")
+                return self.status
+
+            if entry_touched:
+                self.handle_fill(self.entry_price, self.requested_qty)
+                return self.status
+
+        self.bars_elapsed += 1
+        if self.bars_elapsed >= self.ttl_bars:
+            if self.filled_qty > 0:
+                self.handle_partial_expiration_or_cancellation("TTL elapsed with partial fill")
+            else:
+                self.transition_to(OrderLifecycleStatus.EXPIRED, f"TTL elapsed ({self.bars_elapsed}/{self.ttl_bars} bars)")
+
+        return self.status

@@ -1,39 +1,36 @@
-app_name: "SMC-SNR ML Perpetual Scanner"
-version: "1.0.0"
-mode: "RESEARCH"
+app_name: SMC-SNR ML Perpetual Scanner
+version: 1.0.0
+mode: PAPER
 live_trading_locked: true
-data_dir: "./data"
-db_filename: "scanner.db"
-
+data_dir: ./data
+db_filename: scanner.db
 watchlist:
-  - "ADAUSDT"
-  - "XRPUSDT"
-  - "BTCUSDT"
-  - "BNBUSDT"
-  - "ETHUSDT"
-  - "SOLUSDT"
-  - "AVAXUSDT"
-  - "LINKUSDT"
-  - "XMRUSDT"
-  - "DOGEUSDT"
-  - "LTCUSDT"
-
+- ADAUSDT
+- XRPUSDT
+- BTCUSDT
+- BNBUSDT
+- ETHUSDT
+- SOLUSDT
+- AVAXUSDT
+- LINKUSDT
+- XMRUSDT
+- DOGEUSDT
+- LTCUSDT
 enabled_symbols:
-  - "ADAUSDT"
-  - "XRPUSDT"
-  - "BTCUSDT"
-  - "BNBUSDT"
-  - "ETHUSDT"
-  - "SOLUSDT"
-  - "AVAXUSDT"
-  - "LINKUSDT"
-  - "XMRUSDT"
-  - "DOGEUSDT"
-  - "LTCUSDT"
-
+- ADAUSDT
+- XRPUSDT
+- BTCUSDT
+- BNBUSDT
+- ETHUSDT
+- SOLUSDT
+- AVAXUSDT
+- LINKUSDT
+- XMRUSDT
+- DOGEUSDT
+- LTCUSDT
 exchange:
-  name: "Aster DEX"
-  base_url: "https://fapi.asterdex.com"
+  name: Aster DEX
+  base_url: https://fapi.asterdex.com
   request_timeout: 15
   max_retries: 4
   retry_delay_sec: 1.0
@@ -41,25 +38,23 @@ exchange:
   maker_fee_rate: 0.0002
   taker_fee_rate: 0.0005
   slippage_rate: 0.0005
-
 risk:
   initial_equity_usdt: 16.0
-  margin_mode: "ISOLATED"
+  margin_mode: ISOLATED
   max_leverage: 10
-  target_isolated_margin_usdt: 1.00
-  target_isolated_margin_max_usdt: 1.50
-  hard_risk_limit_usdt: 1.50
+  target_isolated_margin_usdt: 1.0
+  target_isolated_margin_max_usdt: 1.5
+  hard_risk_limit_usdt: 1.5
   risk_per_trade_usdt: 0.25
-  daily_loss_limit_usdt: 0.50
+  daily_loss_limit_usdt: 0.5
   weekly_loss_limit_usdt: 1.25
-  max_open_positions: 1
+  max_open_positions: 3
   max_entries_per_week: null
   min_notional_usdt: 5.0
   buffer_pct_for_fees: 0.02
-
 strategy:
-  execution_timeframe: "1h"
-  bias_timeframe: "4h"
+  execution_timeframe: 1h
+  bias_timeframe: 4h
   swing_left_bars: 3
   swing_right_bars: 3
   atr_period: 14
@@ -67,34 +62,45 @@ strategy:
   min_reward_to_risk: 1.5
   fvg_min_size_atr_ratio: 0.1
   sr_cluster_tolerance_pct: 0.015
-
+  premium_threshold: 0.7
+  discount_threshold: 0.3
+  min_extension_48h: 0.035
+  min_impulse_12h: 0.012
+  short_macro_cap_168h: 0.12
+  bull_breakout_pos_72h: 0.85
+  bull_breakout_ret_24h: 0.035
+  bull_breakout_ret_48h: 0.045
+  bull_breakout_ret_168h: 0.06
+  bull_variance_ratio_min: 1.05
+  full_exit_at_tp1: true
+  tp1_rr_multiple: 1.65
+  min_stop_distance_pct: 0.012
 ml:
   enabled: true
-  model_type: "lightgbm"
+  model_type: lightgbm
   label_horizon_bars: 12
-  train_split: 0.60
-  val_split: 0.20
-  test_split: 0.20
-  calibration_method: "isotonic"
+  train_split: 0.6
+  val_split: 0.2
+  test_split: 0.2
+  calibration_method: isotonic
   min_confidence_threshold: 0.55
   min_samples_required: 100
-
 model_b:
   enabled: true
-  model_id: "MODEL_B"
-  version: "1.0.0-alpha"
+  model_id: MODEL_B
+  version: 1.0.0-alpha
   initial_equity_usdt: 100.0
-  target_trade_risk_usdt: 1.00
-  daily_loss_limit_usdt: 3.00
-  weekly_loss_limit_usdt: 7.50
+  target_trade_risk_usdt: 1.0
+  daily_loss_limit_usdt: 3.0
+  weekly_loss_limit_usdt: 7.5
   max_open_positions: 6
   max_open_per_direction: 3
-  cohort_version: "MODEL_B_V2_REMEDIATED"
+  cohort_version: MODEL_B_V2_REMEDIATED
   cohort_cutover_ms: 1792838400000
   live_target_trade_risk_usdt: 0.45
-  live_max_margin_usdt: 4.00
+  live_max_margin_usdt: 4.0
   live_daily_loss_limit_usdt: 1.35
-  live_weekly_loss_limit_usdt: 3.00
+  live_weekly_loss_limit_usdt: 3.0
   live_max_open_positions: 2
   live_max_open_per_direction: 1
   max_leverage: 10
@@ -102,10 +108,13 @@ model_b:
   diagnostic_breaker_override: false
   min_risk_reward: 1.5
   max_spread_bps: 15.0
-  min_depth_imbalance: 0.20
+  min_depth_imbalance: 0.2
   min_24h_volume_usdt: 1000000.0
   scan_interval_sec: 60
   enabled_venues:
-    - "asterdex"
-    - "binance"
-    - "hyperliquid"
+  - asterdex
+  - binance
+  - hyperliquid
+paper:
+  enabled: true
+  full_exit_at_tp1: true

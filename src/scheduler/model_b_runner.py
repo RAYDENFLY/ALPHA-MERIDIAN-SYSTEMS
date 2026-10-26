@@ -70,7 +70,10 @@ class ModelBRunner:
         self.config = config or ModelBConfig()
         base_paper = paper_config or PaperExecutionConfig()
         self.paper_config = base_paper.model_copy(
-            update={"pending_expiry_bars": int(getattr(self.config, "pending_expiry_bars", base_paper.pending_expiry_bars))}
+            update={
+                "pending_expiry_bars": int(getattr(self.config, "pending_expiry_bars", base_paper.pending_expiry_bars)),
+                "full_exit_at_tp1": bool(getattr(self.config, "full_exit_at_tp1", getattr(base_paper, "full_exit_at_tp1", False))),
+            }
         )
         self.model_id: str = str(getattr(self.config, "model_id", "MODEL_B") or "MODEL_B")
         self.trigger_timeframe: str = str(getattr(self.config, "trigger_timeframe", "1h") or "1h")
@@ -356,6 +359,12 @@ class ModelBRunner:
 
             def _eval_single(inst: NormalizedInstrument) -> Tuple[NormalizedInstrument, List[Candle], Optional[SetupCandidate], float]:
                 sym = inst.symbol
+                bl = [s.upper() for s in getattr(self.config, "symbol_blacklist", []) or []]
+                if bl and sym.upper() in bl:
+                    pending_syms = {o.symbol for o in self.paper_engine.pending_orders.values()}
+                    open_syms = set(self.paper_engine.open_positions.keys())
+                    if sym not in pending_syms and sym not in open_syms:
+                        return inst, [], None, 0.0
                 candles: List[Candle] = []
                 candles_4h: List[Candle] = []
                 kline_lat_ms = 0.0
@@ -936,18 +945,34 @@ class ModelBRunner:
         closed_trades_count = sum(1 for t in all_trades if not t.get("is_open"))
 
         is_fast = self.model_id == "MODEL_B_FAST"
+        is_v3 = self.model_id == "MODEL_B_V3"
+        model_name = (
+            "Model B V1-Pro (15m Fast Long-Biased)"
+            if is_v3
+            else (
+                "Model B Fast Scalper (15m / 1H)"
+                if is_fast
+                else "Model B Normal (1H / 4H)"
+            )
+        )
         return {
             "model_id": self.model_id,
-            "model_name": (
-                "Aggressive Multi-Exchange Liquidity Scalper (15m / 1H)"
-                if is_fast
-                else "Aggressive Multi-Exchange Liquidity Research (1H / 4H)"
-            ),
+            "model_name": model_name,
             "trigger_timeframe": self.trigger_timeframe,
             "trend_timeframe": self.trend_timeframe,
             "min_stop_distance_pct": self.config.min_stop_distance_pct,
             "pending_expiry_bars": getattr(self.config, "pending_expiry_bars", 6),
             "cohort_version": getattr(self.config, "cohort_version", "MODEL_B_V2_REMEDIATED"),
+            "min_rejection_wick_ratio": getattr(self.config, "min_rejection_wick_ratio", 0.0),
+            "min_volume_sma_mult": getattr(self.config, "min_volume_sma_mult", 0.0),
+            "full_exit_at_tp1": getattr(self.config, "full_exit_at_tp1", False),
+            "tp1_rr_multiple": getattr(self.config, "tp1_rr_multiple", 1.50),
+            "symbol_blacklist": getattr(self.config, "symbol_blacklist", []),
+            "allowed_directions": getattr(self.config, "allowed_directions", ["LONG", "SHORT"]),
+            "require_confirmed_body": getattr(self.config, "require_confirmed_body", True),
+            "require_htf_ema_alignment": getattr(self.config, "require_htf_ema_alignment", True),
+            "max_open_positions": getattr(self.config, "max_open_positions", 2),
+            "max_open_per_direction": getattr(self.config, "max_open_per_direction", 1),
             "is_running": self._is_running,
             "last_scan_utc": self.last_scan_utc,
             "last_successful_scan_utc": self.last_successful_scan_utc,

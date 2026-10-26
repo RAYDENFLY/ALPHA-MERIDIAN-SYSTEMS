@@ -1,0 +1,5 @@
+Configuration,Total Trades,Win Rate %,Gross PnL,Fees Paid,Funding Paid,Net PnL,ROI % ($100),Profit Factor,Max Drawdown %,Avg Trade PnL,Avg Duration Hrs,Long Trades,Short Trades
+V1 Legacy (Unremediated),8053,40.89,-308.21,785.36,5.26,-1098.85,-1098.85,0.91,1075.97,-0.1365,2.54,4873,3180
+V2 Remediated (Fast Scalper),3959,39.78,-169.02,311.58,5.09,-485.7,-485.7,0.93,479.16,-0.1227,6.14,2426,1533
+V3 Tuned (All 10 Pairs),1962,40.42,-44.74,153.84,2.72,-201.31,-201.31,0.96,200.64,-0.1026,5.8,1277,685
+V3 Tuned (Chop Blacklist),1403,40.41,-31.18,107.33,2.38,-140.88,-140.88,0.96,140.02,-0.1004,5.02,922,481

@@ -12,13 +12,13 @@ import hmac
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from config.settings import ExecutionMode, ModelBConfig, create_model_b_fast_config, get_default_config
+from config.settings import ExecutionMode, ModelBConfig, create_model_b_fast_config, create_model_b_v3_config, get_default_config
 from src.core.logger import logger
 from src.core.types import Candle, CandidateStatus, Direction, EntryCategory, ExecutionStatus, MarketBias, RiskAssessment, SetupCandidate, StructureState
 from src.data.database import DatabaseManager
@@ -75,6 +75,7 @@ from src.intelligence.market_context import (
     UnifiedMarketContext,
 )
 from src.intelligence.liquidity_chart_service import LiquidityChartService
+from src.intelligence.coin_inspector import CoinInspectorService
 from src.intelligence.whale_ranking import WhaleRankingEngine
 from src.research import (
     ModelBShadowEvaluator,
@@ -93,6 +94,7 @@ from src.demand_zone.types import (
 )
 from src.screener import (
     CrossExchangeMarketAsset,
+    GeminiArgonPairSelector,
     MultiExchangeMarketScreener,
     ScreenerFilterParams,
     VenueMarketMetrics,
@@ -104,6 +106,11 @@ from src.ai_analyst import (
     AnalysisRequest,
     AIConfigUpdateRequest,
 )
+from src.ai import (
+    ExecutionVenue,
+    GroqAutoTrader,
+    RiskPreset,
+)
 from src.model_d import ModelDCollector
 from src.model_d.binance import BinanceModelDCollector
 from src.model_d.features import build_features
@@ -113,6 +120,7 @@ from src.model_d.universe import ModelDUniverse
 from src.model_d.scanner import ModelDScanWorker, ModelDExitMonitor
 from src.model_d.wallets import WalletRegistry, JsonRpcProvider, WalletPipelineWorker
 import sqlite3
+from src.execution.live_session import LiveAutoSessionManager, ExecutionMode
 
 
 
@@ -149,7 +157,7 @@ try:
             chain_id=_v3_chain,
             is_testnet=False,
             request_timeout=cfg.exchange.request_timeout,
-            live_trading_locked=True,
+            live_trading_locked=False,
         )
         account_service = AsterAccountService(
             adapter=_v3_acc_adapter,
@@ -224,12 +232,29 @@ model_b_fast_runner = ModelBRunner(
     account_service=account_service,
 )
 
+# Model B V3 Tuned Parallel Instance (15m Trigger / 1H Trend, Full-TP1)
+model_b_v3_config: ModelBConfig = create_model_b_v3_config(model_b_config)
+model_b_v3_risk_mgr = ModelBRiskManager(config=model_b_v3_config)
+model_b_v3_risk_mgr.diagnostic_state = dict(model_b_diagnostic_state)
+model_b_v3_runner = ModelBRunner(
+    db=db,
+    journal=journal,
+    exchange=exchange,
+    config=model_b_v3_config,
+    paper_config=cfg.paper,
+    exchange_service=model_b_runner.exchange_service,
+    risk_manager=model_b_v3_risk_mgr,
+    account_service=account_service,
+)
+
 
 def _resolve_model_b_instance(model_id: Optional[str] = None) -> tuple[str, ModelBRunner, ModelBRiskManager]:
-    """Resolve the active Model B runner and risk manager by model_id ('MODEL_B' or 'MODEL_B_FAST')."""
+    """Resolve the active Model B runner and risk manager by model_id ('MODEL_B', 'MODEL_B_FAST', or 'MODEL_B_V3')."""
     m_clean = str(model_id or "MODEL_B").strip().upper()
     if m_clean == "MODEL_B_FAST":
         return "MODEL_B_FAST", model_b_fast_runner, model_b_fast_risk_mgr
+    elif m_clean in ("MODEL_B_V3", "MODEL_B_V3_TUNED", "MODEL_B_V1_PRO"):
+        return "MODEL_B_V3", model_b_v3_runner, model_b_v3_risk_mgr
     return "MODEL_B", model_b_runner, model_b_risk_mgr
 
 # Model D is read-only and independently scoped. It is not started as a background
@@ -264,7 +289,36 @@ model_d_scan_worker = ModelDScanWorker(db, model_d_universe, model_d_collector, 
 model_d_exit_monitor = ModelDExitMonitor(model_d_collector, model_d_bots, model_d_bot_store, interval_sec=getattr(model_d_config, "scan_interval_sec", 30))
 
 # AsterDEX Position Intelligence & Market Liquidity Context Service
+from src.journal.automated_journal import AutomatedTradeJournal
+from src.journal.exporter import JournalExporter
+from src.scheduler.live_micro_runner import LiveMicroCoordinator
+
+# Re-use global automated_journal and journal_exporter
+if 'automated_journal' not in globals() or automated_journal is None:
+    automated_journal = AutomatedTradeJournal(db)
+    journal_exporter = JournalExporter(db, automated_journal)
+live_micro_coordinator = LiveMicroCoordinator(
+    db=db,
+    exchange=account_service.adapter if (account_service and hasattr(account_service, "adapter")) else None,
+)
+
 market_context_service = MarketContextService()
+coin_inspector_service = CoinInspectorService(adapter=market_context_service.adapter)
+live_auto_session_manager = LiveAutoSessionManager(
+    coordinator=live_micro_coordinator,
+    exchange_adapter=account_service.adapter if (account_service and hasattr(account_service, "adapter")) else None,
+    account_service=account_service,
+    automated_journal=automated_journal,
+    db=db,
+)
+groq_autotrader = GroqAutoTrader(
+    adapter=market_context_service.adapter,
+    inspector_service=coin_inspector_service,
+    coordinator=live_micro_coordinator,
+    automated_journal=automated_journal,
+    session_manager=live_auto_session_manager,
+)
+live_auto_session_manager.autotrader = groq_autotrader
 liquidity_chart_service = LiquidityChartService(adapter=market_context_service.adapter, db=db)
 whale_ranking_engine = WhaleRankingEngine(
     exchange_service=model_b_runner.exchange_service,
@@ -282,6 +336,7 @@ demand_zone_scanner = AsterDexDemandZoneScanner(
 
 # Multi-Exchange Perpetual Futures Market Screener (Read-Only)
 market_screener = MultiExchangeMarketScreener()
+ai_top3_selector = GeminiArgonPairSelector(screener=market_screener)
 
 # Groq AI Trading Analyst (Logically isolated, advisory research only)
 ai_analyst_storage = AIAnalystStorage(db)
@@ -483,6 +538,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Startup database setup reconciliation error: {e}")
 
+    # Recover persisted LIVE Auto Session state and reconcile exchange positions
+    try:
+        live_auto_session_manager.recover_session_after_restart()
+        logger.info("LIVE Auto Session state recovered and exchange reconciled on startup.")
+    except Exception as e:
+        logger.warning(f"Startup LIVE Auto Session recovery error: {e}")
+
     # Validate Discord monitoring configuration safely
     discord_url = cfg.paper.discord_webhook_url
     if not discord_url:
@@ -525,6 +587,11 @@ async def lifespan(app: FastAPI):
             logger.info("Model B Fast Scalper (15m/1H) background research loop started.")
         except Exception as e:
             logger.warning(f"Failed to start Model B Fast runner: {e}")
+        try:
+            model_b_v3_runner.start_background_loop(interval_seconds=60.0, initial_delay_seconds=30.0)
+            logger.info("Model B V3 Tuned (15m Full-TP1) background loop started.")
+        except Exception as e:
+            logger.warning(f"Failed to start Model B V3 runner: {e}")
 
     if model_d_scan_worker.state["enabled"]:
         model_d_scan_worker.start()
@@ -567,6 +634,11 @@ async def lifespan(app: FastAPI):
         logger.info("Model B Fast runner stopped.")
     except Exception as e:
         logger.warning(f"Error stopping Model B Fast runner: {e}")
+    try:
+        model_b_v3_runner.stop()
+        logger.info("Model B V3 runner stopped.")
+    except Exception as e:
+        logger.warning(f"Error stopping Model B V3 runner: {e}")
     model_d_scan_worker.stop()
     model_d_exit_monitor.stop()
     model_d_wallet_pipeline.stop()
@@ -609,6 +681,15 @@ def get_dashboard() -> HTMLResponse:
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>Dashboard HTML not found.</h1>")
+
+
+@app.get("/inspector", response_class=HTMLResponse)
+def get_inspector_page() -> HTMLResponse:
+    """Serve the Coin Inspector & AI Context Exporter view."""
+    html_path = Path(__file__).parent / "dashboard.html"
+    if html_path.exists():
+        return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Inspector page not found.</h1>")
 
 
 @app.get("/api/status")
@@ -970,8 +1051,8 @@ def get_model_a_status() -> Dict[str, Any]:
     )
 
     strategy_config_readonly = {
-        "config_id": f"MODEL_A_FROZEN_v{cfg.version}",
-        "strategy_version": "MODEL_A_FROZEN",
+        "config_id": f"MODEL_A_PAPER_V2_TUNED_v{cfg.version}",
+        "strategy_version": "MODEL_A_PAPER_V2",
         "venue": cfg.exchange.name,
         "venue_base_url": cfg.exchange.base_url,
         "whitelisted_symbols": list(cfg.watchlist),
@@ -1035,7 +1116,7 @@ def get_model_a_status() -> Dict[str, Any]:
         "forward_validation_anchor": {
             "cohort_start_utc": cohort_start_utc,
             "required_sample_size": 30,
-            "frozen_invariant": "Model A strategy logic, thresholds, and risk parameters are frozen during forward validation.",
+            "frozen_invariant": "Model A SMC Dealing Range tuned cohort (MODEL_A_PAPER_V2) actively trading paper orders on Aster DEX with relaxed Dealing Range and impulse gates.",
         },
     }
 
@@ -1111,7 +1192,7 @@ def get_model_a_status() -> Dict[str, Any]:
             "age_seconds": age_sec,
             "age_display": age_display,
             "entry_category": t.get("entry_category", "Unclassified"),
-            "source_strategy": "MODEL_A (SMC/SnR Frozen)",
+            "source_strategy": "MODEL_A (SMC/SnR Tuned)",
             "model_id": "MODEL_A",
         })
 
@@ -1301,7 +1382,7 @@ def get_model_a_status() -> Dict[str, Any]:
             "historical_scan_cycles_completed": scan_completed_events,
             "last_scan_utc": last_scan_utc,
             "last_successful_scan_utc": last_successful_scan_utc,
-            "active_config_id": f"MODEL_A_FROZEN_v{cfg.version}",
+            "active_config_id": f"MODEL_A_PAPER_V2_TUNED_v{cfg.version}",
         },
         "strategy_configuration": strategy_config_readonly,
         "forward_validation": forward_validation_section,
@@ -1416,12 +1497,29 @@ async def analyze_position_endpoint(payload: PositionAnalysisPayload) -> Dict[st
     candles_1h = market_context_service.adapter.get_klines(pos_sym, "1h", limit=50)
     candles_15m = market_context_service.adapter.get_klines(pos_sym, "15m", limit=50)
 
+    # BTC & ETH Context for Market Regime and Correlation Evaluation
+    btc_candles_1h = market_context_service.adapter.get_klines("BTCUSDT", "1h", limit=24) if pos_sym != "BTCUSDT" else candles_1h
+    btc_candles_4h = market_context_service.adapter.get_klines("BTCUSDT", "4h", limit=24) if pos_sym != "BTCUSDT" else candles_4h
+    eth_candles_1h = market_context_service.adapter.get_klines("ETHUSDT", "1h", limit=24) if pos_sym != "ETHUSDT" else candles_1h
+    eth_candles_4h = market_context_service.adapter.get_klines("ETHUSDT", "4h", limit=24) if pos_sym != "ETHUSDT" else candles_4h
+    btc_prem = market_context_service.adapter.get_premium_index("BTCUSDT") or {}
+    eth_prem = market_context_service.adapter.get_premium_index("ETHUSDT") or {}
+    pos_prem = market_context_service.adapter.get_premium_index(pos_sym) or {}
+    funding_rate_pct = float(pos_prem.get("last_funding_rate", 0.0)) * 100 if pos_prem else 0.0
+
     analysis = PositionAnalyzer.analyze_position(
         position=target_pos,
         candles_4h=candles_4h,
         candles_1h=candles_1h,
         candles_15m=candles_15m,
         account_equity=equity,
+        btc_candles_1h=btc_candles_1h,
+        btc_candles_4h=btc_candles_4h,
+        eth_candles_1h=eth_candles_1h,
+        eth_candles_4h=eth_candles_4h,
+        btc_ticker=btc_prem,
+        eth_ticker=eth_prem,
+        funding_rate_pct=funding_rate_pct,
     )
     return analysis.to_dict()
 
@@ -1730,6 +1828,254 @@ def get_ai_status() -> Dict[str, Any]:
         "timeout_sec": cfg.ai.read_timeout_sec,
         "max_tokens": cfg.ai.max_tokens,
     }
+
+
+@app.get("/api/inspector/symbols")
+def get_inspector_symbols() -> Dict[str, Any]:
+    """Return active perpetual futures symbols sorted with popular/active and top volume at top."""
+    active_symbols = []
+    for r in [model_b_runner, model_b_fast_runner, model_b_v3_runner]:
+        if hasattr(r, "paper_engine"):
+            active_symbols.extend(list(r.paper_engine.open_positions.keys()))
+            active_symbols.extend(list(r.paper_engine.pending_orders.keys()))
+    if runner and hasattr(runner, "paper_engine"):
+        active_symbols.extend(list(runner.paper_engine.open_positions.keys()))
+    return coin_inspector_service.get_symbols_catalog(
+        whitelisted_symbols=getattr(cfg, "watchlist", []),
+        active_symbols=list(set(active_symbols)),
+    )
+
+
+@app.get("/api/inspector/coin/{symbol}")
+def get_coin_inspection(
+    symbol: str,
+    account_balance: Optional[float] = Query(None, description="Optional custom account balance for sizing"),
+) -> Dict[str, Any]:
+    """Return comprehensive, deterministic AI quantitative context snapshot for symbol."""
+    runners = {
+        "MODEL_A": runner,
+        "MODEL_B": model_b_runner,
+        "MODEL_B_FAST": model_b_fast_runner,
+        "MODEL_B_V3": model_b_v3_runner,
+    }
+    bal = float(account_balance) if account_balance and account_balance > 0 else 15.72
+    return coin_inspector_service.inspect_coin(
+        symbol=symbol,
+        runners=runners,
+        account_balance_usdt=bal,
+    )
+
+
+class AISetupExecutionPayload(BaseModel):
+    symbol: str
+    direction: str
+    order_type: Optional[str] = "LIMIT"
+    entry_price: float
+    stop_loss_price: float
+    take_profit_price: float
+    qty: Optional[float] = None
+    leverage: Optional[int] = 10
+    margin_mode: Optional[str] = "ISOLATED"
+    max_risk_usdt: Optional[float] = None
+    execution_venue: Optional[str] = "PAPER"
+    notes: Optional[str] = None
+
+
+@app.post("/api/inspector/execute-setup")
+def execute_inspector_ai_setup(payload: AISetupExecutionPayload) -> Dict[str, Any]:
+    """Execute or simulate an AI-generated trade setup with ISOLATED 10x configuration and TP/SL bracket."""
+    try:
+        runners = {
+            "MODEL_A": runner,
+            "MODEL_B": model_b_runner,
+            "MODEL_B_FAST": model_b_fast_runner,
+            "MODEL_B_V3": model_b_v3_runner,
+        }
+        live_adapter = account_service.adapter if (account_service and hasattr(account_service, "adapter")) else None
+        res = coin_inspector_service.execute_ai_trade_setup(
+            payload=payload.model_dump(),
+            journal=journal,
+            live_trading_locked=False,
+            runners=runners,
+            live_adapter=live_adapter,
+        )
+        return res
+    except (ValueError, PermissionError) as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except Exception as err:
+        logger.error(f"AI Setup Execution error: {err}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Execution failed: {err}")
+
+
+class GroqAutoSetupRequest(BaseModel):
+    risk_preset: str = "GROWTH_080"
+    execution_venue: str = "PAPER"
+    auto_fire_limit_order: bool = False
+    operator_confirmed: bool = False
+    strategy_id: str = "EMA20_RECLAIM_5M_V1"
+    model_override: Optional[str] = None
+    selected_setup: Optional[Dict[str, Any]] = None
+
+
+class SessionModeRequest(BaseModel):
+    mode: str = "PAPER"
+
+
+class SessionControlRequest(BaseModel):
+    operator_id: str = "OPERATOR"
+    reason: Optional[str] = None
+
+
+@app.get("/api/inspector/live-session")
+def get_live_session_status():
+    """Return current server-controlled LIVE Auto-Execution session state."""
+    return {
+        "status": "SUCCESS",
+        "data": live_auto_session_manager.get_session_info(),
+        "preflight": live_auto_session_manager.run_preflight_audit().to_dict(),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/inspector/live-session/mode")
+def set_live_session_mode(req: SessionModeRequest):
+    """Set execution mode: PAPER, LIVE_MANUAL, LIVE_AUTO."""
+    mode = ExecutionMode.from_str(req.mode)
+    ok, msg = live_auto_session_manager.set_execution_mode(mode)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {
+        "status": "SUCCESS",
+        "message": msg,
+        "data": live_auto_session_manager.get_session_info(),
+    }
+
+
+@app.post("/api/inspector/live-session/start")
+def start_live_session(req: SessionControlRequest):
+    """Explicit operator action: run pre-flight audit and start LIVE Auto-Execution session."""
+    ok, msg, info = live_auto_session_manager.start_session(operator_id=req.operator_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {
+        "status": "SUCCESS",
+        "message": msg,
+        "data": live_auto_session_manager.get_session_info(),
+    }
+
+
+@app.post("/api/inspector/live-session/pause")
+def pause_live_session(req: SessionControlRequest):
+    """Pause live auto-execution."""
+    ok, msg, info = live_auto_session_manager.pause_session(reason=req.reason or "OPERATOR_PAUSED")
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {
+        "status": "SUCCESS",
+        "message": msg,
+        "data": live_auto_session_manager.get_session_info(),
+    }
+
+
+@app.post("/api/inspector/live-session/resume")
+def resume_live_session():
+    """Resume paused live auto-execution."""
+    ok, msg, info = live_auto_session_manager.resume_session()
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {
+        "status": "SUCCESS",
+        "message": msg,
+        "data": live_auto_session_manager.get_session_info(),
+    }
+
+
+@app.post("/api/inspector/live-session/reauthorize")
+def reauthorize_live_session(req: Optional[SessionControlRequest] = None):
+    """Explicit operator action: reauthorize live session after restart or pause."""
+    op_id = req.operator_id if req else "OPERATOR"
+    ok, msg, info = live_auto_session_manager.reauthorize_session(operator_id=op_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {
+        "status": "SUCCESS",
+        "message": msg,
+        "data": live_auto_session_manager.get_session_info(),
+    }
+
+
+@app.post("/api/inspector/live-session/stop")
+def stop_live_session(req: SessionControlRequest):
+    """Stop live auto-execution session."""
+    ok, msg, info = live_auto_session_manager.stop_session(reason=req.reason or "OPERATOR_STOPPED")
+    return {
+        "status": "SUCCESS",
+        "message": msg,
+        "data": live_auto_session_manager.get_session_info(),
+    }
+
+
+@app.post("/api/inspector/live-session/kill-switch")
+def trigger_live_kill_switch(req: SessionControlRequest):
+    """Emergency kill switch: halt entries, cancel resting orders, close positions."""
+    ok, msg, info = live_auto_session_manager.trigger_emergency_kill_switch(reason=req.reason or "OPERATOR_EMERGENCY")
+    return {
+        "status": "SUCCESS",
+        "message": msg,
+        "data": live_auto_session_manager.get_session_info(),
+    }
+
+
+@app.post("/api/inspector/groq-auto-setup")
+async def run_groq_auto_setup(req: GroqAutoSetupRequest):
+    """Execute 10 -> 3 -> 1 Groq AI Trade Funnel and optionally dispatch Limit Order."""
+    try:
+        venue_str = req.execution_venue.strip().upper()
+        if venue_str == "LIVE_AUTO":
+            venue = ExecutionVenue.LIVE_AUTO
+        elif venue_str in ("LIVE", "LIVE_MANUAL"):
+            venue = ExecutionVenue.LIVE_MANUAL
+        else:
+            venue = ExecutionVenue.PAPER
+
+        risk = RiskPreset.CONSERVATIVE_035 if "035" in req.risk_preset else RiskPreset.GROWTH_080
+
+        runners = {
+            "MODEL_A": runner,
+            "MODEL_B": model_b_runner,
+            "MODEL_B_FAST": model_b_fast_runner,
+            "MODEL_B_V3": model_b_v3_runner,
+        }
+        live_adapter = account_service.adapter if (account_service and hasattr(account_service, "adapter")) else None
+
+        result = await asyncio.to_thread(
+            groq_autotrader.run_full_pipeline,
+            risk_preset=risk,
+            execution_venue=venue,
+            execution_mode=ExecutionMode.from_str(req.execution_venue),
+            model_override=req.model_override,
+            auto_fire_limit_order=req.auto_fire_limit_order,
+            operator_confirmed=req.operator_confirmed,
+            strategy_id=req.strategy_id,
+            journal=journal,
+            runners=runners,
+            live_adapter=live_adapter,
+            coordinator=live_micro_coordinator,
+            automated_journal=automated_journal,
+            session_manager=live_auto_session_manager,
+            selected_setup=req.selected_setup,
+        )
+        return {
+            "status": "SUCCESS",
+            "data": result.model_dump(),
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        }
+    except PermissionError as pe:
+        logger.error(f"Groq Auto-Trader security/authorization error: {pe}")
+        raise HTTPException(status_code=403, detail=str(pe))
+    except Exception as e:
+        logger.error(f"Groq Auto-Trader error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/symbols")
@@ -2436,6 +2782,7 @@ def get_model_b_status(
     primary_status = runner.get_status()
     normal_status = model_b_runner.get_status() if resolved_id != "MODEL_B" else primary_status
     fast_status = model_b_fast_runner.get_status() if resolved_id != "MODEL_B_FAST" else primary_status
+    v3_status = model_b_v3_runner.get_status() if resolved_id != "MODEL_B_V3" else primary_status
     primary_status["model_b_fast"] = {
         "model_id": fast_status.get("model_id", "MODEL_B_FAST"),
         "cohort_version": fast_status.get("cohort_version", "MODEL_B_FAST_V2"),
@@ -2450,6 +2797,25 @@ def get_model_b_status(
         "capital": fast_status.get("capital", {}),
         "risk_limits": fast_status.get("risk_limits", {}),
         "execution_metrics": fast_status.get("execution_metrics", {}),
+    }
+    primary_status["model_b_v3"] = {
+        "model_id": v3_status.get("model_id", "MODEL_B_V3"),
+        "cohort_version": v3_status.get("cohort_version", "MODEL_B_V1_PRO"),
+        "trigger_timeframe": v3_status.get("trigger_timeframe", "15m"),
+        "trend_timeframe": v3_status.get("trend_timeframe", "1h"),
+        "min_stop_distance_pct": v3_status.get("min_stop_distance_pct", 0.012),
+        "pending_expiry_bars": v3_status.get("pending_expiry_bars", 8),
+        "is_running": v3_status.get("is_running", False),
+        "scan_count": v3_status.get("scan_count", 0),
+        "last_scan_utc": v3_status.get("last_scan_utc"),
+        "last_scan_status": v3_status.get("last_scan_status"),
+        "capital": v3_status.get("capital", {}),
+        "risk_limits": v3_status.get("risk_limits", {}),
+        "execution_metrics": v3_status.get("execution_metrics", {}),
+        "min_rejection_wick_ratio": v3_status.get("min_rejection_wick_ratio", 0.0),
+        "min_volume_sma_mult": v3_status.get("min_volume_sma_mult", 0.0),
+        "full_exit_at_tp1": v3_status.get("full_exit_at_tp1", True),
+        "symbol_blacklist": v3_status.get("symbol_blacklist", []),
     }
     primary_status["parallel_instances"] = {
         "MODEL_B": {
@@ -2480,6 +2846,24 @@ def get_model_b_status(
             "pending_orders_count": (fast_status.get("risk_limits") or {}).get("pending_orders_count", 0),
             "trades_closed": (fast_status.get("execution_metrics") or {}).get("trades_closed", 0),
         },
+        "MODEL_B_V3": {
+            "model_id": "MODEL_B_V3",
+            "cohort_version": v3_status.get("cohort_version", "MODEL_B_V1_PRO"),
+            "trigger_timeframe": v3_status.get("trigger_timeframe", "15m"),
+            "trend_timeframe": v3_status.get("trend_timeframe", "1h"),
+            "min_stop_distance_pct": v3_status.get("min_stop_distance_pct", 0.012),
+            "pending_expiry_bars": v3_status.get("pending_expiry_bars", 8),
+            "is_running": v3_status.get("is_running", False),
+            "scan_count": v3_status.get("scan_count", 0),
+            "current_equity_usdt": (v3_status.get("capital") or {}).get("current_equity_usdt", 100.0),
+            "open_positions_count": (v3_status.get("risk_limits") or {}).get("open_positions_count", 0),
+            "pending_orders_count": (v3_status.get("risk_limits") or {}).get("pending_orders_count", 0),
+            "trades_closed": (v3_status.get("execution_metrics") or {}).get("trades_closed", 0),
+            "min_rejection_wick_ratio": v3_status.get("min_rejection_wick_ratio", 0.0),
+            "min_volume_sma_mult": v3_status.get("min_volume_sma_mult", 0.0),
+            "full_exit_at_tp1": v3_status.get("full_exit_at_tp1", True),
+            "symbol_blacklist": v3_status.get("symbol_blacklist", []),
+        },
     }
     return primary_status
 
@@ -2488,6 +2872,12 @@ def get_model_b_status(
 def get_model_b_fast_status():
     """Retrieve dedicated runtime status, portfolio capital, and risk meters for Model B Fast Scalper (15m / 1H)."""
     return get_model_b_status(model_id="MODEL_B_FAST")
+
+
+@app.get("/api/model_b_v3/status")
+def get_model_b_v3_status():
+    """Retrieve dedicated runtime status, portfolio capital, and risk meters for Model B V3 Tuned (15m Full-TP1)."""
+    return get_model_b_status(model_id="MODEL_B_V3")
 
 
 def _wallet_pipeline_status() -> str:
@@ -2681,7 +3071,9 @@ async def model_b_kill_switch(
     model_b_runner.config.entry_kill_switch = payload.enabled
     model_b_fast_risk_mgr.entry_kill_switch = payload.enabled
     model_b_fast_runner.config.entry_kill_switch = payload.enabled
-    logger.warning(f"MODEL_B_ENTRY_KILL_SWITCH (both instances) set to {payload.enabled}")
+    model_b_v3_risk_mgr.entry_kill_switch = payload.enabled
+    model_b_v3_runner.config.entry_kill_switch = payload.enabled
+    logger.warning(f"MODEL_B_ENTRY_KILL_SWITCH (all instances) set to {payload.enabled}")
     return {"entry_kill_switch": payload.enabled, "paper_only": True}
 
 
@@ -2877,7 +3269,7 @@ def get_model_b_orders(
     pending_count = len(runner.paper_engine.pending_orders) if runner else 0
     return {
         "model_id": resolved_id,
-        "pending_expiry_bars": getattr(runner.config, "pending_expiry_bars", 8 if resolved_id == "MODEL_B_FAST" else 6),
+        "pending_expiry_bars": getattr(runner.config, "pending_expiry_bars", 8 if resolved_id in ("MODEL_B_FAST", "MODEL_B_V3") else 6),
         "orders": orders[:limit],
         "count": len(orders),
         "pending_count": pending_count,
@@ -3582,6 +3974,39 @@ async def refresh_screener_data():
     }
 
 
+class AITop3SelectRequest(BaseModel):
+    force_refresh: bool = False
+
+
+@app.get("/api/screener/ai-top3/latest")
+async def get_screener_ai_top3_latest():
+    """Retrieve the latest cached Gemini Argon Top 3 pair selection without triggering new LLM calls."""
+    data = ai_top3_selector.get_latest_selection()
+    if data is None:
+        data = await asyncio.to_thread(ai_top3_selector.select_top3, force_refresh=False)
+    return {
+        "status": "SUCCESS",
+        "data": data,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/screener/ai-top3/select")
+async def trigger_screener_ai_top3_select(req: Optional[AITop3SelectRequest] = None):
+    """Trigger an autonomous market-wide screening by Gemini Argon to select the Top 3 pairs."""
+    force = req.force_refresh if req else True
+    try:
+        data = await asyncio.to_thread(ai_top3_selector.select_top3, force_refresh=force)
+        return {
+            "status": "SUCCESS",
+            "data": data,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"AI Top 3 selection error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==============================================================================
 # Groq AI Trading Analyst REST API Endpoints
 # ==============================================================================
@@ -3720,6 +4145,258 @@ async def research_audit_endpoint(dataset_id: str, start: str = Query(...), end:
 @app.get("/api/research/retail_positioning")
 async def retail_positioning_endpoint(symbol: str = Query("BTCUSDT"), period: str = Query("1h"), limit: int = Query(50, ge=1, le=500)) -> Dict[str, Any]:
     return await asyncio.to_thread(retail_positioning_provider.get, symbol, period, limit)
+
+
+
+# -----------------------------------------------------------------------------
+# AUTOMATED TRADE JOURNAL & CSV EXPORT ENDPOINTS (Section 15)
+# -----------------------------------------------------------------------------
+from src.journal.automated_journal import AutomatedTradeJournal
+from src.journal.exporter import JournalExporter
+from src.journal.models import AutomatedTradeRecord, FillRecord, JournalFilter, TradeStatus, ReconciliationStatus
+
+automated_journal = AutomatedTradeJournal(db)
+journal_exporter = JournalExporter(db, automated_journal)
+
+
+@app.get("/api/v1/journal/trades")
+def get_automated_trades(
+    symbol: Optional[str] = Query(None, description="Filter by symbol"),
+    strategy_id: Optional[str] = Query(None, description="Filter by strategy_id"),
+    mode: Optional[str] = Query(None, description="Filter mode: LIVE, SHADOW, PAPER, ALL"),
+    status: Optional[str] = Query(None, description="Filter status: OPEN, CLOSED, MISS, EXPIRED, etc."),
+    closed_only: bool = Query(False, description="Filter closed trades only"),
+    start_date: Optional[str] = Query(None, description="Start date (ISO or YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (ISO or YYYY-MM-DD)"),
+    limit: int = Query(500, le=5000, description="Max trades to return"),
+) -> Dict[str, Any]:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        mode=mode,
+        status=status,
+        closed_only=closed_only,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+    )
+    trades = automated_journal.get_trades(filter_criteria)
+    summary = automated_journal.get_summary_metrics(mode=mode or "LIVE")
+    return {
+        "count": len(trades),
+        "trades": [t.to_dict() for t in trades],
+        "summary": summary,
+        "filters": filter_criteria.__dict__,
+    }
+
+
+@app.get("/api/v1/journal/fills")
+def get_automated_fills(
+    trade_id: Optional[str] = Query(None, description="Filter by trade_id"),
+    symbol: Optional[str] = Query(None, description="Filter by symbol"),
+    start_date: Optional[str] = Query(None, description="Start date"),
+    end_date: Optional[str] = Query(None, description="End date"),
+    limit: int = Query(1000, le=10000, description="Max fills to return"),
+) -> Dict[str, Any]:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+    )
+    if trade_id:
+        fills = automated_journal.get_fills_for_trade(trade_id)
+    else:
+        fills = automated_journal.get_all_fills(filter_criteria)
+
+    return {
+        "count": len(fills),
+        "fills": [f.to_dict() for f in fills],
+    }
+
+
+@app.get("/api/v1/journal/summary")
+def get_automated_journal_summary(
+    mode: str = Query("LIVE", description="Execution mode: LIVE, SHADOW, PAPER"),
+) -> Dict[str, Any]:
+    return automated_journal.get_summary_metrics(mode=mode)
+
+
+@app.get("/api/v1/journal/export/trades.csv")
+def export_trades_csv_endpoint(
+    symbol: Optional[str] = Query(None),
+    strategy_id: Optional[str] = Query(None),
+    mode: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    closed_only: bool = Query(False),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+) -> Response:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        mode=mode,
+        status=status,
+        closed_only=closed_only,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    csv_data = journal_exporter.export_trades_csv(filter_criteria)
+    now_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"trades_{mode or 'all'}_{now_tag}.csv"
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/api/v1/journal/export/fills.csv")
+def export_fills_csv_endpoint(
+    symbol: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+) -> Response:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    csv_data = journal_exporter.export_fills_csv(filter_criteria)
+    now_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=fills_{now_tag}.csv"},
+    )
+
+
+@app.get("/api/v1/journal/export/signals.csv")
+def export_signals_csv_endpoint(
+    symbol: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+) -> Response:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    csv_data = journal_exporter.export_signals_csv(filter_criteria)
+    now_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=signals_{now_tag}.csv"},
+    )
+
+
+@app.get("/api/v1/journal/export/shadow.csv")
+def export_shadow_csv_endpoint(
+    symbol: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+) -> Response:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    csv_data = journal_exporter.export_shadow_csv(filter_criteria)
+    now_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=shadow_{now_tag}.csv"},
+    )
+
+
+@app.get("/api/v1/journal/export/scan_attribution.csv")
+def export_scan_attribution_csv_endpoint(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+) -> Response:
+    filter_criteria = JournalFilter(
+        start_date=start_date,
+        end_date=end_date,
+    )
+    csv_data = journal_exporter.export_scan_attribution_csv(filter_criteria)
+    now_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=scan_attribution_{now_tag}.csv"},
+    )
+
+
+@app.get("/api/v1/journal/export/bundle.zip")
+def export_bundle_zip_endpoint(
+    symbol: Optional[str] = Query(None),
+    strategy_id: Optional[str] = Query(None),
+    mode: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    closed_only: bool = Query(False),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+) -> Response:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        mode=mode,
+        status=status,
+        closed_only=closed_only,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    zip_bytes = journal_exporter.export_journal_bundle_zip(filter_criteria)
+    now_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"journal_bundle_{mode or 'all'}_{now_tag}.zip"
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.post("/api/v1/journal/reconcile")
+def reconcile_journal_endpoint() -> Dict[str, Any]:
+    """Execute on-demand reconciliation against Aster DEX account, positions, orders, and fills."""
+    try:
+        live_adapter = getattr(account_service, "adapter", None) or exchange
+        exchange_positions = []
+        exchange_orders = []
+        account_balance = {}
+
+        if live_adapter and hasattr(live_adapter, "get_positions"):
+            try:
+                exchange_positions = live_adapter.get_positions()
+            except Exception as e:
+                logger.warning("Could not fetch exchange positions for reconciliation: %s", e)
+
+        if live_adapter and hasattr(live_adapter, "get_open_orders"):
+            try:
+                exchange_orders = live_adapter.get_open_orders()
+            except Exception as e:
+                logger.warning("Could not fetch exchange open orders for reconciliation: %s", e)
+
+        if live_adapter and hasattr(live_adapter, "get_account_balance"):
+            try:
+                balances = live_adapter.get_account_balance()
+                if isinstance(balances, list) and balances:
+                    account_balance = balances[0]
+            except Exception as e:
+                logger.warning("Could not fetch exchange balance for reconciliation: %s", e)
+
+        summary = automated_journal.reconcile_with_exchange(
+            exchange_positions=exchange_positions,
+            exchange_orders=exchange_orders,
+            account_balance=account_balance,
+            exchange_adapter=live_adapter,
+        )
+        return summary
+    except Exception as e:
+        logger.error("Journal reconciliation failed: %s", e)
+        return {"status": "ERROR", "error": str(e)}
 
 
 if __name__ == "__main__":

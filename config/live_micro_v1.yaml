@@ -1,0 +1,30 @@
+config_version: "LIVE_MICRO_V1"
+
+risk:
+  fixed_risk_usd: 0.20
+  max_filled_entries_per_day: 3
+  daily_loss_limit_usd: 0.45
+  max_drawdown_from_equity_peak_pct: 25.0
+  max_global_open_positions: 1
+  max_isolated_margin_usd: 7.00
+  max_isolated_margin_equity_pct: 45.0
+  leverage: 10
+  margin_mode: isolated
+
+strategy:
+  live_strategy_id: EMA20_RECLAIM_5M_V1
+  shadow_strategy_id: SWEEP_1M_V1
+  shadow_strategy_live_enabled: false
+
+calibration:
+  minimum_filled_trades_before_parameter_review: 100
+  allow_live_parameter_optimization: false
+
+costs:
+  maker_fee_rate: 0.0002
+  taker_fee_rate: 0.0005
+  slippage_rate: 0.0005
+  funding_fee_rate_est: 0.0001
+  min_net_rr: 1.50
+  min_stop_distance_pct: 0.0040  # 0.40%
+  max_stop_distance_pct: 0.0080  # 0.80%

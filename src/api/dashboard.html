@@ -355,7 +355,7 @@
                                     <i class="fa-solid fa-shield-halved sidebar-icon text-blue-400" aria-hidden="true"></i>
                                     <span class="sidebar-text">Model A Engine</span>
                                 </span>
-                                <span class="sidebar-badge px-1.5 py-0.2 rounded text-[9px] bg-blue-950/80 text-blue-300 font-bold border border-blue-800">FROZEN</span>
+                                <span class="sidebar-badge px-1.5 py-0.2 rounded text-[9px] bg-blue-950/80 text-blue-300 font-bold border border-blue-800">ACTIVE PAPER (SMC TUNED)</span>
                             </button>
                             <button type="button" onclick="switchTab('model_b')" id="sideBtn-model_b" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
                                 <span class="flex items-center gap-2">
@@ -376,6 +376,13 @@
                                     <i class="fa-solid fa-robot sidebar-icon text-purple-400" aria-hidden="true"></i>
                                     <span class="sidebar-text">AI Analyst (Groq)</span>
                                 </span>
+                            </button>
+                            <button type="button" onclick="switchTab('inspector')" id="sideBtn-inspector" class="sidebar-item w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs border border-transparent hover:bg-slate-800/60 transition text-slate-300">
+                                <span class="flex items-center gap-2">
+                                    <i class="fa-solid fa-microscope sidebar-icon text-cyan-400" aria-hidden="true"></i>
+                                    <span class="sidebar-text">Coin Inspector</span>
+                                </span>
+                                <span class="sidebar-badge px-1.5 py-0.2 rounded text-[9px] bg-cyan-950/80 text-cyan-300 font-bold border border-cyan-800">AI CONTEXT</span>
                             </button>
                         </div>
                     </div>
@@ -749,6 +756,48 @@
                         <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                         <span>Refresh Journal</span>
                     </button>
+                </div>
+            </div>
+
+            <!-- SECTION 15: AUTOMATED TRADE JOURNAL & CSV EXPORT PANEL -->
+            <div class="card-bg p-5 rounded-xl border border-indigo-900/60 bg-gradient-to-br from-slate-900 via-indigo-950/20 to-slate-900 shadow-xl space-y-4">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-base font-bold text-white flex items-center gap-1.5">
+                                <span>📊 Automated AsterDEX Trade Journal & AI Review Exporter</span>
+                            </span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 border border-emerald-500 text-emerald-300">ACTUAL EXECUTION VERIFIED</span>
+                            <span id="reconcileBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 border border-blue-500 text-blue-300">IDEMPOTENT RECONCILED</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">
+                            Captures actual execution data from Aster DEX (fills, fees, funding, realized R = Net PnL / $0.20 planned risk). Separates LIVE, SHADOW, and PAPER activity without LLM estimation.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="triggerReconciliation()" id="reconcileBtn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span>Reconcile AsterDEX</span>
+                        </button>
+                        <a href="/api/v1/journal/export/bundle.zip" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md border border-indigo-400/30">
+                            <span>📦 Download AI Bundle (ZIP)</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Export Action Bar -->
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                    <div class="flex items-center gap-2 text-slate-300 font-medium">
+                        <span>📥 Individual CSV Datasets:</span>
+                        <a href="/api/v1/journal/export/trades.csv" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 font-mono transition">trades.csv</a>
+                        <a href="/api/v1/journal/export/fills.csv" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 font-mono transition">fills.csv</a>
+                        <a href="/api/v1/journal/export/signals.csv" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 font-mono transition">signals.csv</a>
+                        <a href="/api/v1/journal/export/shadow.csv" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 font-mono transition">shadow.csv</a>
+                        <a href="/api/v1/journal/export/scan_attribution.csv" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 font-mono transition">scan_attribution.csv</a>
+                    </div>
+                    <div class="text-[11px] text-slate-400">
+                        <span>Review Format: </span><span class="text-indigo-300 font-semibold">ChatGPT / Claude / Qwen Ready</span>
+                    </div>
                 </div>
             </div>
 
@@ -1212,10 +1261,10 @@
                             <h2 class="text-lg font-bold text-white tracking-wide font-mono">Model A: Defensive SMC &amp; SnR Perpetual Engine</h2>
                             <span id="modelAStateBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-blue-950 text-blue-300 border border-blue-700">CHECKING...</span>
                             <span id="modelAPaperBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-950 text-amber-300 border border-amber-700">PAPER ONLY &bull; LIVE LOCKED</span>
-                            <span id="modelAConfigIdBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-300 border border-slate-700">MODEL_A_FROZEN_v1.0.0</span>
+                            <span id="modelAConfigIdBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-300 border border-slate-700">MODEL_A_PAPER_V2_TUNED</span>
                         </div>
                         <p class="text-xs text-slate-400 max-w-3xl leading-relaxed">
-                            Defensive institutional Smart Money Concepts (72H Dealing Range Premium/Discount, Order Blocks, Fair Value Gaps, Liquidity Sweeps) &amp; Multi-Timeframe Support/Resistance (4H Bias + 1H Execution). Strictly isolated from Model B (`model_id="MODEL_A"`). Read-only forward validation cohort baseline.
+                            Defensive institutional Smart Money Concepts (72H Dealing Range Premium/Discount, Order Blocks, Fair Value Gaps, Liquidity Sweeps) &amp; Multi-Timeframe Support/Resistance (4H Bias + 1H Execution). Strictly isolated from Model B (`model_id="MODEL_A"`). Active paper trading cohort with tuned SMC dealing range gates.
                         </p>
                     </div>
                     <div class="flex items-center gap-2.5 self-start md:self-center">
@@ -1630,23 +1679,44 @@
             </div>
 
             <!-- Dual-Bot Mode Switcher: Normal (1H / 4H) vs Fast Scalper (15m / 1H) -->
-            <div class="card-bg p-3.5 rounded-xl border border-indigo-500/40 bg-slate-900/90 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-lg">
-                <div class="flex flex-wrap items-center gap-2" id="modelBBotModeSwitcherGroup">
-                    <span class="text-[11px] font-mono uppercase tracking-wider text-slate-400 px-2 font-semibold">Parallel Bot Instance:</span>
-                    <button type="button" id="btnModelBModeNormal" onclick="switchModelBInstance('MODEL_B')" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md shadow-indigo-950/80 ring-2 ring-indigo-400 transition-all flex items-center gap-2 cursor-pointer">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" id="dotModelBModeNormal"></span>
-                        <span>Model B Normal (1H / 4H)</span>
-                        <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-950/90 text-indigo-200 border border-indigo-400/50" id="badgeModelBModeNormal">1H SWING &bull; $100.00</span>
-                    </button>
-                    <button type="button" id="btnModelBModeFast" onclick="switchModelBInstance('MODEL_B_FAST')" class="px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 hover:text-cyan-300 transition-all flex items-center gap-2 cursor-pointer">
-                        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" id="dotModelBModeFast"></span>
-                        <span>Model B Fast Scalper (15m / 1H)</span>
-                        <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-950/90 text-cyan-300 border border-cyan-500/50" id="badgeModelBModeFast">15M SCALP &bull; $100.00</span>
-                    </button>
+            <div class="card-bg p-3.5 rounded-xl border border-indigo-500/40 bg-slate-900/90 shadow-lg space-y-2.5">
+                <!-- Top Row: Label, Parallel Bot Instance Cards (Single Horizontal Row), and Status Badge -->
+                <div class="flex items-center justify-between gap-3 overflow-x-auto no-scrollbar py-0.5">
+                    <div class="flex items-center gap-2.5 shrink-0 flex-nowrap" id="modelBBotModeSwitcherGroup">
+                        <span class="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold shrink-0 whitespace-nowrap">Parallel Bot Instance:</span>
+                        <!-- Bot Instance 1: Normal (1H / 4H Swing) -->
+                        <button type="button" id="btnModelBModeNormal" onclick="switchModelBInstance('MODEL_B')" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md shadow-indigo-950/80 ring-2 ring-indigo-400 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" id="dotModelBModeNormal"></span>
+                            <span class="font-semibold tracking-wide">Model B Normal (1H / 4H)</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/90 text-indigo-200 border border-indigo-400/50 tabular-nums" id="badgeModelBModeNormal">1H SWING &bull; $100.00 (0 Open)</span>
+                        </button>
+                        <!-- Bot Instance 2: Fast Scalper (15m / 1H Scalp) -->
+                        <button type="button" id="btnModelBModeFast" onclick="switchModelBInstance('MODEL_B_FAST')" class="px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 hover:text-cyan-300 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" id="dotModelBModeFast"></span>
+                            <span class="font-semibold tracking-wide">Model B Fast Scalper (15m / 1H)</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 tabular-nums" id="badgeModelBModeFast">15M SCALP &bull; $100.00 (0 Open)</span>
+                        </button>
+                        <!-- Bot Instance 3: V1-Pro (15m Fast Long-Biased) -->
+                        <button type="button" id="btnModelBModeV3" onclick="switchModelBInstance('MODEL_B_V3')" class="px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" id="dotModelBModeV3"></span>
+                            <span class="font-semibold tracking-wide">Model B V1-Pro (15m Fast Long-Biased)</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 tabular-nums" id="badgeModelBModeV3">V1-PRO &bull; $100.00 (0 Open)</span>
+                        </button>
+                    </div>
+                    <!-- Right Status Indicator -->
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="px-2.5 py-1 rounded-md bg-emerald-950/90 text-emerald-300 border border-emerald-800 font-bold text-xs font-mono shrink-0 whitespace-nowrap shadow-sm flex items-center gap-1.5" id="modelBDualRuntimeStatusBadge">3 PARALLEL BOTS RUNNING</span>
+                    </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400 px-2">
-                    <span class="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-bold" id="modelBDualRuntimeStatusBadge">2 PARALLEL BOTS RUNNING</span>
-                    <span id="modelBActiveConfigSummary">Trigger: 1H | Trend: 4H EMA20/50 | Stop Floor: 1.50% | TTL: 6 Bars (6.0h)</span>
+                <!-- Bottom Sub-bar: Active Profile Execution Parameters -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-500 font-semibold uppercase text-[10px]">Active Execution Parameters:</span>
+                        <span id="modelBActiveConfigSummary" class="text-slate-300 font-medium">Trigger: 1H | Trend: 4H EMA20/50 | Stop Floor: 1.50% | TTL: 6 Bars (6.0h)</span>
+                    </div>
+                    <div class="text-[10px] text-slate-500 font-mono">
+                        Isolated Risk: $1.00 / Trade &bull; Max 6 Positions
+                    </div>
                 </div>
             </div>
 
@@ -3269,6 +3339,117 @@
                 </div>
             </div>
 
+            <!-- AI Top 3 Pair Selection Panel (Gemini Argon Autonomous Market Screener) -->
+            <div id="screenerAITop3Section" class="card-bg p-4 md:p-5 rounded-xl border border-cyan-500/30 shadow-lg space-y-4 relative overflow-hidden">
+                <div class="absolute -right-20 -top-20 w-72 h-72 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3.5">
+                    <div class="space-y-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                            <h3 class="text-base font-bold text-white tracking-wide flex items-center gap-2">
+                                <span>AI Top 3 Pair Selection</span>
+                            </h3>
+                            <span id="aiTop3ModelBadge" class="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-800/80">
+                                GEMINI 4 ARGON
+                            </span>
+                            <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400 border border-slate-700">
+                                ENTIRE DATASET SCREENED
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400">
+                            Autonomous multi-factor screening across all perpetual markets &bull; Scoring liquidity, relative strength vs BTC/ETH, momentum, funding health &amp; micro-sizing suitability.
+                        </p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <button type="button" onclick="triggerAISelectTop3(true)" id="aiSelectTop3Btn" class="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs rounded-lg shadow-md transition flex items-center gap-2 border border-cyan-400/30">
+                            <svg id="aiSelectTop3Spin" class="w-4 h-4 text-white hidden animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                            <svg id="aiSelectTop3Icon" class="w-4 h-4 text-cyan-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span id="aiSelectTop3BtnText">AI Select Top 3</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="aiTop3MetaBar" class="p-3 rounded-lg bg-slate-900/80 border border-slate-800/90 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
+                    <div class="flex flex-wrap items-center gap-3 text-slate-300">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-slate-500">Regime:</span>
+                            <span id="aiTop3RegimeLabel" class="text-cyan-300 font-bold">Analyzing...</span>
+                        </div>
+                        <span class="text-slate-600">&bull;</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-slate-500">BTC:</span>
+                            <span id="aiTop3BtcChange" class="text-slate-200">--</span>
+                        </div>
+                        <span class="text-slate-600">&bull;</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-slate-500">ETH:</span>
+                            <span id="aiTop3EthChange" class="text-slate-200">--</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3 text-slate-400 text-[11px]">
+                        <div>Snapshot: <span id="aiTop3SnapshotId" class="text-slate-300">--</span></div>
+                        <span class="text-slate-600">&bull;</span>
+                        <div>Analyzed: <span id="aiTop3Timestamp" class="text-slate-300">--</span></div>
+                    </div>
+                </div>
+
+                <div id="aiTop3EmptyState" class="py-8 text-center space-y-3 bg-slate-900/40 rounded-xl border border-dashed border-slate-800">
+                    <div class="w-10 h-10 rounded-full bg-cyan-950/60 text-cyan-400 flex items-center justify-center mx-auto border border-cyan-800/40">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                    </div>
+                    <div class="space-y-1">
+                        <h4 class="text-sm font-semibold text-slate-200">No Active AI Screening Result</h4>
+                        <p class="text-xs text-slate-400 max-w-md mx-auto">
+                            Click <strong>AI Select Top 3</strong> to evaluate the entire cross-exchange perpetual dataset through Gemini Argon's 5-factor quantitative rubric.
+                        </p>
+                    </div>
+                    <button type="button" onclick="triggerAISelectTop3(true)" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold rounded-lg border border-slate-700 transition">
+                        Run Initial Market Screening
+                    </button>
+                </div>
+
+                <div id="aiTop3LoadingState" class="hidden py-10 text-center space-y-3 bg-slate-900/40 rounded-xl border border-cyan-900/30">
+                    <div class="w-10 h-10 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <div class="space-y-1">
+                        <h4 class="text-sm font-semibold text-white">Gemini Argon is Screening All Markets...</h4>
+                        <p class="text-xs text-slate-400">
+                            Analyzing quote turnover, basis spreads, relative strength vs BTC/ETH, and small-account execution feasibility.
+                        </p>
+                    </div>
+                </div>
+
+                <div id="aiTop3ErrorState" class="hidden p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs space-y-2">
+                    <div class="flex items-center gap-2 text-rose-300 font-semibold">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span>AI Screening Encountered an Error</span>
+                    </div>
+                    <p id="aiTop3ErrorMessage" class="text-slate-300"></p>
+                    <button type="button" onclick="triggerAISelectTop3(true)" class="px-3 py-1 bg-rose-900/60 hover:bg-rose-800 text-white rounded text-xs transition">
+                        Retry Screening
+                    </button>
+                </div>
+
+                <div id="aiTop3CandidatesGrid" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <!-- Populated dynamically via renderAITop3Selection() -->
+                </div>
+
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-[10px] text-slate-500">
+                    <div>
+                        <strong class="text-slate-400">Disclaimer:</strong> Selection score (0-100) measures algorithmic multi-factor confluence for discovery. It is NOT a probability of profit or financial advice.
+                    </div>
+                    <div class="font-mono text-slate-400">
+                        Safety: PAPER ONLY &bull; Zero Automated Orders
+                    </div>
+                </div>
+            </div>
+
             <!-- Filter & Search Toolbar -->
             <div class="card-bg p-4 rounded-xl space-y-3.5 border border-slate-800">
                 <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -3899,6 +4080,549 @@
 
         </div>
 
+        <!-- ===================================================================== -->
+        <!-- TAB: COIN INSPECTOR & AI CONTEXT EXPORTER (INTERACTIVE QUANT SNAPSHOT) -->
+        <!-- ===================================================================== -->
+        <div id="tab-inspector" class="hidden space-y-6">
+
+            <!-- Control Bar / Coin Selector Header -->
+            <div class="card-bg p-4 md:p-5 rounded-xl border border-cyan-900/40 space-y-4 shadow-xl">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-700/60 flex items-center justify-center text-cyan-400">
+                                <i class="fa-solid fa-microscope text-sm"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-base sm:text-lg font-bold text-white tracking-wide flex items-center gap-2">
+                                    <span>Coin Inspector &amp; AI Context Exporter</span>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">AI CONTEXT SNAPSHOT</span>
+                                </h2>
+                                <p class="text-xs text-slate-400">
+                                    Export high-density, token-efficient JSON snapshots (~2,800 tokens) with multi-timeframe indicators, SMC structure, order book L2 walls, and micro-sizing presets.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Controls: Account Sizing Input & Actions -->
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <div class="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+                            <span class="text-slate-400 text-[11px] font-mono">Micro Sizing Bal:</span>
+                            <span class="text-slate-500 text-xs">$</span>
+                            <input id="inspectorBalanceInput" type="number" step="0.01" value="15.72"
+                                class="w-16 bg-transparent text-emerald-400 font-mono font-bold focus:outline-none text-right" title="Account equity for sizing calculations">
+                        </div>
+                        <button type="button" id="inspectorFetchBtn" onclick="fetchCoinInspection()"
+                            class="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950/40 transition">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                            <span>Fetch / Refresh JSON</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Coin Search Input & Quick-Select Chips -->
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="relative w-full sm:w-72">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                        </div>
+                        <input id="inspectorSearchInput" type="text" placeholder="Select or search coin (e.g. SOLUSDT)..."
+                            oninput="onInspectorSearchInput(this.value)"
+                            onfocus="onInspectorSearchInput(this.value)"
+                            class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 uppercase font-mono transition">
+                        <div id="inspectorDropdownMenu" class="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-slate-950 border border-slate-800 rounded-lg shadow-2xl z-50 hidden divide-y divide-slate-800/60"></div>
+                    </div>
+
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">Quick Select:</span>
+                        <div id="inspectorPopularChips" class="flex items-center gap-1.5 flex-wrap">
+                            <!-- Injected dynamically by coin_inspector.js -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================================= -->
+            <!-- GROQ AI AUTO-HUNTER (10 -> 3 -> 1 FUNNEL SCREENER & AUTO-TRADER)  -->
+            <!-- ================================================================= -->
+            <div id="groqAutoHunterPanel" class="card-bg p-4 md:p-5 rounded-xl border border-purple-900/50 shadow-2xl space-y-4 relative overflow-hidden">
+                <div class="absolute -right-16 -top-16 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-700/60 flex items-center justify-center text-purple-400">
+                                <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm sm:text-base font-bold text-white tracking-wide flex items-center gap-2">
+                                    <span>Groq AI Auto-Hunter (10 &rarr; 3 &rarr; 1)</span>
+                                    <span id="groqAutoHunterModelBadge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-800">QWEN 3.8-27B</span>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">AUTO-LIMIT BRACKET</span>
+                                </h3>
+                                <p class="text-xs text-slate-400">
+                                    Autonomous 3-stage funnel: Python pre-screens Aster DEX &rarr; Groq Qwen narrows to Top 3 &rarr; Deep Inspector selects #1 Best Limit Order with hard mathematical sizing.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <div class="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+                            <span class="text-slate-400 text-[11px] font-mono">Risk Budget:</span>
+                            <select id="groqRiskPresetSelect" class="bg-transparent text-amber-300 font-mono font-bold focus:outline-none text-xs">
+                                <option value="GROWTH_080" selected>$0.80 Growth (10x)</option>
+                                <option value="CONSERVATIVE_035">$0.35 Conservative (10x)</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+                            <span class="text-slate-400 text-[11px] font-mono">Mode:</span>
+                            <select id="groqVenueSelect" onchange="onGroqVenueChanged()" class="bg-transparent text-emerald-400 font-mono font-bold focus:outline-none text-xs">
+                                <option value="PAPER" selected>PAPER (Simulated)</option>
+                                <option value="LIVE_MANUAL">LIVE MANUAL (Operator Confirmation)</option>
+                                <option value="LIVE_AUTO">LIVE AUTO (Session-Authorized)</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+                            <span class="text-slate-400 text-[11px] font-mono">Model:</span>
+                            <select id="groqModelSelect" class="bg-transparent text-purple-300 font-mono font-bold focus:outline-none text-xs">
+                                <option value="qwen/qwen3.8-27b" selected>qwen/qwen3.8-27b</option>
+                                <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
+                                <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mainnet LIVE Warning Banner -->
+                <div id="groqMainnetWarningBanner" class="hidden p-3 rounded-xl bg-rose-950/70 border border-rose-600/80 text-rose-200 text-xs font-mono space-y-1 shadow-inner">
+                    <div class="flex items-center gap-2 font-bold text-rose-300">
+                        <i class="fa-solid fa-triangle-exclamation text-rose-400 text-sm animate-pulse"></i>
+                        <span id="groqMainnetWarningTitle">MAINNET LIVE EXECUTION MODE (ASTER DEX)</span>
+                    </div>
+                    <p id="groqMainnetWarningDesc" class="text-[11px] text-rose-200/90 leading-relaxed font-sans">
+                        Orders placed in LIVE mode use real USDT funds with ISOLATED 10x leverage and strict $0.20 dollar risk cap under LIVE_MICRO_V1 (EMA20_RECLAIM_5M_V1 authorized).
+                    </p>
+                </div>
+
+                <!-- SESSION-AUTHORIZED LIVE AUTO-EXECUTION CONTROLLER BAR -->
+                <div id="groqLiveSessionBar" class="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3 font-mono text-xs">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-slate-400 text-[11px] uppercase tracking-wider">Session State:</span>
+                            <span id="groqSessionStateBadge" class="px-2.5 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">INACTIVE</span>
+                            <span class="text-slate-600">|</span>
+                            <span class="text-slate-400 text-[11px] uppercase tracking-wider">Mode:</span>
+                            <span id="groqSessionModeBadge" class="px-2 py-0.5 rounded text-xs font-bold bg-blue-950 text-blue-300 border border-blue-800">PAPER</span>
+                            <span class="text-slate-600">|</span>
+                            <span class="text-slate-400 text-[11px]">Duration:</span>
+                            <span id="groqSessionDuration" class="text-slate-200 font-bold">00:00:00</span>
+                        </div>
+
+                        <!-- Session Operator Action Buttons -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" id="btnStartLiveSession" onclick="startLiveAutoSession()"
+                                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition">
+                                <i class="fa-solid fa-play text-[10px]"></i>
+                                <span>Start LIVE Auto</span>
+                            </button>
+                            <button type="button" id="btnReauthorizeLiveSession" onclick="reauthorizeLiveAutoSession()" class="hidden px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-amber-950/40 transition">
+                                <i class="fa-solid fa-key text-[10px]"></i>
+                                <span>Reauthorize LIVE</span>
+                            </button>
+                            <button type="button" id="btnPauseLiveSession" onclick="pauseLiveAutoSession()" class="hidden px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-pause text-[10px]"></i>
+                                <span>Pause Entries</span>
+                            </button>
+                            <button type="button" id="btnResumeLiveSession" onclick="resumeLiveAutoSession()" class="hidden px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-play text-[10px]"></i>
+                                <span>Resume Auto</span>
+                            </button>
+                            <button type="button" id="btnStopLiveSession" onclick="stopLiveAutoSession()" class="hidden px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-xs flex items-center gap-1.5 transition border border-slate-700">
+                                <i class="fa-solid fa-stop text-[10px]"></i>
+                                <span>Stop Session</span>
+                            </button>
+                            <button type="button" id="btnKillSwitchLiveSession" onclick="triggerLiveEmergencyKillSwitch()"
+                                class="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-rose-950/50 transition">
+                                <i class="fa-solid fa-skull-crossbones text-[10px]"></i>
+                                <span>Emergency Kill Switch</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Session Metrics Strip -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
+                        <div class="p-2 rounded bg-slate-950/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px]">Current Equity:</span>
+                            <span id="sessMetricEquity" class="font-bold text-slate-200">--</span>
+                        </div>
+                        <div class="p-2 rounded bg-slate-950/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px]">Daily Loss Used:</span>
+                            <span id="sessMetricDailyLoss" class="font-bold text-slate-200">$0.00 / $0.45</span>
+                        </div>
+                        <div class="p-2 rounded bg-slate-950/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px]">Entries Placed:</span>
+                            <span id="sessMetricEntries" class="font-bold text-slate-200">0 / 3</span>
+                        </div>
+                        <div class="p-2 rounded bg-slate-950/60 border border-slate-800">
+                            <span class="text-slate-500 block text-[10px]">Global Position Lock:</span>
+                            <span id="sessMetricLock" class="font-bold text-emerald-400">IDLE</span>
+                        </div>
+                        <div class="p-2 rounded bg-slate-950/60 border border-slate-800 col-span-2 sm:col-span-1">
+                            <span class="text-slate-500 block text-[10px]">Approved Strategy:</span>
+                            <span class="font-bold text-purple-400">EMA20_RECLAIM_5M_V1</span>
+                        </div>
+                    </div>
+
+                    <!-- Status Notification / Preflight Alert Box -->
+                    <div id="groqSessionStatusMessage" class="hidden text-[11px] p-2 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div id="groqFunnelStepsBar" class="flex items-center gap-2 text-xs font-mono">
+                        <span id="funnelStep1" class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">1. Top 10 Screen</span>
+                        <span class="text-slate-600">&rarr;</span>
+                        <span id="funnelStep2" class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">2. Top 3 Groq Qwen</span>
+                        <span class="text-slate-600">&rarr;</span>
+                        <span id="funnelStep3" class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">3. Limit Order & Bracket</span>
+                    </div>
+
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <button type="button" id="groqRunPreviewBtn" onclick="runGroqAutoTrader(false)"
+                            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-purple-300 font-semibold rounded-lg text-xs flex items-center gap-2 border border-purple-800/60 transition shadow-md">
+                            <i class="fa-solid fa-eye"></i>
+                            <span>Preview Setup (Read-Only)</span>
+                        </button>
+                        <div id="groqAutoScannerStatusPill" class="hidden px-3 py-2 rounded-lg text-xs font-mono font-bold flex items-center gap-2 border">
+                            <span class="w-2 h-2 rounded-full animate-ping"></span>
+                            <span id="groqAutoScannerStatusText">AUTO-SCANNER ACTIVE</span>
+                        </div>
+                        <button type="button" id="groqRunAutoOrderBtn" onclick="runGroqAutoTrader(true)"
+                            class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-lg text-xs flex items-center gap-2 shadow-lg shadow-purple-950/40 border border-purple-400/40 transition">
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>Run &amp; Auto-Place Limit Order (Simulated PAPER)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="groqFunnelLoading" class="hidden p-6 rounded-xl bg-slate-950/60 border border-purple-900/40 text-center space-y-3">
+                    <div class="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <div class="space-y-1">
+                        <h4 class="text-sm font-semibold text-white" id="groqFunnelLoadingText">Executing 10 &rarr; 3 &rarr; 1 Funnel...</h4>
+                        <p class="text-xs text-slate-400" id="groqFunnelLoadingSubtext">Screening Aster DEX tickers and filtering micro-account feasibility...</p>
+                    </div>
+                </div>
+
+                <div id="groqFunnelResult" class="hidden space-y-4 pt-2"></div>
+
+                <!-- Modal for Operator Confirmation of Real LIVE Aster DEX Order -->
+                <div id="groqLiveConfirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+                    <div class="card-bg max-w-lg w-full p-5 rounded-2xl border-2 border-rose-600/80 shadow-2xl space-y-4 relative">
+                        <div class="flex items-start justify-between border-b border-rose-900/50 pb-3">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-9 h-9 rounded-xl bg-rose-950 border border-rose-600 flex items-center justify-center text-rose-400">
+                                    <i class="fa-solid fa-shield-halved text-base"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-base font-bold text-white tracking-wide">CONFIRM LIVE ORDER</h4>
+                                    <p class="text-[11px] font-mono text-rose-300">ASTER DEX MAINNET &bull; ISOLATED 10x</p>
+                                </div>
+                            </div>
+                            <button type="button" onclick="closeGroqConfirmModal()" class="text-slate-400 hover:text-white p-1">
+                                <i class="fa-solid fa-xmark text-lg"></i>
+                            </button>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs font-mono text-rose-200 space-y-1">
+                            <div class="font-bold flex items-center gap-1.5 text-rose-300">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>MANDATORY OPERATOR SUPERVISION</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 font-sans">
+                                Review the exact mathematical sizing and parameters below. Clicking "Confirm & Place Real Order" will immediately send a real Limit Order and exchange-side reduce-only Stop Loss to Aster DEX Mainnet.
+                            </p>
+                        </div>
+
+                        <div id="groqConfirmModalBody" class="space-y-3 font-mono text-xs">
+                            <!-- Populated dynamically by javascript -->
+                        </div>
+
+                        <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/80">
+                            <button type="button" onclick="closeGroqConfirmModal()"
+                                class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-xs transition">
+                                Cancel
+                            </button>
+                            <button type="button" id="groqModalConfirmSubmitBtn" onclick="confirmAndExecuteGroqLiveOrder()"
+                                class="px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold rounded-lg text-xs shadow-lg shadow-rose-950/60 transition flex items-center gap-2">
+                                <i class="fa-solid fa-check"></i>
+                                <span>Confirm &amp; Place Real Order</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================================= -->
+            <!-- AI TRADE SETUP EXECUTOR PANEL (1-CLICK ASTER DEX LIMIT + BRACKET) -->
+            <!-- ================================================================= -->
+            <div class="card-bg p-4 md:p-5 rounded-xl border border-amber-900/40 space-y-4 shadow-xl">
+                <!-- Panel Header -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-amber-950/80 border border-amber-700/60 flex items-center justify-center text-amber-400">
+                            <i class="fa-solid fa-bolt text-sm"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm sm:text-base font-bold text-white tracking-wide flex items-center gap-2">
+                                <span>AI Trade Setup Executor</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800">1-CLICK BRACKET</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">ISOLATED 10x ENFORCED</span>
+                            </h3>
+                            <p class="text-xs text-slate-400">
+                                Paste any Gemini AI trade setup JSON to automatically configure Isolated 10x and place the Limit Order + TP + SL bracket.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Execution Venue Toggle (PAPER vs LIVE) -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] font-mono text-slate-400 uppercase">Venue:</span>
+                        <div class="inline-flex rounded-lg bg-slate-950 p-1 border border-slate-800 text-xs font-mono">
+                            <button type="button" id="aiVenueBtn-PAPER" onclick="setAISetupVenue('PAPER')"
+                                class="px-3 py-1 rounded-md font-bold text-xs transition bg-emerald-600 text-white shadow-sm">
+                                <i class="fa-solid fa-flask mr-1"></i>PAPER
+                            </button>
+                            <button type="button" id="aiVenueBtn-LIVE" onclick="setAISetupVenue('LIVE')"
+                                class="px-3 py-1 rounded-md font-bold text-xs transition text-slate-400 hover:text-white">
+                                <i class="fa-solid fa-satellite-dish mr-1"></i>LIVE
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Action Bar -->
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">Quick Templates:</span>
+                        <button type="button" onclick="loadAISetupFromPreset('LONG')"
+                            class="px-2.5 py-1 bg-slate-900 hover:bg-emerald-950/80 hover:text-emerald-300 text-slate-300 text-xs font-semibold rounded-lg border border-slate-800 hover:border-emerald-700/60 transition flex items-center gap-1.5"
+                            title="Load pre-calculated 15m Fast Scalper LONG preset for current coin">
+                            <i class="fa-solid fa-arrow-trend-up text-emerald-400"></i>
+                            <span>Load 15m LONG Preset</span>
+                        </button>
+                        <button type="button" onclick="loadAISetupFromPreset('SHORT')"
+                            class="px-2.5 py-1 bg-slate-900 hover:bg-rose-950/80 hover:text-rose-300 text-slate-300 text-xs font-semibold rounded-lg border border-slate-800 hover:border-rose-700/60 transition flex items-center gap-1.5"
+                            title="Load pre-calculated 15m Fast Scalper SHORT preset for current coin">
+                            <i class="fa-solid fa-arrow-trend-down text-rose-400"></i>
+                            <span>Load 15m SHORT Preset</span>
+                        </button>
+                        <button type="button" onclick="loadAISetupSample()"
+                            class="px-2.5 py-1 bg-slate-900 hover:bg-cyan-950/80 hover:text-cyan-300 text-slate-300 text-xs font-semibold rounded-lg border border-slate-800 hover:border-cyan-700/60 transition flex items-center gap-1.5"
+                            title="Paste sample SOLUSDT setup template">
+                            <i class="fa-solid fa-paste text-cyan-400"></i>
+                            <span>Paste SOL Template</span>
+                        </button>
+                    </div>
+
+                    <button type="button" onclick="clearAISetup()"
+                        class="px-2.5 py-1 text-slate-400 hover:text-rose-400 text-xs transition flex items-center gap-1">
+                        <i class="fa-solid fa-trash-can text-[10px]"></i>
+                        <span>Clear</span>
+                    </button>
+                </div>
+
+                <!-- Input Textarea & Parsed Preview Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Column 1: JSON Textarea -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                            <span>PASTE AI TRADE SETUP (JSON)</span>
+                            <span class="text-slate-500">Auto-cleans markdown fences</span>
+                        </div>
+                        <textarea id="aiSetupInput" rows="8"
+                            oninput="onAISetupInput()"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500 leading-relaxed"
+                            placeholder='{\n  "symbol": "SOLUSDT",\n  "direction": "LONG",\n  "order_type": "LIMIT",\n  "entry_price": 100.55,\n  "stop_loss_price": 99.34,\n  "take_profit_price": 102.30,\n  "qty": 0.66,\n  "leverage": 10,\n  "margin_mode": "ISOLATED",\n  "max_risk_usdt": 0.85,\n  "execution_venue": "PAPER",\n  "notes": "SOL 15m/1h oversold sweep-reclaim into 102.30 Bear FVG"\n}'></textarea>
+                    </div>
+
+                    <!-- Column 2: Live Parsed Preview & Bracket Specs -->
+                    <div class="space-y-1.5 flex flex-col justify-between">
+                        <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                            <span>PARSED ORDER BRACKET PREVIEW</span>
+                            <span id="aiSetupStatusBadge" class="text-slate-500">Awaiting JSON input...</span>
+                        </div>
+
+                        <!-- Preview Card Container -->
+                        <div id="aiSetupPreviewCard" class="bg-slate-950/80 border border-slate-800 rounded-lg p-3 flex-1 flex flex-col justify-between space-y-3">
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                                <div class="bg-slate-900/80 p-2 rounded border border-slate-800/80">
+                                    <div class="text-[10px] font-mono text-slate-400">PAIR &amp; SIDE</div>
+                                    <div id="aiPreviewSymbolSide" class="text-xs font-bold font-mono text-slate-300">--</div>
+                                </div>
+                                <div class="bg-slate-900/80 p-2 rounded border border-slate-800/80">
+                                    <div class="text-[10px] font-mono text-slate-400">ENTRY LIMIT</div>
+                                    <div id="aiPreviewEntry" class="text-xs font-bold font-mono text-white">$0.00</div>
+                                </div>
+                                <div class="bg-slate-900/80 p-2 rounded border border-slate-800/80">
+                                    <div class="text-[10px] font-mono text-slate-400">STOP LOSS</div>
+                                    <div id="aiPreviewSL" class="text-xs font-bold font-mono text-rose-400">$0.00</div>
+                                </div>
+                                <div class="bg-slate-900/80 p-2 rounded border border-slate-800/80">
+                                    <div class="text-[10px] font-mono text-slate-400">TAKE PROFIT</div>
+                                    <div id="aiPreviewTP" class="text-xs font-bold font-mono text-emerald-400">$0.00</div>
+                                </div>
+                            </div>
+
+                            <!-- Position & Risk Breakdown -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-slate-300 bg-slate-900/40 p-2 rounded border border-slate-800/50">
+                                <div><span class="text-slate-400">Size:</span> <strong id="aiPreviewSize" class="text-white">--</strong></div>
+                                <div><span class="text-slate-400">Notional:</span> <strong id="aiPreviewNotional" class="text-white">$0.00</strong></div>
+                                <div><span class="text-slate-400">Margin:</span> <strong id="aiPreviewMargin" class="text-cyan-300">$0.00</strong></div>
+                                <div><span class="text-slate-400">R:R:</span> <strong id="aiPreviewRR" class="text-amber-400">-- R</strong></div>
+                            </div>
+
+                            <!-- Notes Preview -->
+                            <div class="text-[11px] text-slate-400 italic truncate" id="aiPreviewNotes">
+                                "Paste JSON above to parse AI thesis &amp; target levels"
+                            </div>
+                        </div>
+
+                        <!-- Validation Error Display -->
+                        <div id="aiSetupValidationError" class="hidden p-2 rounded bg-rose-950/70 border border-rose-800 text-rose-300 text-xs font-mono flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+                            <span id="aiSetupValidationMsg"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Execution Button & Status -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                    <div id="aiSetupExecutionFeedback" class="text-xs font-mono text-slate-400 flex items-center gap-2">
+                        <!-- Dynamic feedback message or order ID -->
+                    </div>
+
+                    <button type="button" id="executeAISetupBtn" onclick="executeAISetup()"
+                        class="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-lg text-xs shadow-lg shadow-emerald-950/40 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span id="executeAISetupBtnText">1-Click Execute AI Trade Setup (PAPER)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Empty / Initial Prompt State -->
+            <div id="inspectorEmptyState" class="card-bg p-10 sm:p-14 rounded-xl border border-slate-800 text-center space-y-4">
+                <div class="w-16 h-16 rounded-2xl bg-cyan-950/50 border border-cyan-800/40 text-cyan-400 mx-auto flex items-center justify-center text-2xl shadow-inner">
+                    <i class="fa-solid fa-coins"></i>
+                </div>
+                <div class="max-w-md mx-auto space-y-1.5">
+                    <h3 class="text-base font-bold text-slate-200">Select a Coin to Generate AI Context</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Select a coin above or click one of the popular coin chips to generate its real-time quantitative JSON snapshot with SMC dealing range, liquidity sweeps, L2 walls, and micro-sizing.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="inspectorLoadingState" class="hidden card-bg p-12 rounded-xl border border-slate-800 text-center space-y-3">
+                <div class="inline-block animate-spin text-cyan-400 text-2xl">
+                    <i class="fa-solid fa-circle-notch"></i>
+                </div>
+                <div class="text-sm font-bold text-slate-200">
+                    Compiling Quantitative Context for <span id="inspectorLoadingSymbol" class="text-cyan-400 font-mono">--</span>...
+                </div>
+                <p class="text-xs text-slate-500">Fetching 15m/1h/4h MTF candles, SMC dealing range, orderbook L2 depth, and Aster DEX micro-sizing.</p>
+            </div>
+
+            <!-- Result Container (Mini Cards + JSON Viewer + Copy Buttons) -->
+            <div id="inspectorResultContainer" class="hidden space-y-5">
+
+                <!-- Mini Metric Header Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <!-- 1. Mark Price & 24h Change -->
+                    <div class="card-bg p-3.5 rounded-xl border border-slate-800 space-y-1">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] font-mono">
+                            <span>MARK PRICE</span>
+                            <span id="inspectorCardChange24h" class="text-xs font-semibold text-emerald-400">+0.00%</span>
+                        </div>
+                        <div id="inspectorCardMarkPrice" class="text-xl font-bold font-mono text-white">$0.00</div>
+                        <div id="inspectorCardFunding" class="text-[10px] text-slate-500 font-mono">Funding: 0.000%</div>
+                    </div>
+
+                    <!-- 2. MTF Trend & Compass -->
+                    <div class="card-bg p-3.5 rounded-xl border border-slate-800 space-y-1">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] font-mono">
+                            <span>TREND ALIGNMENT</span>
+                            <i class="fa-solid fa-compass text-slate-500"></i>
+                        </div>
+                        <div id="inspectorCardTrend" class="text-sm font-bold font-mono text-emerald-400">1H: -- | 4H: --</div>
+                        <div id="inspectorCardCompass" class="text-[10px] text-slate-400 font-mono">BTC: -- • Regime: --</div>
+                    </div>
+
+                    <!-- 3. 72H Dealing Range -->
+                    <div class="card-bg p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] font-mono">
+                            <span>72H DEALING RANGE</span>
+                            <span id="inspectorCardDealingRange" class="text-xs font-bold font-mono text-cyan-300">50.0%</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="inspectorCardDealingRangeBar" class="h-full bg-cyan-500 rounded-full transition-all duration-300" style="width: 50%"></div>
+                        </div>
+                        <div id="inspectorCardDealingRangeSpan" class="text-[10px] text-slate-500 font-mono">Span: $0.00 - $0.00</div>
+                    </div>
+
+                    <!-- 4. L2 Imbalance & Depth -->
+                    <div class="card-bg p-3.5 rounded-xl border border-slate-800 space-y-1">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] font-mono">
+                            <span>L2 ORDER BOOK</span>
+                            <span id="inspectorCardL2Gate" class="text-[10px] font-semibold px-1.5 py-0.2 rounded border bg-emerald-950/70 border-emerald-800 text-emerald-300">L2: PASSED</span>
+                        </div>
+                        <div id="inspectorCardImbalance" class="text-sm font-bold font-mono text-white">50.0% Bids</div>
+                        <div id="inspectorCardDepth" class="text-[10px] text-slate-500 font-mono">Bids: $0 | Asks: $0</div>
+                    </div>
+                </div>
+
+                <!-- Action Bar & JSON Code Viewer -->
+                <div class="card-bg rounded-xl border border-slate-800 overflow-hidden shadow-2xl">
+                    <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-900/90 border-b border-slate-800">
+                        <div class="flex items-center gap-3">
+                            <span class="flex items-center gap-2 text-xs font-bold font-mono text-cyan-400">
+                                <i class="fa-solid fa-code"></i> JSON SNAPSHOT PAYLOAD
+                            </span>
+                            <span id="inspectorTokenBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                                ~2,800 Tokens • 11.2 KB
+                            </span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="copyPromptBtn" onclick="copyInspectorPrompt()"
+                                class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-1.5 transition"
+                                title="Copy both the quantitative prompt and JSON payload together">
+                                <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i>
+                                <span>Copy with AI Prompt</span>
+                            </button>
+
+                            <button type="button" id="copyJsonBtn" onclick="copyInspectorJson()"
+                                class="px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950/30 transition">
+                                <i class="fa-regular fa-copy"></i>
+                                <span>Copy JSON for AI Analysis</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Syntax Highlighted JSON Container -->
+                    <div class="p-4 bg-slate-950 max-h-[650px] overflow-auto">
+                        <pre class="font-mono text-xs leading-relaxed text-slate-300 select-all"><code id="inspectorJsonCode">// Snapshot will appear here...</code></pre>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
     </div>
 
 
@@ -4212,6 +4936,7 @@
     <script src="/static/js/market_screener.js"></script>
     <script src="/static/js/ai_analyst.js"></script>
     <script src="/static/js/trade_inspector.js"></script>
+    <script src="/static/js/coin_inspector.js"></script>
     <script src="/static/js/navigation.js"></script>
     <script src="/static/js/market_participant.js"></script>
     <script src="/static/js/app.js"></script>

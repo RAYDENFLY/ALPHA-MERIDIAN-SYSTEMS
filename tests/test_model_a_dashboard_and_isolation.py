@@ -132,13 +132,13 @@ def test_7_strategy_configuration_is_strictly_read_only(client):
     # Verify API returns exact frozen parameters
     resp = client.get("/api/model_a/status")
     sc = resp.json()["strategy_configuration"]
-    assert sc["strategy_version"] == "MODEL_A_FROZEN"
+    assert sc["strategy_version"] == "MODEL_A_PAPER_V2"
     assert len(sc["whitelisted_symbols"]) == 11
     assert sc["timeframes"]["bias_timeframe"] == "4h"
     assert sc["timeframes"]["execution_timeframe"] == "1h"
     assert sc["strategy_parameters"]["min_reward_to_risk"] == 1.5
     assert sc["risk_settings"]["initial_equity_usdt"] == 16.0
-    assert sc["risk_settings"]["max_open_positions"] == 1
+    assert sc["risk_settings"]["max_open_positions"] == 3
     assert sc["risk_settings"]["margin_mode"] == "ISOLATED"
 
 

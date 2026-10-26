@@ -104,7 +104,7 @@ function renderModelAStatusSection(st) {
     }
 
     const cfgBadge = document.getElementById('modelAConfigIdBadge');
-    if (cfgBadge) cfgBadge.textContent = st.active_config_id || 'MODEL_A_FROZEN';
+    if (cfgBadge) cfgBadge.textContent = st.active_config_id || 'MODEL_A_PAPER_V2_TUNED';
 
     const setEl = (id, text) => {
         const el = document.getElementById(id);
@@ -201,8 +201,8 @@ function renderModelAConfigurationSection(cfg) {
     const cohortContainer = document.getElementById('modelAConfigCohortParams');
     if (cohortContainer) {
         const rows = [
-            ['Strategy Version', cfg.strategy_version || 'MODEL_A_FROZEN'],
-            ['Config Identifier', cfg.config_id || 'MODEL_A_FROZEN_v1.0.0'],
+            ['Strategy Version', cfg.strategy_version || 'MODEL_A_PAPER_V2'],
+            ['Config Identifier', cfg.config_id || 'MODEL_A_PAPER_V2_TUNED'],
             ['ML Model & Calibration', `${ml.model_type || 'lightgbm'} (${ml.calibration_method || 'isotonic'})`],
             ['ML Governance Role', ml.role || 'INFORMATIVE_RANKING_NON_BLOCKING'],
             ['ML Confidence Reference', ml.min_confidence_threshold !== undefined ? `${(ml.min_confidence_threshold * 100).toFixed(1)}%` : 'UNAVAILABLE'],

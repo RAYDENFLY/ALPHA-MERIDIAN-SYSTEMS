@@ -63,6 +63,9 @@
             const marginEl = document.getElementById('modalPosMarginBadge');
             if (!content) return;
 
+            const safeFP = (p) => (typeof formatPrice === 'function' ? formatPrice(p) : (p != null ? Number(p).toFixed(4) : '--'));
+            const safeEH = (str) => (typeof escapeHtml === 'function' ? escapeHtml(str) : (str != null ? String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : ''));
+
             const isLong = data.side === 'LONG';
             const sideBadgeClass = isLong ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800';
             
@@ -72,28 +75,50 @@
                 sideEl.innerText = `${data.side}`;
             }
             if (marginEl) {
-                marginEl.innerText = data.risk.margin_mode || 'ISOLATED';
+                marginEl.innerText = (data.risk && data.risk.margin_mode) ? data.risk.margin_mode : 'ISOLATED';
             }
 
-            // Thesis Status Badge
+            // 1. Thesis Status Badge
             let thesisBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
-            if (data.thesis_status === 'VALID') thesisBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-700';
-            else if (data.thesis_status === 'WEAKENING') thesisBadgeClass = 'bg-amber-950 text-amber-300 border-amber-700';
-            else if (data.thesis_status === 'INVALIDATED') thesisBadgeClass = 'bg-rose-950 text-rose-300 border-rose-700';
+            if (data.thesis_status === 'THESIS_INTACT' || data.thesis_status === 'VALID') {
+                thesisBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-700';
+            } else if (data.thesis_status === 'THESIS_WEAKENING' || data.thesis_status === 'WEAKENING') {
+                thesisBadgeClass = 'bg-amber-950 text-amber-300 border-amber-700';
+            } else if (data.thesis_status === 'THESIS_INVALIDATED' || data.thesis_status === 'INVALIDATED') {
+                thesisBadgeClass = 'bg-rose-950 text-rose-300 border-rose-700 animate-pulse';
+            }
 
-            // Action Badge
+            // 2. Position Risk Status Badge
+            const riskStatus = (data.risk && data.risk.risk_status) ? data.risk.risk_status : 'PROTECTION_UNVERIFIED';
+            let riskBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+            if (riskStatus === 'RISK_WITHIN_LIMIT') riskBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-700';
+            else if (riskStatus === 'RISK_WARNING') riskBadgeClass = 'bg-amber-950 text-amber-300 border-amber-700';
+            else if (riskStatus === 'RISK_BREACHED') riskBadgeClass = 'bg-rose-950 text-rose-300 border-rose-700 animate-pulse';
+            else if (riskStatus === 'PROTECTION_UNVERIFIED') riskBadgeClass = 'bg-yellow-950 text-yellow-300 border-yellow-700';
+
+            // 3. Protection Status Badge
+            const protStatus = (data.risk && data.risk.protection_status) ? data.risk.protection_status : 'PROTECTION_UNVERIFIED';
+            let protBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+            if (protStatus === 'FULLY_PROTECTED') protBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+            else if (protStatus === 'PROTECTED_NO_TP') protBadgeClass = 'bg-cyan-950 text-cyan-300 border-cyan-800';
+            else if (protStatus === 'PARTIALLY_PROTECTED') protBadgeClass = 'bg-amber-950 text-amber-300 border-amber-800';
+            else if (protStatus === 'PROTECTION_UNVERIFIED') protBadgeClass = 'bg-yellow-950 text-yellow-300 border-yellow-800';
+            else if (protStatus === 'UNPROTECTED_NO_SL') protBadgeClass = 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse';
+
+            // 4. Action Badge
             let actionBadgeClass = 'bg-indigo-950 text-indigo-300 border-indigo-700';
             if (data.action === 'HOLD') actionBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-700';
             else if (data.action === 'REDUCE') actionBadgeClass = 'bg-amber-950 text-amber-300 border-amber-700';
-            else if (data.action === 'CLOSE') actionBadgeClass = 'bg-rose-950 text-rose-300 border-rose-700';
-            else if (data.action === 'ADJUST') actionBadgeClass = 'bg-cyan-950 text-cyan-300 border-cyan-700';
+            else if (data.action === 'EXIT' || data.action === 'CLOSE') actionBadgeClass = 'bg-rose-950 text-rose-300 border-rose-700 animate-pulse';
+            else if (data.action === 'REVIEW' || data.action === 'ADJUST') actionBadgeClass = 'bg-cyan-950 text-cyan-300 border-cyan-700';
 
             // Liquidation Threat Badge
+            const liqThreat = (data.risk && data.risk.liquidation_threat) ? data.risk.liquidation_threat : 'SAFE';
             let liqBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
-            if (data.risk.liquidation_threat === 'SAFE') liqBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-800';
-            else if (data.risk.liquidation_threat === 'MODERATE') liqBadgeClass = 'bg-yellow-950 text-yellow-300 border-yellow-800';
-            else if (data.risk.liquidation_threat === 'ELEVATED') liqBadgeClass = 'bg-amber-950 text-amber-300 border-amber-800';
-            else if (data.risk.liquidation_threat === 'CRITICAL') liqBadgeClass = 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse';
+            if (liqThreat === 'SAFE') liqBadgeClass = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+            else if (liqThreat === 'MODERATE') liqBadgeClass = 'bg-yellow-950 text-yellow-300 border-yellow-800';
+            else if (liqThreat === 'ELEVATED') liqBadgeClass = 'bg-amber-950 text-amber-300 border-amber-800';
+            else if (liqThreat === 'CRITICAL') liqBadgeClass = 'bg-rose-950 text-rose-300 border-rose-800 animate-pulse';
 
             const upnl = Number(data.unrealized_pnl_usdt || 0);
             const upnlClass = upnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
@@ -103,43 +128,168 @@
             const evidenceHtml = (data.structural_evidence || []).map(e => `
                 <li class="flex items-start gap-2 text-xs text-slate-300">
                     <span class="text-indigo-400 mt-0.5">&bull;</span>
-                    <span>${escapeHtml(e)}</span>
+                    <span>${safeEH(e)}</span>
                 </li>
             `).join('') || '<li class="text-xs text-slate-500 italic">No structural anomalies detected.</li>';
-
-            // Format Conditional Triggers
-            const triggersHtml = (data.conditional_triggers || []).map(t => `
-                <li class="flex items-start gap-2 text-xs text-slate-200 bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                    <span class="text-cyan-400 font-bold font-mono">&#10148;</span>
-                    <span>${escapeHtml(t)}</span>
-                </li>
-            `).join('') || '<div class="text-xs text-slate-500">Maintain standard parameters.</div>';
 
             // Format Invalidation Conditions
             const invalidationsHtml = (data.invalidation_conditions || []).map(inv => `
                 <li class="flex items-start gap-2 text-xs text-rose-200 bg-rose-950/30 p-2 rounded-lg border border-rose-900/40">
                     <span class="text-rose-400 font-bold">&#9888;</span>
-                    <span>${escapeHtml(inv)}</span>
+                    <span>${safeEH(inv)}</span>
                 </li>
             `).join('') || '<div class="text-xs text-slate-500">None specified.</div>';
 
+            // Helper to render Timeframe Structure card
+            const renderTfCard = (tfLabel, tf) => {
+                if (!tf) return `<div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 text-slate-500 text-xs">${tfLabel}: Data unavailable</div>`;
+                const trendClass = tf.trend === 'BULLISH' ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800/60' : (tf.trend === 'BEARISH' ? 'text-rose-400 bg-rose-950/60 border border-rose-800/60' : 'text-slate-400 bg-slate-800 border border-slate-700');
+                const alignClass = tf.position_alignment === 'SUPPORTS' ? 'text-emerald-400' : (tf.position_alignment === 'CONFLICTS' ? 'text-rose-400 font-bold' : 'text-slate-400');
+                const isTfStale = tf.data_freshness && tf.data_freshness.is_stale;
+                const freshBadge = isTfStale ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-amber-950 text-amber-300 border border-amber-800">STALE</span>' : '<span class="px-1.5 py-0.2 rounded text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-800">FRESH</span>';
+
+                return `
+                    <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/90 space-y-2">
+                        <div class="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-bold text-indigo-400 text-xs">${tfLabel}</span>
+                                ${freshBadge}
+                            </div>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${trendClass}">${tf.trend || 'NEUTRAL'}</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                            <div><span class="text-slate-500">EMA Stack:</span> <span class="text-slate-200 font-semibold">${tf.ema_alignment || '--'}</span></div>
+                            <div><span class="text-slate-500">Alignment:</span> <span class="${alignClass}">${tf.position_alignment || 'NEUTRAL'}</span></div>
+                            <div><span class="text-slate-500">EMA20:</span> <span class="text-slate-300">${tf.ema20 ? '$' + safeFP(tf.ema20) : '--'}</span></div>
+                            <div><span class="text-slate-500">EMA50:</span> <span class="text-slate-300">${tf.ema50 ? '$' + safeFP(tf.ema50) : '--'}</span></div>
+                            <div><span class="text-slate-500">RSI(14):</span> <span class="text-indigo-300 font-bold">${tf.rsi_14 != null ? tf.rsi_14.toFixed(1) : '--'}</span></div>
+                            <div class="truncate" title="${safeEH(tf.momentum_condition || '')}"><span class="text-slate-500">Mom:</span> <span class="text-slate-300">${tf.momentum_condition ? tf.momentum_condition.replace('MOMENTUM_', '') : '--'}</span></div>
+                            <div><span class="text-slate-500">Struct Supp:</span> <span class="text-emerald-400">${tf.structural_support ? '$' + safeFP(tf.structural_support) : (tf.last_swing_low ? '$' + safeFP(tf.last_swing_low) : '--')}</span></div>
+                            <div><span class="text-slate-500">Struct Res:</span> <span class="text-rose-400">${tf.structural_resistance ? '$' + safeFP(tf.structural_resistance) : (tf.last_swing_high ? '$' + safeFP(tf.last_swing_high) : '--')}</span></div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 pt-1 border-t border-slate-800/50 flex justify-between">
+                            <span>BOS: ${tf.bos_count || 0} | CHoCH: ${tf.choch_count || 0}</span>
+                            <span>SwH: ${tf.last_swing_high ? '$' + safeFP(tf.last_swing_high) : '--'} / SwL: ${tf.last_swing_low ? '$' + safeFP(tf.last_swing_low) : '--'}</span>
+                        </div>
+                    </div>
+                `;
+            };
+
+            // Format Structured Triggers Table
+            let triggersTableHtml = '';
+            const structuredTriggers = data.structured_triggers || [];
+            if (structuredTriggers.length > 0) {
+                triggersTableHtml = `
+                    <div class="overflow-x-auto rounded-lg border border-slate-800/80">
+                        <table class="min-w-full divide-y divide-slate-800 text-left text-xs font-mono">
+                            <thead class="bg-slate-900/80 text-[10px] text-slate-400 uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-2.5 py-1.5">Type</th>
+                                    <th class="px-2.5 py-1.5">Price</th>
+                                    <th class="px-2.5 py-1.5">Distance</th>
+                                    <th class="px-2.5 py-1.5">TF</th>
+                                    <th class="px-2.5 py-1.5">Confirmation</th>
+                                    <th class="px-2.5 py-1.5">Action Implication</th>
+                                    <th class="px-2.5 py-1.5">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/60 bg-slate-950/40 text-[11px]">
+                                ${structuredTriggers.map(tr => {
+                                    const typeClass = tr.trigger_type === 'TAKE_PROFIT' ? 'text-emerald-400 bg-emerald-950/50 border border-emerald-800' : (tr.trigger_type === 'STOP_LOSS' ? 'text-rose-400 bg-rose-950/50 border border-rose-800' : 'text-amber-300 bg-amber-950/50 border border-amber-800');
+                                    const distSign = (tr.distance_pct || 0) >= 0 ? '+' : '';
+                                    return `
+                                        <tr class="hover:bg-slate-800/20">
+                                            <td class="px-2.5 py-2 font-bold whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[10px] ${typeClass}">${tr.trigger_type}</span></td>
+                                            <td class="px-2.5 py-2 text-white font-bold whitespace-nowrap">$${safeFP(tr.price)}</td>
+                                            <td class="px-2.5 py-2 ${tr.distance_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'} whitespace-nowrap">${distSign}${Number(tr.distance_pct || 0).toFixed(2)}%</td>
+                                            <td class="px-2.5 py-2 text-indigo-300 whitespace-nowrap">${tr.timeframe}</td>
+                                            <td class="px-2.5 py-2 text-slate-400 whitespace-nowrap">${tr.required_confirmation}</td>
+                                            <td class="px-2.5 py-2 text-slate-200 font-semibold">${tr.action_implication}</td>
+                                            <td class="px-2.5 py-2 whitespace-nowrap">
+                                                <span class="px-1.5 py-0.5 rounded text-[10px] ${tr.is_active ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-800 text-slate-400'}">${tr.is_active ? 'ACTIVE' : 'PENDING'}</span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else if ((data.conditional_triggers || []).length > 0) {
+                triggersTableHtml = `
+                    <ul class="space-y-1.5">
+                        ${data.conditional_triggers.map(t => `
+                            <li class="flex items-start gap-2 text-xs text-slate-200 bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                                <span class="text-cyan-400 font-bold font-mono">&#10148;</span>
+                                <span>${safeEH(t)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                `;
+            } else {
+                triggersTableHtml = '<div class="text-xs text-slate-500">Maintain standard parameters.</div>';
+            }
+
+            // Market Regime summary section
+            const regime = data.market_regime || {};
+            const regClass = regime.regime && regime.regime.includes('BULL') ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800' : (regime.regime && regime.regime.includes('BEAR') ? 'text-rose-400 bg-rose-950/60 border border-rose-800' : 'text-slate-300 bg-slate-800 border border-slate-700');
+            const corrClass = regime.position_correlation === 'ALIGNED_WITH_MACRO' ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800' : (regime.position_correlation === 'COUNTER_TREND_TO_BTC' ? 'text-rose-400 bg-rose-950/60 border border-rose-800' : 'text-slate-300 bg-slate-800 border border-slate-700');
+
+            // Freshness summary
+            const freshness = data.freshness || {};
+            const isFresh = freshness.overall_freshness === 'FRESH';
+            const freshClass = isFresh ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800' : 'text-amber-400 bg-amber-950/60 border border-amber-800';
+
             content.innerHTML = `
-                <!-- Top Summary Metrics Cards -->
+                <!-- 1. Multi-Timeframe Synthesis & Alignment Banner -->
+                <div class="p-3.5 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-900/60 space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-indigo-950 text-indigo-300 border border-indigo-700 uppercase tracking-wide">MTF Synthesis</span>
+                            <span class="text-xs font-bold text-white font-mono">${safeEH(data.multi_timeframe_synthesis || 'MIXED_TIMEFRAME_CONSOLIDATION')}</span>
+                        </div>
+                        <div class="flex items-center gap-2 font-mono text-[11px]">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${thesisBadgeClass}" title="Structural Thesis Status">THESIS: ${data.thesis_status}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${riskBadgeClass}" title="Account Risk Limit Status">RISK: ${riskStatus}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${protBadgeClass}" title="Exchange Order Protection Status">PROT: ${protStatus}</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed font-sans">${safeEH(data.synthesis_narrative || data.thesis_summary || '')}</p>
+                </div>
+
+                <!-- 2. Market Regime & BTC/ETH Context Banner -->
+                <div class="p-3 rounded-xl bg-slate-900/50 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs font-mono">
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-400 uppercase text-[10px] font-bold">Macro Regime:</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${regClass}">${regime.regime || 'NEUTRAL'}</span>
+                            <span class="text-slate-400 uppercase text-[10px] font-bold ml-2">Correlation:</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${corrClass}">${regime.position_correlation || 'NEUTRAL'}</span>
+                        </div>
+                        <div class="text-slate-400 text-[11px] font-sans">${safeEH(regime.summary || 'Market regime data synchronized.')}</div>
+                    </div>
+                    <div class="flex items-center gap-4 text-[11px] text-slate-300 bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-800/80 whitespace-nowrap">
+                        <div>BTC: <span class="text-white font-bold">${regime.btc_trend_1h || '--'}</span> <span class="text-slate-500">(4H ${regime.btc_trend_4h || '--'})</span> <span class="${(regime.btc_change_24h_pct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${(regime.btc_change_24h_pct || 0) >= 0 ? '+' : ''}${Number(regime.btc_change_24h_pct || 0).toFixed(2)}%</span></div>
+                        <div class="border-l border-slate-800 pl-4">ETH: <span class="text-white font-bold">${regime.eth_trend_1h || '--'}</span> <span class="text-slate-500">(4H ${regime.eth_trend_4h || '--'})</span> <span class="${(regime.eth_change_24h_pct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${(regime.eth_change_24h_pct || 0) >= 0 ? '+' : ''}${Number(regime.eth_change_24h_pct || 0).toFixed(2)}%</span></div>
+                    </div>
+                </div>
+
+                <!-- 3. Top Summary Metrics Cards -->
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
                     <div class="card-inner p-3 rounded-xl border border-slate-800">
                         <span class="text-slate-500 block text-[10px] uppercase">Entry &amp; Mark</span>
-                        <div class="text-white font-bold text-sm">$${formatPrice(data.entry_price)}</div>
-                        <div class="text-slate-400 text-[11px]">Mark: $${formatPrice(data.mark_price)}</div>
+                        <div class="text-white font-bold text-sm">$${safeFP(data.entry_price)}</div>
+                        <div class="text-slate-400 text-[11px]">Mark: $${safeFP(data.mark_price)}</div>
                     </div>
                     <div class="card-inner p-3 rounded-xl border border-slate-800">
                         <span class="text-slate-500 block text-[10px] uppercase">Position Size &amp; Notional</span>
                         <div class="text-white font-bold text-sm">${data.position_amt}</div>
-                        <div class="text-slate-400 text-[11px]">$${Number(data.risk.notional_usdt || 0).toFixed(2)} USDT</div>
+                        <div class="text-slate-400 text-[11px]">$${Number(data.risk ? data.risk.notional_usdt : 0).toFixed(2)} USDT</div>
                     </div>
                     <div class="card-inner p-3 rounded-xl border border-slate-800">
                         <span class="text-slate-500 block text-[10px] uppercase">Allocated Margin</span>
-                        <div class="text-white font-bold text-sm">$${Number(data.risk.allocated_margin_usdt || 0).toFixed(2)}</div>
-                        <div class="text-slate-400 text-[11px]">${data.risk.margin_mode}</div>
+                        <div class="text-white font-bold text-sm">$${Number(data.risk ? data.risk.allocated_margin_usdt : 0).toFixed(2)}</div>
+                        <div class="text-slate-400 text-[11px]">${data.risk ? data.risk.margin_mode : 'ISOLATED'}</div>
                     </div>
                     <div class="card-inner p-3 rounded-xl border border-slate-800">
                         <span class="text-slate-500 block text-[10px] uppercase">Unrealized PnL</span>
@@ -148,7 +298,7 @@
                     </div>
                 </div>
 
-                <!-- Thesis Audit & Recommendation Section -->
+                <!-- 4. Thesis Audit & Recommendation Section -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Thesis Audit Card -->
                     <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
@@ -156,7 +306,7 @@
                             <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Position Thesis Audit</span>
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border font-mono ${thesisBadgeClass}">${data.thesis_status}</span>
                         </div>
-                        <p class="text-xs font-medium text-slate-200 leading-relaxed">${escapeHtml(data.thesis_summary)}</p>
+                        <p class="text-xs font-medium text-slate-200 leading-relaxed font-sans">${safeEH(data.thesis_summary)}</p>
                         <div class="space-y-1.5 pt-1">
                             <span class="text-[10px] text-slate-500 font-semibold uppercase block">Structural Evidence:</span>
                             <ul class="space-y-1.5">${evidenceHtml}</ul>
@@ -169,24 +319,50 @@
                             <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Action Recommendation</span>
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border font-mono ${actionBadgeClass}">${data.action}</span>
                         </div>
-                        <p class="text-xs font-medium text-slate-200 leading-relaxed">${escapeHtml(data.action_summary)}</p>
-                        <div class="space-y-2 pt-1">
-                            <span class="text-[10px] text-slate-500 font-semibold uppercase block">Conditional Triggers:</span>
-                            <ul class="space-y-1.5">${triggersHtml}</ul>
-                        </div>
-                        <div class="space-y-1 pt-1">
-                            <span class="text-[10px] text-rose-400 font-semibold uppercase block">Invalidation Criteria:</span>
+                        <p class="text-xs font-medium text-slate-200 leading-relaxed font-sans">${safeEH(data.action_summary)}</p>
+                        
+                        <!-- Structural Invalidation Criteria -->
+                        <div class="space-y-1.5 pt-2 border-t border-slate-800/80">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] text-rose-400 font-semibold uppercase block">Structural Invalidation Criteria:</span>
+                                <span class="text-[9px] text-slate-500">(Premise Failure)</span>
+                            </div>
                             <ul class="space-y-1">${invalidationsHtml}</ul>
                         </div>
                     </div>
                 </div>
 
-                <!-- Risk & Protection Analysis Details -->
+                <!-- 5. Multi-Timeframe Structural Evidence Grid (4H Primary, 1H Local, 15M Momentum) -->
                 <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
                     <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                        <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Risk &amp; Protection Breakdown</span>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${data.risk.protection_status === 'FULLY_PROTECTED' ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-amber-950 text-amber-300 border-amber-800'}">
-                            ${data.risk.protection_status}
+                        <span class="text-xs font-bold text-slate-300 uppercase tracking-wide block">Independent Multi-Timeframe Structure (4H, 1H, 15M)</span>
+                        <span class="text-[10px] text-slate-400">Trend &bull; EMA Stack &bull; RSI &bull; Key S/R &bull; Freshness</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-xs">
+                        ${renderTfCard('4H PRIMARY', data.timeframe_4h)}
+                        ${renderTfCard('1H LOCAL', data.timeframe_1h)}
+                        ${renderTfCard('15M EXECUTION', data.timeframe_15m)}
+                    </div>
+                </div>
+
+                <!-- 6. Structured Conditional Triggers -->
+                <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                        <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Structured Conditional Triggers</span>
+                        <span class="text-[10px] text-slate-400">Active Market Watchers &amp; Invalidation Levels</span>
+                    </div>
+                    ${triggersTableHtml}
+                </div>
+
+                <!-- 7. Risk & Protection Breakdown -->
+                <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Risk &amp; Protection Breakdown</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${riskBadgeClass}">${riskStatus}</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${protBadgeClass}">
+                            ${protStatus}
                         </span>
                     </div>
 
@@ -194,23 +370,26 @@
                         <!-- Stop Loss & All-In Fee Loss -->
                         <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1.5">
                             <span class="text-slate-400 block text-[11px] font-semibold">STOP LOSS &amp; ALL-IN LOSS</span>
-                            <div class="text-slate-200">${data.risk.stop_loss_price ? '$' + formatPrice(data.risk.stop_loss_price) : '<span class="text-rose-400 italic">No Stop Loss set</span>'}</div>
+                            <div class="text-slate-200 font-bold">${data.risk.stop_loss_price ? '$' + safeFP(data.risk.stop_loss_price) : '<span class="text-rose-400 italic">No Stop Loss set</span>'}</div>
                             ${data.risk.has_stop_loss ? `
                                 <div class="text-slate-400 text-[11px]">Distance: $${Number(data.risk.sl_distance_usdt).toFixed(2)} (${data.risk.sl_distance_pct}%)</div>
-                                <div class="text-rose-400 font-bold pt-1 border-t border-slate-800">All-In Loss: -$${Number(data.risk.all_in_loss_at_sl_usdt).toFixed(2)} USDT</div>
-                                <div class="text-slate-500 text-[10px]">Gross: -$${Number(data.risk.gross_loss_at_sl_usdt).toFixed(2)} | Fees: $${data.risk.est_taker_fees_usdt} | Slip: $${data.risk.est_slippage_usdt}</div>
-                                ${data.risk.loss_equity_pct !== null ? `<div class="text-amber-400 text-[10px]">Equity Risk: ${data.risk.loss_equity_pct}% of total equity</div>` : ''}
+                                <div class="text-rose-400 font-bold pt-1 border-t border-slate-800">Net Loss: -$${Number(data.risk.net_loss_at_sl_usdt != null ? data.risk.net_loss_at_sl_usdt : (data.risk.all_in_loss_at_sl_usdt || 0)).toFixed(2)} USDT</div>
+                                <div class="text-slate-500 text-[10px]">Gross Loss: -$${Number(data.risk.gross_loss_at_sl_usdt || 0).toFixed(2)} USDT</div>
+                                <div class="text-slate-400 text-[10px]">Fees: $${Number(data.risk.est_taker_fees_usdt || 0).toFixed(3)} | Slip: $${Number(data.risk.est_slippage_usdt || 0).toFixed(3)} | Fund: $${Number(data.risk.est_funding_fee_usdt || 0).toFixed(3)}</div>
+                                ${(data.risk.net_loss_equity_pct !== null || data.risk.loss_equity_pct !== null) ? `<div class="text-amber-400 text-[10px] font-semibold">Equity Risk: ${Number(data.risk.net_loss_equity_pct != null ? data.risk.net_loss_equity_pct : data.risk.loss_equity_pct).toFixed(2)}% of equity</div>` : ''}
                             ` : '<div class="text-rose-400 text-[11px] font-semibold pt-1">Unprotected position: exposed to full liquidation.</div>'}
                         </div>
 
                         <!-- Take Profit & R:R -->
                         <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1.5">
                             <span class="text-slate-400 block text-[11px] font-semibold">TAKE PROFIT &amp; TARGETS</span>
-                            <div class="text-slate-200">${data.risk.take_profit_price ? '$' + formatPrice(data.risk.take_profit_price) : '<span class="text-slate-500 italic">No TP configured</span>'}</div>
+                            <div class="text-slate-200 font-bold">${data.risk.take_profit_price ? '$' + safeFP(data.risk.take_profit_price) : '<span class="text-slate-500 italic">No TP configured</span>'}</div>
                             ${data.risk.has_take_profit ? `
                                 <div class="text-slate-400 text-[11px]">Distance: $${Number(data.risk.tp_distance_usdt).toFixed(2)} (${data.risk.tp_distance_pct}%)</div>
-                                <div class="text-emerald-400 font-bold pt-1 border-t border-slate-800">Net Profit: +$${Number(data.risk.net_profit_at_tp_usdt).toFixed(2)} USDT</div>
-                                ${data.risk.risk_reward_ratio !== null ? `<div class="text-indigo-400 text-[11px] font-bold">Risk-Reward Ratio: 1 : ${data.risk.risk_reward_ratio}</div>` : ''}
+                                <div class="text-emerald-400 font-bold pt-1 border-t border-slate-800">Net Profit: +$${Number(data.risk.net_profit_at_tp_usdt != null ? data.risk.net_profit_at_tp_usdt : (data.risk.gross_profit_at_tp_usdt || 0)).toFixed(2)} USDT</div>
+                                <div class="text-slate-500 text-[10px]">Gross Profit: +$${Number(data.risk.gross_profit_at_tp_usdt || 0).toFixed(2)} USDT</div>
+                                <div class="text-indigo-400 text-[11px] font-bold pt-0.5">Net R:R: 1 : ${data.risk.net_risk_reward_ratio != null ? data.risk.net_risk_reward_ratio : (data.risk.risk_reward_ratio || '--')}</div>
+                                <div class="text-slate-500 text-[10px]">Gross R:R: 1 : ${data.risk.gross_risk_reward_ratio != null ? data.risk.gross_risk_reward_ratio : '--'}</div>
                             ` : '<div class="text-slate-500 text-[11px] pt-1">Target exit level not set on exchange.</div>'}
                         </div>
 
@@ -218,59 +397,46 @@
                         <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1.5">
                             <div class="flex items-center justify-between">
                                 <span class="text-slate-400 text-[11px] font-semibold">LIQUIDATION PROXIMITY</span>
-                                <span class="px-1.5 py-0.2 rounded text-[9px] font-bold border ${liqBadgeClass}">${data.risk.liquidation_threat}</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] font-bold border ${liqBadgeClass}">${liqThreat}</span>
                             </div>
-                            <div class="text-slate-200">${data.risk.liquidation_price ? '$' + formatPrice(data.risk.liquidation_price) : '<span class="text-slate-500 italic">Unavailable</span>'}</div>
+                            <div class="text-slate-200 font-bold">${data.risk.liquidation_price ? '$' + safeFP(data.risk.liquidation_price) : '<span class="text-slate-500 italic">Unavailable</span>'}</div>
                             ${data.risk.has_liquidation_price ? `
                                 <div class="text-slate-400 text-[11px]">Distance: $${Number(data.risk.liquidation_distance_usdt).toFixed(2)} (${data.risk.liquidation_distance_pct}%)</div>
-                                <div class="text-[10px] text-slate-400 pt-1 border-t border-slate-800">${escapeHtml(data.risk.margin_mode_assessment)}</div>
+                                <div class="text-[10px] text-slate-400 pt-1 border-t border-slate-800 font-sans">${safeEH(data.risk.margin_mode_assessment)}</div>
                             ` : '<div class="text-slate-500 text-[11px] pt-1">Exchange reported 0 or no liquidation.</div>'}
                         </div>
                     </div>
 
-                    ${(data.risk.protection_notes || []).length > 0 ? `
-                        <div class="p-2.5 rounded-lg bg-amber-950/40 border border-amber-900/50 text-[11px] text-amber-300 space-y-1">
-                            ${data.risk.protection_notes.map(n => `<div>&bull; ${escapeHtml(n)}</div>`).join('')}
+                    <!-- Protection Verification and Audit Notes -->
+                    <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-1.5 font-mono text-[11px]">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 pb-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-slate-400">Exchange Order Verification:</span>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${data.risk.is_exchange_verified ? 'text-emerald-400 bg-emerald-950 border border-emerald-800' : 'text-amber-400 bg-amber-950 border border-amber-800'}">
+                                    ${data.risk.is_exchange_verified ? 'VERIFIED ACTIVE ORDERS' : 'UNVERIFIED / LOCAL CONFIG ONLY'}
+                                </span>
+                            </div>
+                            <div class="text-slate-500 text-[10px]">SL ID: ${data.risk.verified_sl_order_id || 'None'} | TP ID: ${data.risk.verified_tp_order_id || 'None'}</div>
                         </div>
-                    ` : ''}
+                        ${(data.risk.protection_notes || []).length > 0 ? `
+                            <div class="text-amber-300 text-[11px] space-y-0.5 pt-1">
+                                ${data.risk.protection_notes.map(n => `<div>&bull; ${safeEH(n)}</div>`).join('')}
+                            </div>
+                        ` : '<div class="text-slate-500 text-[10px]">No protection warnings.</div>'}
+                    </div>
                 </div>
 
-                <!-- Multi-Timeframe Structure Section -->
-                <div class="card-inner p-4 rounded-xl border border-slate-800 space-y-3">
-                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wide block">Multi-Timeframe Structural Evidence</span>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
-                        <!-- 4H Primary -->
-                        <div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1.5">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-indigo-400">4H PRIMARY</span>
-                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${data.timeframe_4h.trend === 'BULLISH' ? 'text-emerald-400 bg-emerald-950/60' : (data.timeframe_4h.trend === 'BEARISH' ? 'text-rose-400 bg-rose-950/60' : 'text-slate-400 bg-slate-800')}">${data.timeframe_4h.trend}</span>
-                            </div>
-                            <div class="text-[11px] text-slate-300">Swing High: ${data.timeframe_4h.last_swing_high ? '$' + formatPrice(data.timeframe_4h.last_swing_high) : '--'}</div>
-                            <div class="text-[11px] text-slate-300">Swing Low: ${data.timeframe_4h.last_swing_low ? '$' + formatPrice(data.timeframe_4h.last_swing_low) : '--'}</div>
-                            <div class="text-[10px] text-slate-400">${data.timeframe_4h.bos_count} BOS | ${data.timeframe_4h.choch_count} CHoCH</div>
-                        </div>
-
-                        <!-- 1H Local -->
-                        <div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1.5">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-indigo-400">1H LOCAL</span>
-                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${data.timeframe_1h.trend === 'BULLISH' ? 'text-emerald-400 bg-emerald-950/60' : (data.timeframe_1h.trend === 'BEARISH' ? 'text-rose-400 bg-rose-950/60' : 'text-slate-400 bg-slate-800')}">${data.timeframe_1h.trend}</span>
-                            </div>
-                            <div class="text-[11px] text-slate-300">Swing High: ${data.timeframe_1h.last_swing_high ? '$' + formatPrice(data.timeframe_1h.last_swing_high) : '--'}</div>
-                            <div class="text-[11px] text-slate-300">Swing Low: ${data.timeframe_1h.last_swing_low ? '$' + formatPrice(data.timeframe_1h.last_swing_low) : '--'}</div>
-                            <div class="text-[10px] text-slate-400">${data.timeframe_1h.bos_count} BOS | ${data.timeframe_1h.choch_count} CHoCH</div>
-                        </div>
-
-                        <!-- 15M Execution -->
-                        <div class="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1.5">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-indigo-400">15M MOMENTUM</span>
-                                <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${data.timeframe_15m.trend === 'BULLISH' ? 'text-emerald-400 bg-emerald-950/60' : (data.timeframe_15m.trend === 'BEARISH' ? 'text-rose-400 bg-rose-950/60' : 'text-slate-400 bg-slate-800')}">${data.timeframe_15m.trend}</span>
-                            </div>
-                            <div class="text-[11px] text-slate-300">Swing High: ${data.timeframe_15m.last_swing_high ? '$' + formatPrice(data.timeframe_15m.last_swing_high) : '--'}</div>
-                            <div class="text-[11px] text-slate-300">Swing Low: ${data.timeframe_15m.last_swing_low ? '$' + formatPrice(data.timeframe_15m.last_swing_low) : '--'}</div>
-                            <div class="text-[10px] text-slate-400">${data.timeframe_15m.bos_count} BOS | ${data.timeframe_15m.choch_count} CHoCH</div>
-                        </div>
+                <!-- 8. Data Freshness & Verification Timestamps Footer -->
+                <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <span class="px-1.5 py-0.5 rounded font-bold ${freshClass}">${freshness.overall_freshness || 'FRESH'}</span>
+                        <span>Generated: ${data.analyzed_at_utc ? new Date(data.analyzed_at_utc).toLocaleTimeString() : '--'}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span>Pos Snap: ${freshness.position_snapshot_utc ? new Date(freshness.position_snapshot_utc).toLocaleTimeString() : '--'}</span>
+                        <span>15M: ${freshness.candle_timestamps && freshness.candle_timestamps['15m'] ? freshness.candle_timestamps['15m'].age_seconds + 's ago' : '--'}</span>
+                        <span>1H: ${freshness.candle_timestamps && freshness.candle_timestamps['1h'] ? freshness.candle_timestamps['1h'].age_seconds + 's ago' : '--'}</span>
+                        <span>4H: ${freshness.candle_timestamps && freshness.candle_timestamps['4h'] ? freshness.candle_timestamps['4h'].age_seconds + 's ago' : '--'}</span>
                     </div>
                 </div>
             `;

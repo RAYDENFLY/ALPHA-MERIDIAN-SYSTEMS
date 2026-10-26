@@ -54,6 +54,9 @@ class PaperExecutionEngine:
         if pos.model_id == "MODEL_B_FAST":
             d["cohort_version"] = "MODEL_B_FAST_V2"
             d["timeframe"] = "15m"
+        elif pos.model_id == "MODEL_B_V3":
+            d["cohort_version"] = "MODEL_B_V1_PRO"
+            d["timeframe"] = "15m"
         elif pos.model_id == "MODEL_B":
             d["cohort_version"] = "MODEL_B_V2_REMEDIATED"
             d["timeframe"] = "1h"
@@ -62,7 +65,7 @@ class PaperExecutionEngine:
     def _build_open_trade_record(self, pos: PaperPosition, order_status: str = "FILLED") -> TradeRecord:
         """Construct an open TradeRecord reflecting current PaperPosition state for SQLite persistence."""
         active_model = pos.model_id or self.model_id
-        tf_str = "15m" if active_model == "MODEL_B_FAST" else "1h"
+        tf_str = "15m" if active_model in ("MODEL_B_FAST", "MODEL_B_V3") else "1h"
         return TradeRecord(
             trade_id=pos.trade_id,
             symbol=pos.symbol,
@@ -218,7 +221,7 @@ class PaperExecutionEngine:
         if assessment is None or not assessment.is_feasible:
             return None
 
-        order_prefix = "PORD_FAST" if self.model_id == "MODEL_B_FAST" else "PORD"
+        order_prefix = "PORD_V3" if self.model_id == "MODEL_B_V3" else ("PORD_FAST" if self.model_id == "MODEL_B_FAST" else "PORD")
         order_id = f"{order_prefix}_{sym}_{candidate.timestamp_ms}"
 
         # 3. Prevent duplicate order submission across restarts
@@ -233,8 +236,23 @@ class PaperExecutionEngine:
             else str(candidate.entry_category)
         )
 
-        # 4. Account Risk Gate Check
+        # 4. Account Risk Gate Check (governed by RiskManager & in-flight pending orders)
         can_open, reason = self.risk_manager.can_open_new_position(now_ms, direction=candidate.direction)
+        if can_open:
+            max_open = getattr(self.risk_manager, "max_open_positions", 2)
+            total_in_flight = len(self.open_positions) + len(self.pending_orders)
+            if total_in_flight >= max_open:
+                can_open = False
+                reason = f"Total in-flight cap reached ({total_in_flight}/{max_open}: {len(self.open_positions)} open, {len(self.pending_orders)} pending)."
+
+            max_dir = getattr(self.risk_manager, "max_open_per_direction", 1)
+            dir_str = candidate.direction.value if hasattr(candidate.direction, "value") else str(candidate.direction).upper()
+            dir_open = sum(1 for p in self.open_positions.values() if (p.direction.value if hasattr(p.direction, "value") else str(p.direction).upper()) == dir_str)
+            dir_pending = sum(1 for o in self.pending_orders.values() if (o.direction.value if hasattr(o.direction, "value") else str(o.direction).upper()) == dir_str)
+            if dir_open + dir_pending >= max_dir:
+                can_open = False
+                reason = f"Directional in-flight cap reached for {dir_str} ({dir_open + dir_pending}/{max_dir}: {dir_open} open, {dir_pending} pending)."
+
         if not can_open:
             logger.warning(f"PaperEngine: Risk limits rejected order for {sym}: {reason}")
             rejected_order = PaperOrder(
@@ -577,7 +595,7 @@ class PaperExecutionEngine:
 
     def _open_position(self, order: PaperOrder, fill_candle: Candle) -> PaperPosition:
         """Create and persist an active open position and register it with the RiskManager."""
-        trade_prefix = "PTRD_FAST" if self.model_id == "MODEL_B_FAST" else "PTRD"
+        trade_prefix = "PTRD_V3" if self.model_id == "MODEL_B_V3" else ("PTRD_FAST" if self.model_id == "MODEL_B_FAST" else "PTRD")
         trade_id = f"{trade_prefix}_{order.symbol}_{order.created_bar_time_ms}"
         entry_price = order.fill_price or order.price
         initial_r = abs(entry_price - order.stop_loss)
@@ -841,6 +859,7 @@ class PaperExecutionEngine:
                     self.config.enable_tp1_trailing_stop
                     and pos.take_profit_2 is not None
                     and 0.0 < self.config.tp1_partial_close_pct < 1.0
+                    and not getattr(self.config, "full_exit_at_tp1", False)
                 )
 
                 hit_tp = False
@@ -954,7 +973,7 @@ class PaperExecutionEngine:
                         exit_reason=exit_reason,
                         is_open=False,
                         setup_id=pos.setup_id,
-                        timeframe="15m" if (pos.model_id or self.model_id) == "MODEL_B_FAST" else "1h",
+                        timeframe="15m" if (pos.model_id or self.model_id) in ("MODEL_B_FAST", "MODEL_B_V3") else "1h",
                         order_status="CLOSED",
                         leverage=pos.leverage,
                         margin_usdt=(initial_qty * pos.entry_price) / pos.leverage if pos.leverage > 0 else pos.margin_usdt,

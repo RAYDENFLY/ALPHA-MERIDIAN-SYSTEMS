@@ -76,6 +76,11 @@ def evaluate_liquidity_setup(
     max_spread_bps: float = 15.0,
     buffer_pct: float = 0.001,
     timeframe_label: str = "1H",
+    min_rejection_wick_ratio: float = 0.0,
+    min_volume_sma_mult: float = 0.0,
+    tp1_rr_multiple: float = 1.50,
+    require_confirmed_body: bool = True,
+    allowed_directions: Optional[List[str]] = None,
 ) -> Optional[ModelBSetupSignal]:
     """Evaluate candle series and liquidity snapshot for Model B setup."""
     if len(candles) < 20:
@@ -90,8 +95,10 @@ def evaluate_liquidity_setup(
     last_closed = candles[-1]
     swing_highs, swing_lows = find_recent_swings(candles[:-1], left_bars=3, right_bars=2)
 
+    norm_allowed = [d.upper() for d in allowed_directions] if allowed_directions is not None else ["LONG", "SHORT"]
+
     # 1. Evaluate LONG Liquidity Sweep-Reclaim
-    if swing_lows:
+    if swing_lows and ("LONG" in norm_allowed):
         # Most recent key swing low
         _, key_low = swing_lows[-1]
 
@@ -100,7 +107,7 @@ def evaluate_liquidity_setup(
         # B) Last closed bar closed strictly above key_low
         swept = (last_closed.low < key_low) or (len(candles) >= 2 and candles[-2].low < key_low)
         reclaimed = swept and (last_closed.close > key_low)
-        confirmed_close = last_closed.close > last_closed.open
+        confirmed_close = (last_closed.close > last_closed.open) if require_confirmed_body else True
 
         # C) Liquidity confirmation: bid depth imbalance or positive CVD or absorption
         has_bid_imbalance = snapshot.imbalance_25bps >= min_imbalance
@@ -110,13 +117,31 @@ def evaluate_liquidity_setup(
         liquidity_confirmed = has_bid_imbalance or (has_positive_cvd and has_absorption)
 
         if reclaimed and liquidity_confirmed and confirmed_close:
+            # Light-touch rejection wick check (if configured)
+            if min_rejection_wick_ratio > 0.0:
+                c_range = last_closed.high - last_closed.low
+                if c_range <= 0.0:
+                    return None
+                lower_wick = min(last_closed.open, last_closed.close) - last_closed.low
+                if (lower_wick / c_range) < min_rejection_wick_ratio:
+                    return None
+
+            # Light-touch volume SMA check (if configured)
+            if min_volume_sma_mult > 0.0:
+                if len(candles) >= 20:
+                    vols = [getattr(c, "volume", 0.0) or 0.0 for c in candles[-20:]]
+                    avg_vol = sum(vols) / len(vols)
+                    last_vol = getattr(last_closed, "volume", 0.0) or 0.0
+                    if avg_vol > 0.0 and (last_vol / avg_vol) < min_volume_sma_mult:
+                        return None
+
             entry_px = last_closed.close
             sweep_low = min(last_closed.low, candles[-2].low if len(candles) >= 2 else last_closed.low)
             sl_px = sweep_low * (1.0 - buffer_pct)
             risk_dist = entry_px - sl_px
 
             if risk_dist > 0:
-                tp1 = entry_px + (risk_dist * 1.5)
+                tp1 = entry_px + (risk_dist * tp1_rr_multiple)
                 # Next target: nearest swing high above entry or 3R
                 high_targets = [px for _, px in swing_highs if px > tp1]
                 tp2 = high_targets[0] if high_targets else entry_px + (risk_dist * 3.0)
@@ -143,12 +168,12 @@ def evaluate_liquidity_setup(
                 )
 
     # 2. Evaluate SHORT Liquidity Sweep-Reclaim
-    if swing_highs:
+    if swing_highs and ("SHORT" in norm_allowed):
         _, key_high = swing_highs[-1]
 
         swept = (last_closed.high > key_high) or (len(candles) >= 2 and candles[-2].high > key_high)
         reclaimed = swept and (last_closed.close < key_high)
-        confirmed_close = last_closed.close < last_closed.open
+        confirmed_close = (last_closed.close < last_closed.open) if require_confirmed_body else True
 
         has_ask_imbalance = snapshot.imbalance_25bps <= -min_imbalance
         has_negative_cvd = snapshot.cvd_1h < 0
@@ -157,13 +182,31 @@ def evaluate_liquidity_setup(
         liquidity_confirmed = has_ask_imbalance or (has_negative_cvd and has_absorption)
 
         if reclaimed and liquidity_confirmed and confirmed_close:
+            # Light-touch rejection wick check (if configured)
+            if min_rejection_wick_ratio > 0.0:
+                c_range = last_closed.high - last_closed.low
+                if c_range <= 0.0:
+                    return None
+                upper_wick = last_closed.high - max(last_closed.open, last_closed.close)
+                if (upper_wick / c_range) < min_rejection_wick_ratio:
+                    return None
+
+            # Light-touch volume SMA check (if configured)
+            if min_volume_sma_mult > 0.0:
+                if len(candles) >= 20:
+                    vols = [getattr(c, "volume", 0.0) or 0.0 for c in candles[-20:]]
+                    avg_vol = sum(vols) / len(vols)
+                    last_vol = getattr(last_closed, "volume", 0.0) or 0.0
+                    if avg_vol > 0.0 and (last_vol / avg_vol) < min_volume_sma_mult:
+                        return None
+
             entry_px = last_closed.close
             sweep_high = max(last_closed.high, candles[-2].high if len(candles) >= 2 else last_closed.high)
             sl_px = sweep_high * (1.0 + buffer_pct)
             risk_dist = sl_px - entry_px
 
             if risk_dist > 0:
-                tp1 = entry_px - (risk_dist * 1.5)
+                tp1 = entry_px - (risk_dist * tp1_rr_multiple)
                 low_targets = [px for _, px in swing_lows if px < tp1]
                 tp2 = low_targets[0] if low_targets else entry_px - (risk_dist * 3.0)
 

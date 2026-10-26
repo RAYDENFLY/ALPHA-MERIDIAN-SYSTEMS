@@ -161,6 +161,11 @@ class ModelBStrategyGenerator:
         candles_4h: Optional[List[Candle]] = None,
     ) -> Optional[SetupCandidate]:
         """Evaluate a single symbol's 1H candles, L2 depth, resting walls, and catalysts."""
+        # Check symbol blacklist (e.g. structural chop pairs)
+        blacklist = [s.upper() for s in getattr(self.config, "symbol_blacklist", []) or []]
+        if symbol.upper() in blacklist:
+            return None
+
         if not self.liquidity_collector:
             return None
 
@@ -252,6 +257,11 @@ class ModelBStrategyGenerator:
             min_absorption=self.config.min_absorption_score,
             max_spread_bps=self.config.max_spread_bps,
             timeframe_label=trigger_tf.upper(),
+            min_rejection_wick_ratio=getattr(self.config, "min_rejection_wick_ratio", 0.0),
+            min_volume_sma_mult=getattr(self.config, "min_volume_sma_mult", 0.0),
+            tp1_rr_multiple=float(getattr(self.config, "tp1_rr_multiple", 1.50) or 1.50),
+            require_confirmed_body=getattr(self.config, "require_confirmed_body", True),
+            allowed_directions=getattr(self.config, "allowed_directions", None),
         )
         if not signal:
             return None
@@ -299,11 +309,13 @@ class ModelBStrategyGenerator:
                     elif candles[-1].close < e1_20 and (e1_50 is None or e1_20 <= e1_50):
                         structure_1h = StructureState.BEARISH
 
-        # Reject counter-trend setups strongly opposing 4H bias
-        if signal.direction == Direction.LONG and bias_4h == MarketBias.BEARISH:
-            rejection_reasons.append("COUNTER_TREND_4H_BEARISH_OPPOSES_LONG")
-        elif signal.direction == Direction.SHORT and bias_4h == MarketBias.BULLISH:
-            rejection_reasons.append("COUNTER_TREND_4H_BULLISH_OPPOSES_SHORT")
+        # Reject counter-trend setups strongly opposing 4H bias (unless bypassed by responsive V1-Pro)
+        require_htf_ema = getattr(self.config, "require_htf_ema_alignment", True)
+        if require_htf_ema:
+            if signal.direction == Direction.LONG and bias_4h == MarketBias.BEARISH:
+                rejection_reasons.append("COUNTER_TREND_4H_BEARISH_OPPOSES_LONG")
+            elif signal.direction == Direction.SHORT and bias_4h == MarketBias.BULLISH:
+                rejection_reasons.append("COUNTER_TREND_4H_BULLISH_OPPOSES_SHORT")
 
         # Order-Flow & Opposing Wall Veto
         req_side = "BID" if signal.direction == Direction.LONG else "ASK"
@@ -341,16 +353,17 @@ class ModelBStrategyGenerator:
             signal.stop_loss = enforce_stop_floor(signal.entry_price, signal.stop_loss, signal.direction, None, self.config.min_stop_distance_pct, 0.0)
 
         # Recalculate TP1/TP2 after stop floor enforcement to maintain favorable R:R
+        tp1_mult = float(getattr(self.config, "tp1_rr_multiple", 1.50) or 1.50)
         widened_risk = abs(signal.entry_price - signal.stop_loss)
         if widened_risk > 0:
             if signal.direction == Direction.LONG:
-                signal.take_profit_1 = round(signal.entry_price + (widened_risk * 1.5), 8)
+                signal.take_profit_1 = round(signal.entry_price + (widened_risk * tp1_mult), 8)
                 signal.take_profit_2 = round(max(signal.take_profit_2 or 0.0, signal.entry_price + (widened_risk * 2.5)), 8)
             else:
-                signal.take_profit_1 = round(signal.entry_price - (widened_risk * 1.5), 8)
+                signal.take_profit_1 = round(signal.entry_price - (widened_risk * tp1_mult), 8)
                 signal.take_profit_2 = round(min(signal.take_profit_2 or 1e9, signal.entry_price - (widened_risk * 2.5)), 8)
 
-        dynamic_gross_rr = round(abs(signal.take_profit_1 - signal.entry_price) / widened_risk, 4) if widened_risk > 0 else 1.5
+        dynamic_gross_rr = round(abs(signal.take_profit_1 - signal.entry_price) / widened_risk, 4) if widened_risk > 0 else tp1_mult
         dynamic_net_rr = round(max(0.1, dynamic_gross_rr - 0.1), 4)
 
         assessment = self.size_position(
@@ -410,7 +423,7 @@ class ModelBStrategyGenerator:
             expires_at = ts_ms + int(expiry_bars) * bar_duration_ms
         else:
             expires_at = ts_ms + int(self.config.pending_order_ttl_hours * 3600 * 1000)
-        cid_prefix = "MCAND_B_FAST" if active_model_id == "MODEL_B_FAST" else "MCAND_B"
+        cid_prefix = "MCAND_B_V3" if active_model_id == "MODEL_B_V3" else ("MCAND_B_FAST" if active_model_id == "MODEL_B_FAST" else "MCAND_B")
         cid = f"{cid_prefix}_{symbol}_{signal.direction.value}_{anchor_candle_ms}"
 
         candidate = SetupCandidate(
@@ -441,7 +454,7 @@ class ModelBStrategyGenerator:
             model_id=active_model_id,
             expires_at_ms=expires_at,
             ai_analysis={
-                "strategy": "Model_B_Fast_Scalp" if active_model_id == "MODEL_B_FAST" else "Model_B_Liquidity_Sweep",
+                "strategy": "Model_B_V1_Pro" if (active_cohort == "MODEL_B_V1_PRO" or active_model_id == "MODEL_B_V3") else ("Model_B_Fast_Scalp" if active_model_id == "MODEL_B_FAST" else "Model_B_Liquidity_Sweep"),
                 "cohort_version": active_cohort,
                 "trigger_timeframe": trigger_tf,
                 "trend_timeframe": trend_tf,

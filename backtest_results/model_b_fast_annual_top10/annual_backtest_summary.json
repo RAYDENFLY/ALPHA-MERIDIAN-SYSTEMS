@@ -1,0 +1,480 @@
+{
+  "metadata": {
+    "strategy": "Model B Fast Scalper (15M Trigger / 1H Trend)",
+    "model_id": "MODEL_B_FAST",
+    "cohort_version": "MODEL_B_FAST_V2",
+    "backtest_window": "2025-10-24 00:00:00 UTC to 2026-10-24 15:00:00 UTC",
+    "exchange": "Aster DEX / Binance Futures Perpetuals",
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT",
+      "XRPUSDT",
+      "DOGEUSDT",
+      "BNBUSDT",
+      "ADAUSDT",
+      "AVAXUSDT",
+      "LINKUSDT",
+      "LTCUSDT"
+    ],
+    "config": {
+      "model_id": "MODEL_B_FAST",
+      "cohort_version": "MODEL_B_FAST_V2",
+      "trigger_timeframe": "15m",
+      "trend_timeframe": "1h",
+      "initial_capital_per_pair": 100.0,
+      "portfolio_capital": 100.0,
+      "portfolio_capital_alt": 1000.0,
+      "target_trade_risk_usdt": 1.0,
+      "max_isolated_margin_usdt": 15.0,
+      "leverage": 10.0,
+      "min_stop_distance_pct": 0.008,
+      "min_stop_atr_multiple": 1.25,
+      "pending_order_ttl_bars": 8,
+      "maker_fee_rate": 0.0002,
+      "taker_fee_rate": 0.0005,
+      "adverse_slippage_rate": 0.0005,
+      "max_open_positions_portfolio": 6,
+      "max_open_per_direction": 3,
+      "backtest_start_ts": 1761264000000,
+      "backtest_end_ts": 1792854000000
+    },
+    "generated_at_utc": "2026-10-24T15:30:51.715359+00:00"
+  },
+  "per_pair_results": {
+    "BTCUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 37.5,
+      "gross_pnl": -19.54,
+      "net_pnl": -62.5,
+      "net_pnl_pct": -62.5,
+      "total_trades": 521,
+      "win_rate": 40.69,
+      "profit_factor": 0.94,
+      "max_drawdown_pct": 76.08,
+      "avg_trade_pnl": -0.12,
+      "long_trades": 334,
+      "short_trades": 187,
+      "long_net_pnl": -56.11,
+      "short_net_pnl": -6.39,
+      "long_win_rate": 38.62,
+      "short_win_rate": 44.39,
+      "total_fees": 42.91,
+      "total_funding": 0.05,
+      "sharpe_ratio": -2.32,
+      "exit_reasons": {
+        "STOP_LOSS": 309,
+        "TAKE_PROFIT_2": 86,
+        "TRAILING_STOP": 126
+      }
+    },
+    "ETHUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 6.71,
+      "gross_pnl": -44.25,
+      "net_pnl": -93.29,
+      "net_pnl_pct": -93.29,
+      "total_trades": 616,
+      "win_rate": 38.47,
+      "profit_factor": 0.89,
+      "max_drawdown_pct": 95.47,
+      "avg_trade_pnl": -0.1514,
+      "long_trades": 416,
+      "short_trades": 200,
+      "long_net_pnl": -67.4,
+      "short_net_pnl": -25.89,
+      "long_win_rate": 38.46,
+      "short_win_rate": 38.5,
+      "total_fees": 48.33,
+      "total_funding": 0.71,
+      "sharpe_ratio": -2.93,
+      "exit_reasons": {
+        "STOP_LOSS": 378,
+        "TRAILING_STOP": 124,
+        "TAKE_PROFIT_2": 112,
+        "SL_COLLISION": 2
+      }
+    },
+    "SOLUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 29.91,
+      "gross_pnl": -10.9,
+      "net_pnl": -70.09,
+      "net_pnl_pct": -70.09,
+      "total_trades": 746,
+      "win_rate": 41.02,
+      "profit_factor": 0.98,
+      "max_drawdown_pct": 72.71,
+      "avg_trade_pnl": -0.094,
+      "long_trades": 504,
+      "short_trades": 242,
+      "long_net_pnl": -75.05,
+      "short_net_pnl": 4.96,
+      "long_win_rate": 38.49,
+      "short_win_rate": 46.28,
+      "total_fees": 58.23,
+      "total_funding": 0.97,
+      "sharpe_ratio": -2.03,
+      "exit_reasons": {
+        "STOP_LOSS": 439,
+        "TAKE_PROFIT_2": 136,
+        "TRAILING_STOP": 163,
+        "SL_COLLISION": 8
+      }
+    },
+    "XRPUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 34.55,
+      "gross_pnl": -12.28,
+      "net_pnl": -65.45,
+      "net_pnl_pct": -65.45,
+      "total_trades": 668,
+      "win_rate": 40.42,
+      "profit_factor": 0.97,
+      "max_drawdown_pct": 71.98,
+      "avg_trade_pnl": -0.098,
+      "long_trades": 415,
+      "short_trades": 253,
+      "long_net_pnl": -87.77,
+      "short_net_pnl": 22.32,
+      "long_win_rate": 36.14,
+      "short_win_rate": 47.43,
+      "total_fees": 51.79,
+      "total_funding": 1.38,
+      "sharpe_ratio": -1.99,
+      "exit_reasons": {
+        "STOP_LOSS": 398,
+        "TAKE_PROFIT_2": 130,
+        "TRAILING_STOP": 139,
+        "SL_COLLISION": 1
+      }
+    },
+    "DOGEUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": -11.68,
+      "gross_pnl": -54.08,
+      "net_pnl": -111.68,
+      "net_pnl_pct": -111.68,
+      "total_trades": 729,
+      "win_rate": 38.13,
+      "profit_factor": 0.89,
+      "max_drawdown_pct": 124.58,
+      "avg_trade_pnl": -0.1532,
+      "long_trades": 446,
+      "short_trades": 283,
+      "long_net_pnl": -98.23,
+      "short_net_pnl": -13.45,
+      "long_win_rate": 35.43,
+      "short_win_rate": 42.4,
+      "total_fees": 56.36,
+      "total_funding": 1.24,
+      "sharpe_ratio": -3.27,
+      "exit_reasons": {
+        "TAKE_PROFIT_2": 130,
+        "STOP_LOSS": 451,
+        "TRAILING_STOP": 147,
+        "SL_COLLISION": 1
+      }
+    },
+    "BNBUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 19.51,
+      "gross_pnl": -30.14,
+      "net_pnl": -80.49,
+      "net_pnl_pct": -80.49,
+      "total_trades": 590,
+      "win_rate": 39.32,
+      "profit_factor": 0.92,
+      "max_drawdown_pct": 81.66,
+      "avg_trade_pnl": -0.1364,
+      "long_trades": 381,
+      "short_trades": 209,
+      "long_net_pnl": -53.77,
+      "short_net_pnl": -26.73,
+      "long_win_rate": 39.63,
+      "short_win_rate": 38.76,
+      "total_fees": 49.38,
+      "total_funding": 0.97,
+      "sharpe_ratio": -2.59,
+      "exit_reasons": {
+        "STOP_LOSS": 357,
+        "TRAILING_STOP": 121,
+        "TAKE_PROFIT_2": 111,
+        "SL_COLLISION": 1
+      }
+    },
+    "ADAUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 34.86,
+      "gross_pnl": -11.79,
+      "net_pnl": -65.14,
+      "net_pnl_pct": -65.14,
+      "total_trades": 708,
+      "win_rate": 40.82,
+      "profit_factor": 0.97,
+      "max_drawdown_pct": 88.12,
+      "avg_trade_pnl": -0.092,
+      "long_trades": 436,
+      "short_trades": 272,
+      "long_net_pnl": -87.44,
+      "short_net_pnl": 22.3,
+      "long_win_rate": 36.7,
+      "short_win_rate": 47.43,
+      "total_fees": 52.63,
+      "total_funding": 0.71,
+      "sharpe_ratio": -2.06,
+      "exit_reasons": {
+        "TAKE_PROFIT_2": 129,
+        "STOP_LOSS": 417,
+        "TRAILING_STOP": 159,
+        "SL_COLLISION": 3
+      }
+    },
+    "AVAXUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 12.3,
+      "gross_pnl": -27.5,
+      "net_pnl": -87.7,
+      "net_pnl_pct": -87.7,
+      "total_trades": 771,
+      "win_rate": 40.08,
+      "profit_factor": 0.94,
+      "max_drawdown_pct": 91.49,
+      "avg_trade_pnl": -0.1137,
+      "long_trades": 507,
+      "short_trades": 264,
+      "long_net_pnl": -81.91,
+      "short_net_pnl": -5.78,
+      "long_win_rate": 38.26,
+      "short_win_rate": 43.56,
+      "total_fees": 58.82,
+      "total_funding": 1.37,
+      "sharpe_ratio": -2.64,
+      "exit_reasons": {
+        "STOP_LOSS": 462,
+        "TRAILING_STOP": 178,
+        "TAKE_PROFIT_2": 129,
+        "SL_COLLISION": 2
+      }
+    },
+    "LINKUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": -40.15,
+      "gross_pnl": -79.0,
+      "net_pnl": -140.15,
+      "net_pnl_pct": -140.15,
+      "total_trades": 777,
+      "win_rate": 37.45,
+      "profit_factor": 0.85,
+      "max_drawdown_pct": 144.13,
+      "avg_trade_pnl": -0.1804,
+      "long_trades": 509,
+      "short_trades": 268,
+      "long_net_pnl": -103.63,
+      "short_net_pnl": -36.51,
+      "long_win_rate": 36.94,
+      "short_win_rate": 38.43,
+      "total_fees": 59.7,
+      "total_funding": 1.44,
+      "sharpe_ratio": -3.99,
+      "exit_reasons": {
+        "TRAILING_STOP": 147,
+        "TAKE_PROFIT_2": 140,
+        "STOP_LOSS": 485,
+        "SL_COLLISION": 5
+      }
+    },
+    "LTCUSDT": {
+      "initial_capital": 100.0,
+      "final_equity": 5.19,
+      "gross_pnl": -36.85,
+      "net_pnl": -94.81,
+      "net_pnl_pct": -94.81,
+      "total_trades": 717,
+      "win_rate": 39.75,
+      "profit_factor": 0.92,
+      "max_drawdown_pct": 99.22,
+      "avg_trade_pnl": -0.1322,
+      "long_trades": 468,
+      "short_trades": 249,
+      "long_net_pnl": -80.98,
+      "short_net_pnl": -13.83,
+      "long_win_rate": 38.46,
+      "short_win_rate": 42.17,
+      "total_fees": 56.31,
+      "total_funding": 1.65,
+      "sharpe_ratio": -2.93,
+      "exit_reasons": {
+        "TAKE_PROFIT_2": 125,
+        "TRAILING_STOP": 160,
+        "STOP_LOSS": 432
+      }
+    }
+  },
+  "portfolio_results": {
+    "initial_capital": 100.0,
+    "final_equity": -385.7,
+    "gross_pnl": -169.02,
+    "net_pnl": -485.7,
+    "net_pnl_pct": -485.7,
+    "total_trades": 3959,
+    "win_rate": 39.78,
+    "profit_factor": 0.93,
+    "max_drawdown_pct": 479.16,
+    "avg_trade_pnl": -0.1227,
+    "long_trades": 2426,
+    "short_trades": 1533,
+    "long_net_pnl": -409.36,
+    "short_net_pnl": -76.34,
+    "long_win_rate": 37.96,
+    "short_win_rate": 42.66,
+    "total_fees": 311.58,
+    "total_funding": 5.09,
+    "sharpe_ratio": -4.81,
+    "exit_reasons": {
+      "STOP_LOSS": 2384,
+      "TAKE_PROFIT_2": 701,
+      "TRAILING_STOP": 862,
+      "SL_COLLISION": 12
+    },
+    "avg_simultaneous_positions": 2.74,
+    "max_simultaneous_positions": 6
+  },
+  "monthly_breakdown": {
+    "2025-10": {
+      "trades": 93,
+      "wins": 36,
+      "gross_pnl": -7.102799999999998,
+      "net_pnl": -14.310199999999998,
+      "fees": 7.031800000000001
+    },
+    "2025-11": {
+      "trades": 424,
+      "wins": 163,
+      "gross_pnl": -31.659200000000013,
+      "net_pnl": -62.64920000000008,
+      "fees": 30.649399999999993
+    },
+    "2025-12": {
+      "trades": 313,
+      "wins": 110,
+      "gross_pnl": -56.29429999999997,
+      "net_pnl": -81.85910000000004,
+      "fees": 25.03960000000001
+    },
+    "2026-01": {
+      "trades": 309,
+      "wins": 133,
+      "gross_pnl": 17.205600000000008,
+      "net_pnl": -7.205599999999999,
+      "fees": 24.107199999999995
+    },
+    "2026-02": {
+      "trades": 348,
+      "wins": 145,
+      "gross_pnl": 5.291700000000006,
+      "net_pnl": -19.810900000000014,
+      "fees": 24.935799999999997
+    },
+    "2026-03": {
+      "trades": 348,
+      "wins": 144,
+      "gross_pnl": -2.0780000000000065,
+      "net_pnl": -29.952799999999993,
+      "fees": 27.628300000000017
+    },
+    "2026-04": {
+      "trades": 309,
+      "wins": 101,
+      "gross_pnl": -70.41850000000001,
+      "net_pnl": -96.61210000000011,
+      "fees": 25.728400000000008
+    },
+    "2026-05": {
+      "trades": 290,
+      "wins": 116,
+      "gross_pnl": -14.03829999999998,
+      "net_pnl": -39.24600000000005,
+      "fees": 24.673500000000008
+    },
+    "2026-06": {
+      "trades": 335,
+      "wins": 154,
+      "gross_pnl": 38.02980000000006,
+      "net_pnl": 11.936499999999976,
+      "fees": 25.883300000000006
+    },
+    "2026-07": {
+      "trades": 304,
+      "wins": 122,
+      "gross_pnl": -5.662400000000059,
+      "net_pnl": -31.662700000000044,
+      "fees": 25.2307
+    },
+    "2026-08": {
+      "trades": 274,
+      "wins": 118,
+      "gross_pnl": 11.62609999999999,
+      "net_pnl": -11.00660000000001,
+      "fees": 22.1547
+    },
+    "2026-09": {
+      "trades": 364,
+      "wins": 140,
+      "gross_pnl": -28.731499999999993,
+      "net_pnl": -57.54270000000008,
+      "fees": 28.14380000000001
+    },
+    "2026-10": {
+      "trades": 248,
+      "wins": 93,
+      "gross_pnl": -25.187299999999993,
+      "net_pnl": -45.77500000000011,
+      "fees": 20.377399999999984
+    }
+  },
+  "quarterly_breakdown": {
+    "2025-Q4": {
+      "trades": 830,
+      "wins": 309,
+      "gross_pnl": -95.05629999999991,
+      "net_pnl": -158.81850000000023,
+      "fees": 62.720800000000445
+    },
+    "2026-Q1": {
+      "trades": 1005,
+      "wins": 422,
+      "gross_pnl": 20.419299999999946,
+      "net_pnl": -56.96930000000012,
+      "fees": 76.67130000000027
+    },
+    "2026-Q2": {
+      "trades": 934,
+      "wins": 371,
+      "gross_pnl": -46.42699999999983,
+      "net_pnl": -123.92159999999998,
+      "fees": 76.2852000000003
+    },
+    "2026-Q3": {
+      "trades": 942,
+      "wins": 380,
+      "gross_pnl": -22.767800000000076,
+      "net_pnl": -100.21200000000015,
+      "fees": 75.52920000000042
+    },
+    "2026-Q4": {
+      "trades": 248,
+      "wins": 93,
+      "gross_pnl": -25.187299999999993,
+      "net_pnl": -45.77500000000011,
+      "fees": 20.377399999999984
+    }
+  },
+  "sensitivity_analysis": {
+    "gross_pnl_zero_costs": -169.02,
+    "baseline_net_pnl": -485.7,
+    "double_fees_net_pnl": -797.28,
+    "double_slippage_net_pnl": -708.34,
+    "fee_impact_pct_of_gross": 184.35
+  }
+}

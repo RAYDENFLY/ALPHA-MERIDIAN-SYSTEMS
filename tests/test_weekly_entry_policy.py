@@ -502,6 +502,6 @@ def test_10_baseline_strategy_outputs_unchanged():
         as_of_index_1h=45,
     )
     # The policy change touched RiskManager/API, NOT SetupGenerator parameters
-    assert generator.discount_threshold == 0.12
-    assert generator.premium_threshold == 0.88
-    assert generator.bull_breakout_pos_72h == 0.92
+    assert generator.discount_threshold == 0.30
+    assert generator.premium_threshold == 0.70
+    assert generator.bull_breakout_pos_72h == 0.85

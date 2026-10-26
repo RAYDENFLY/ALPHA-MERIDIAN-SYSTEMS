@@ -26,6 +26,7 @@ let screenerIsLoading = false;
 function initOrRefreshMarketScreener() {
     loadMarketScreenerData();
     startScreenerAutoRefresh();
+    loadLatestAITop3();
 }
 
 // Alias for navigation compatibility
@@ -575,3 +576,353 @@ function formatCurrencyCompact(v) {
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// =========================================================================
+// AI TOP 3 PAIR SELECTION (GEMINI ARGON AUTONOMOUS MARKET SCREENER)
+// =========================================================================
+
+let aiTop3IsLoading = false;
+let aiTop3LatestData = null;
+
+async function loadLatestAITop3() {
+    try {
+        const resp = await fetch('/api/screener/ai-top3/latest');
+        if (!resp.ok) return;
+        const res = await resp.json();
+        if (res.status === 'SUCCESS' && res.data && res.data.candidates && res.data.candidates.length > 0) {
+            renderAITop3Selection(res.data);
+        }
+    } catch (err) {
+        console.warn('AI Top 3: Could not load initial cached selection:', err);
+    }
+}
+
+async function triggerAISelectTop3(force = true) {
+    if (aiTop3IsLoading) return;
+    aiTop3IsLoading = true;
+
+    const btn = document.getElementById('aiSelectTop3Btn');
+    const spin = document.getElementById('aiSelectTop3Spin');
+    const icon = document.getElementById('aiSelectTop3Icon');
+    const btnText = document.getElementById('aiSelectTop3BtnText');
+
+    const emptyState = document.getElementById('aiTop3EmptyState');
+    const loadingState = document.getElementById('aiTop3LoadingState');
+    const errorState = document.getElementById('aiTop3ErrorState');
+    const grid = document.getElementById('aiTop3CandidatesGrid');
+
+    if (btn) btn.disabled = true;
+    if (spin) spin.classList.remove('hidden');
+    if (icon) icon.classList.add('hidden');
+    if (btnText) btnText.textContent = 'Screening Markets...';
+
+    if (emptyState) emptyState.classList.add('hidden');
+    if (errorState) errorState.classList.add('hidden');
+    if (grid) grid.classList.add('hidden');
+    if (loadingState) loadingState.classList.remove('hidden');
+
+    try {
+        const resp = await fetch('/api/screener/ai-top3/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force_refresh: force })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `Server returned HTTP ${resp.status}`);
+        }
+
+        const res = await resp.json();
+        if (res.status === 'SUCCESS' && res.data) {
+            renderAITop3Selection(res.data);
+        } else {
+            throw new Error('Invalid response format received from AI screening service.');
+        }
+    } catch (err) {
+        console.error('AI Top 3 screening failed:', err);
+        if (loadingState) loadingState.classList.add('hidden');
+        if (errorState) {
+            errorState.classList.remove('hidden');
+            const msgEl = document.getElementById('aiTop3ErrorMessage');
+            if (msgEl) msgEl.textContent = err.message || 'Network error occurred during multi-exchange screening.';
+        }
+    } finally {
+        aiTop3IsLoading = false;
+        if (btn) btn.disabled = false;
+        if (spin) spin.classList.add('hidden');
+        if (icon) icon.classList.remove('hidden');
+        if (btnText) btnText.textContent = 'AI Select Top 3';
+    }
+}
+
+function renderAITop3Selection(data) {
+    if (!data) return;
+    aiTop3LatestData = data;
+
+    const emptyState = document.getElementById('aiTop3EmptyState');
+    const loadingState = document.getElementById('aiTop3LoadingState');
+    const errorState = document.getElementById('aiTop3ErrorState');
+    const grid = document.getElementById('aiTop3CandidatesGrid');
+
+    if (emptyState) emptyState.classList.add('hidden');
+    if (loadingState) loadingState.classList.add('hidden');
+    if (errorState) errorState.classList.add('hidden');
+
+    // Update Meta Bar
+    const modelBadge = document.getElementById('aiTop3ModelBadge');
+    if (modelBadge) {
+        const isGemini = (data.model_used || '').toLowerCase().includes('gemini');
+        modelBadge.textContent = isGemini ? 'GEMINI 4 ARGON' : 'CONFLUENCE ENGINE';
+        if (isGemini) {
+            modelBadge.className = 'px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-800/80';
+        } else {
+            modelBadge.className = 'px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-blue-950/80 text-blue-300 border border-blue-800/80';
+        }
+    }
+
+    const regime = data.market_regime || {};
+    const regimeLabel = document.getElementById('aiTop3RegimeLabel');
+    if (regimeLabel) regimeLabel.textContent = regime.regime_label || 'Active Regime';
+
+    const btcEl = document.getElementById('aiTop3BtcChange');
+    if (btcEl) {
+        if (regime.btc_change_24h_pct !== null && regime.btc_change_24h_pct !== undefined) {
+            const chg = Number(regime.btc_change_24h_pct);
+            const sign = chg >= 0 ? '+' : '';
+            const color = chg >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            btcEl.innerHTML = `<span class="${color}">${sign}${chg.toFixed(2)}%</span> ($${Number(regime.btc_price || 0).toLocaleString('en-US', {maximumFractionDigits:0})})`;
+        } else {
+            btcEl.textContent = 'N/A';
+        }
+    }
+
+    const ethEl = document.getElementById('aiTop3EthChange');
+    if (ethEl) {
+        if (regime.eth_change_24h_pct !== null && regime.eth_change_24h_pct !== undefined) {
+            const chg = Number(regime.eth_change_24h_pct);
+            const sign = chg >= 0 ? '+' : '';
+            const color = chg >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            ethEl.innerHTML = `<span class="${color}">${sign}${chg.toFixed(2)}%</span> ($${Number(regime.eth_price || 0).toLocaleString('en-US', {maximumFractionDigits:1})})`;
+        } else {
+            ethEl.textContent = 'N/A';
+        }
+    }
+
+    const snapEl = document.getElementById('aiTop3SnapshotId');
+    if (snapEl) snapEl.textContent = data.market_snapshot_id || `${data.total_universe_screened || 0} Assets`;
+
+    const timeEl = document.getElementById('aiTop3Timestamp');
+    if (timeEl) {
+        if (data.analysis_timestamp_utc) {
+            const d = new Date(data.analysis_timestamp_utc);
+            timeEl.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' UTC';
+        } else {
+            timeEl.textContent = 'Just now';
+        }
+    }
+
+    // Render Cards
+    const candidates = data.candidates || [];
+    if (!grid) return;
+
+    if (candidates.length === 0) {
+        grid.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+    }
+
+    grid.innerHTML = candidates.map(c => renderCandidateCard(c)).join('');
+    grid.classList.remove('hidden');
+}
+
+function renderCandidateCard(c) {
+    const rank = c.rank || 1;
+    const rankColors = {
+        1: { border: 'border-amber-500/50', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40', tag: '#1 BEST CONFLUENCE' },
+        2: { border: 'border-slate-400/40', badge: 'bg-slate-400/20 text-slate-200 border-slate-400/40', tag: '#2 RUNNER-UP' },
+        3: { border: 'border-cyan-500/40', badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40', tag: '#3 STRATEGIC SETUP' },
+    };
+    const style = rankColors[rank] || rankColors[3];
+
+    // Price & 24h change
+    const priceFormatted = (c.price !== null && c.price !== undefined) ? formatScreenerPrice(c.price) : 'N/A';
+    const chg = c.price_change_24h_pct;
+    let chgBadge = '<span class="text-slate-400 font-mono text-xs">N/A</span>';
+    if (chg !== null && chg !== undefined) {
+        const chgNum = Number(chg);
+        const sign = chgNum >= 0 ? '+' : '';
+        const colorClass = chgNum >= 0 ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/80' : 'text-rose-400 bg-rose-950/60 border-rose-800/80';
+        chgBadge = `<span class="px-2 py-0.5 text-xs font-mono font-bold rounded border ${colorClass}">${sign}${chgNum.toFixed(2)}%</span>`;
+    }
+
+    // Bias badge
+    const bias = (c.bias || 'NEUTRAL').toUpperCase();
+    const biasColors = {
+        'LONG': 'bg-emerald-950 text-emerald-300 border-emerald-800',
+        'SHORT': 'bg-rose-950 text-rose-300 border-rose-800',
+        'NEUTRAL': 'bg-slate-800 text-slate-300 border-slate-700',
+    };
+    const biasBadge = `<span class="px-2 py-0.5 text-[10px] font-bold rounded border ${biasColors[bias] || biasColors.NEUTRAL}">${bias}</span>`;
+
+    // Category badge
+    const categoryName = (c.category || 'MOMENTUM_CONTINUATION').replace(/_/g, ' ');
+
+    // Readiness badge
+    const readiness = (c.entry_readiness || 'READY_FOR_INSPECTOR').toUpperCase();
+    const readinessColors = {
+        'READY_FOR_INSPECTOR': 'text-cyan-300 bg-cyan-950/70 border-cyan-800/70',
+        'WATCHLIST': 'text-amber-300 bg-amber-950/70 border-amber-800/70',
+        'SKIP': 'text-slate-400 bg-slate-900 border-slate-800',
+    };
+    const readinessBadge = `<span class="px-2 py-0.5 text-[10px] font-bold rounded border ${readinessColors[readiness] || readinessColors.WATCHLIST}">${readiness.replace(/_/g, ' ')}</span>`;
+
+    // Metrics formatting
+    const turnover = (c.turnover_24h_usdt !== null && c.turnover_24h_usdt !== undefined) ? formatCurrencyCompact(c.turnover_24h_usdt) : 'N/A';
+    const oi = (c.open_interest_usdt !== null && c.open_interest_usdt !== undefined) ? formatCurrencyCompact(c.open_interest_usdt) : 'N/A';
+    const spread = (c.spread_bps !== null && c.spread_bps !== undefined) ? `${Number(c.spread_bps).toFixed(2)} bps` : 'N/A';
+    
+    let fundingFormatted = 'N/A';
+    if (c.funding_rate_8h !== null && c.funding_rate_8h !== undefined) {
+        const fundNum = Number(c.funding_rate_8h);
+        const fundSign = fundNum >= 0 ? '+' : '';
+        fundingFormatted = `${fundSign}${(fundNum * 100).toFixed(4)}%`;
+    }
+
+    const rsBtc = (c.relative_strength_vs_btc_pct !== null && c.relative_strength_vs_btc_pct !== undefined)
+        ? `${Number(c.relative_strength_vs_btc_pct) >= 0 ? '+' : ''}${Number(c.relative_strength_vs_btc_pct).toFixed(2)}%`
+        : 'N/A';
+
+    const score = Number(c.selection_score || 0).toFixed(1);
+
+    return `
+        <div class="card-bg p-4 rounded-xl border ${style.border} flex flex-col justify-between space-y-4 hover:border-cyan-500/60 transition shadow-md relative group">
+            
+            <!-- Card Header -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full border ${style.badge}">
+                        ${style.tag}
+                    </span>
+                    <div class="flex items-center gap-1.5">
+                        ${biasBadge}
+                        ${readinessBadge}
+                    </div>
+                </div>
+
+                <div class="flex items-baseline justify-between gap-2 pt-1">
+                    <div>
+                        <h4 class="text-lg font-bold text-white tracking-tight flex items-center gap-1.5 font-mono">
+                            <span>${escapeHtml(c.symbol)}</span>
+                        </h4>
+                        <div class="text-[11px] text-cyan-400 font-medium">
+                            ${escapeHtml(categoryName)}
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-base font-bold text-white font-mono">$${priceFormatted}</div>
+                        <div class="mt-0.5">${chgBadge}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Score Pill & RS Metric Bar -->
+            <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-cyan-950 flex items-center justify-center border border-cyan-700/60 font-mono font-bold text-cyan-300 text-xs shadow-inner">
+                        ${score}
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selection Score</div>
+                        <div class="text-[10px] text-slate-500">Multi-factor Rubric</div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[10px] text-slate-400">RS vs BTC:</div>
+                    <div class="text-xs font-mono font-bold ${rsBtc.startsWith('+') ? 'text-emerald-400' : 'text-slate-300'}">${rsBtc}</div>
+                </div>
+            </div>
+
+            <!-- Key Quantitative Metrics Grid -->
+            <div class="grid grid-cols-2 gap-2 text-[11px] font-mono bg-slate-900/50 p-2.5 rounded-lg border border-slate-800/80">
+                <div>
+                    <span class="text-slate-500">24H Turnover:</span>
+                    <div class="text-slate-200 font-semibold">${turnover}</div>
+                </div>
+                <div>
+                    <span class="text-slate-500">Open Interest:</span>
+                    <div class="text-slate-200 font-semibold">${oi}</div>
+                </div>
+                <div>
+                    <span class="text-slate-500">Spread:</span>
+                    <div class="text-slate-200 font-semibold">${spread}</div>
+                </div>
+                <div>
+                    <span class="text-slate-500">Funding (8H):</span>
+                    <div class="text-slate-200 font-semibold">${fundingFormatted}</div>
+                </div>
+            </div>
+
+            <!-- Quantitative Narrative Explanations -->
+            <div class="space-y-2.5 text-xs text-slate-300 border-t border-slate-800/80 pt-2.5 flex-1">
+                <div>
+                    <span class="text-[11px] font-semibold text-cyan-400 flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Why Selected:
+                    </span>
+                    <p class="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                        ${escapeHtml(c.why_selected || 'Solid liquidity, tight spread, and constructive momentum relative to overall market.')}
+                    </p>
+                </div>
+
+                <div>
+                    <span class="text-[11px] font-semibold text-amber-400 flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        What to Verify in Inspector:
+                    </span>
+                    <p class="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                        ${escapeHtml(c.what_to_verify_in_inspector || 'Check 15m/1h order blocks, EMA alignment, and order book depth.')}
+                    </p>
+                </div>
+
+                <div>
+                    <span class="text-[11px] font-semibold text-rose-400 flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        Invalidation &amp; Risk:
+                    </span>
+                    <p class="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                        ${escapeHtml(c.invalidation_and_risk || 'Loss of key support pivot or sharp Bitcoin reversal.')}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Action Button: Open in Inspector -->
+            <div class="pt-2 border-t border-slate-800/80">
+                <button type="button" onclick="openCoinInInspector('${escapeHtml(c.symbol)}')" class="w-full py-2 px-3 bg-gradient-to-r from-cyan-600/90 to-blue-600/90 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs rounded-lg shadow transition flex items-center justify-center gap-2 border border-cyan-400/40">
+                    <svg class="w-4 h-4 text-cyan-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    <span>Open in Inspector (${escapeHtml(c.symbol)})</span>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function openCoinInInspector(symbol) {
+    if (!symbol) return;
+    const cleanSym = symbol.trim().toUpperCase();
+    if (typeof switchTab === 'function') {
+        switchTab('inspector');
+    }
+    setTimeout(() => {
+        if (typeof selectInspectorSymbol === 'function') {
+            selectInspectorSymbol(cleanSym);
+        } else {
+            const input = document.getElementById('inspectorSearchInput');
+            if (input) input.value = cleanSym;
+            if (typeof fetchCoinInspection === 'function') {
+                fetchCoinInspection();
+            }
+        }
+    }, 120);
+}
+

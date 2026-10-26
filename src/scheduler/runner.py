@@ -189,7 +189,7 @@ class ScannerRunner:
                 "market_candle_close_time_ms": getattr(candle, "close_time_ms", None),
                 "freshness_status": freshness, "history_status": history,
                 "data_quality_status": data_quality, "predicates": predicates or {},
-                "values": values or {}, "strategy_version": "MODEL_A_FROZEN",
+                "values": values or {}, "strategy_version": "MODEL_A_PAPER_V2",
                 "final_status": final_status, "first_rejection_reason": first_rejection,
                 "exception_detail": exception_detail,
             })

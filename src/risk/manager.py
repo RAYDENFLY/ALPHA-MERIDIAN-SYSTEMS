@@ -200,7 +200,7 @@ class RiskManager:
         effective = min(self.trade_risk_usdt, rem_daily, rem_weekly)
         return float(round(effective, 4))
 
-    def can_open_new_position(self, current_ts_ms: int) -> Tuple[bool, Optional[str]]:
+    def can_open_new_position(self, current_ts_ms: int, direction: Optional[Any] = None) -> Tuple[bool, Optional[str]]:
         """Validate whether account conditions allow entering a new position."""
         self._sync_calendar_buckets(current_ts_ms)
 

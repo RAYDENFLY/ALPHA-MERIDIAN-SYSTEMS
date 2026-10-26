@@ -385,10 +385,21 @@ class JournalRepository:
                 else None
             )
             m_val = str(d.get("model_id") or "").strip().upper()
-            d["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B", "MODEL_B_FAST") else ("UNKNOWN" if not m_val else m_val)
+            d["model_id"] = m_val if m_val in ("MODEL_A", "MODEL_B", "MODEL_B_FAST", "MODEL_B_V3") else ("UNKNOWN" if not m_val else m_val)
 
             cohort_ver = details.get("cohort_version")
-            if d["model_id"] == "MODEL_B_FAST" or cohort_ver == "MODEL_B_FAST_V2":
+            if d["model_id"] == "MODEL_B_V3" or cohort_ver in ("MODEL_B_V1_PRO", "MODEL_B_V3_TUNED") or (d.get("trade_id") and d["trade_id"].startswith("PTRD_V3_")):
+                if cohort_ver == "MODEL_B_V3_TUNED":
+                    cohort_name = "V3_TUNED"
+                    cohort_label = "15M V3 TUNED (FULL-TP1)"
+                    resolved_cohort_ver = "MODEL_B_V3_TUNED"
+                    strategy_badge = "15M V3 TUNED"
+                else:
+                    cohort_name = "V1_PRO"
+                    cohort_label = "15M V1-PRO (LONG-BIASED)"
+                    resolved_cohort_ver = cohort_ver or "MODEL_B_V1_PRO"
+                    strategy_badge = "15M V1-PRO"
+            elif d["model_id"] == "MODEL_B_FAST" or cohort_ver == "MODEL_B_FAST_V2" or (d.get("trade_id") and d["trade_id"].startswith("PTRD_FAST_")):
                 cohort_name = "FAST_V2"
                 cohort_label = "15M SCALP (FAST)"
                 resolved_cohort_ver = cohort_ver or "MODEL_B_FAST_V2"
@@ -402,7 +413,7 @@ class JournalRepository:
 
             if cohort and cohort.upper() != "ALL":
                 c_req = cohort.upper().strip()
-                if cohort_name != c_req and str(resolved_cohort_ver).upper() != c_req and not (c_req == "V2" and cohort_name == "FAST_V2"):
+                if cohort_name != c_req and str(resolved_cohort_ver).upper() != c_req and not (c_req == "V2" and cohort_name in ("FAST_V2", "V3_TUNED", "V1_PRO")):
                     continue
 
             d["cohort"] = cohort_name

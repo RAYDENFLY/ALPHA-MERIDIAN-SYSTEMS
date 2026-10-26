@@ -35,7 +35,7 @@ from src.strategy.model_b.generator import ModelBStrategyGenerator
 from config.settings import ModelBConfig
 
 
-def make_candle(ts_ms: int, o: float, h: float, l: float, c: float, sym: str = "BTCUSDT") -> Candle:
+def make_candle(ts_ms: int, o: float, h: float, l: float, c: float, sym: str = "BTCUSDT", vol: float = 1000.0) -> Candle:
     return Candle(
         symbol=sym,
         timeframe="1h",
@@ -44,7 +44,7 @@ def make_candle(ts_ms: int, o: float, h: float, l: float, c: float, sym: str = "
         high=h,
         low=l,
         close=c,
-        volume=1000.0,
+        volume=vol,
         close_time_ms=ts_ms + 3600000 - 1,
         is_closed=True,
     )
@@ -102,7 +102,7 @@ class TestModelBV2Remediation:
         candles.append(make_candle(20 * 3600000, 100.5, 101.0, 99.50, 100.2)) # swing low 99.50
         candles.extend([make_candle((i + 21) * 3600000, 100.2, 100.8, 99.9, 100.4) for i in range(5)])
         # Trigger bar: sweep 99.40 < 99.50, reclaim 100.5 > 99.50, confirmed green body (open 99.8 < close 100.5)
-        candles.append(make_candle(26 * 3600000, 99.8, 100.7, 99.40, 100.5))
+        candles.append(make_candle(26 * 3600000, 99.8, 100.7, 99.40, 100.5, vol=1500.0))
 
         book = NormalizedOrderBook(
             symbol="BTCUSDT",
@@ -176,7 +176,7 @@ class TestModelBV2Remediation:
         candles = [make_candle(i * 3600000, 2000.0, 2020.0, 1980.0, 2000.0, sym="ETHUSDT") for i in range(20)]
         candles.append(make_candle(20 * 3600000, 2000.0, 2010.0, 1950.0, 1980.0, sym="ETHUSDT"))
         candles.extend([make_candle((i + 21) * 3600000, 1980.0, 2000.0, 1970.0, 1990.0, sym="ETHUSDT") for i in range(5)])
-        candles.append(make_candle(26 * 3600000, 1940.0, 1995.0, 1930.0, 1980.0, sym="ETHUSDT"))
+        candles.append(make_candle(26 * 3600000, 1950.0, 1995.0, 1920.0, 1980.0, sym="ETHUSDT", vol=1500.0))
 
         book_adverse = NormalizedOrderBook(
             symbol="ETHUSDT",
@@ -224,7 +224,7 @@ class TestModelBV2Remediation:
         candles = [make_candle(i * 3600000, 10.0, 10.5, 9.5, 10.0, sym="THINUSDT") for i in range(20)]
         candles.append(make_candle(20 * 3600000, 10.0, 10.2, 8.5, 9.8, sym="THINUSDT"))
         candles.extend([make_candle((i + 21) * 3600000, 9.8, 10.1, 9.5, 10.0, sym="THINUSDT") for i in range(5)])
-        candles.append(make_candle(26 * 3600000, 8.4, 9.3, 8.0, 8.9, sym="THINUSDT"))
+        candles.append(make_candle(26 * 3600000, 8.4, 9.3, 8.0, 8.9, sym="THINUSDT", vol=1500.0))
 
         # Very thin book: total depth $200 << $5000 min requirement
         thin_book = NormalizedOrderBook(

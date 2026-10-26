@@ -14,7 +14,8 @@ const ALL_KNOWN_TABS = [
     'liquidity_intel',
     'sweep_chart',
     'demand_zone',
-    'ai_analyst'
+    'ai_analyst',
+    'inspector'
     ,'market_participant','cot','institutional_positioning','retail_sentiment'
 ];
 
@@ -30,7 +31,8 @@ const TAB_TO_CATEGORY_MAP = {
     'model_a': 'ai_research',
     'model_b': 'ai_research',
     'model_d': 'ai_research',
-    'ai_analyst': 'ai_research',
+    'ai_analyst': 'ai_research',
+    'inspector': 'ai_research',
     'backtest': 'exchange_data'
     ,'market_participant': 'participants','cot': 'participants','institutional_positioning': 'participants','retail_sentiment': 'participants'
 };
@@ -257,7 +259,10 @@ function switchTab(tabId) {
         }
     }
     if (tabId === 'ai_analyst' && typeof loadAIAnalyst === 'function') {
-        loadAIAnalyst();
+        loadAIAnalyst();
+    }
+    if (tabId === 'inspector' && typeof loadInspectorTab === 'function') {
+        loadInspectorTab();
     }
 
     // 7. Update browser history / URL hash without reload

@@ -335,7 +335,32 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
         """Query position mode via V3 (GET /fapi/v3/positionSide/dual)."""
         return self._signed_request("GET", "/fapi/v3/positionSide/dual", include_user=True)
 
-    # Execution Guards & Testnet Execution
+    def set_leverage(self, symbol: str, leverage: int) -> Dict[str, Any]:
+        """Set position leverage via V3 (POST /fapi/v3/leverage)."""
+        clean_symbol = symbol.upper().replace(".P", "")
+        return self._signed_request(
+            "POST",
+            "/fapi/v3/leverage",
+            params={"symbol": clean_symbol, "leverage": int(leverage)},
+            include_user=True,
+        )
+
+    def set_margin_type(self, symbol: str, margin_type: str = "ISOLATED") -> Dict[str, Any]:
+        """Set position margin type (ISOLATED or CROSSED) via V3 (POST /fapi/v3/marginType)."""
+        clean_symbol = symbol.upper().replace(".P", "")
+        try:
+            return self._signed_request(
+                "POST",
+                "/fapi/v3/marginType",
+                params={"symbol": clean_symbol, "marginType": margin_type.upper()},
+                include_user=True,
+            )
+        except ExchangeAPIError as err:
+            if "-4046" in str(err) or "No need to change margin type" in str(err):
+                return {"code": 200, "msg": "Margin type already configured", "marginType": margin_type.upper()}
+            raise
+
+    # Execution Guards & Order Placement
     def create_order(
         self,
         symbol: str,
@@ -344,33 +369,31 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
         quantity: float,
         price: Optional[float] = None,
         stop_price: Optional[float] = None,
-        time_in_force: Optional[str] = None,
+        time_in_force: Optional[str] = "GTC",
         reduce_only: bool = False,
         client_order_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Submit new order strictly isolated to Aster Futures Testnet only."""
-        if not self.is_testnet:
+        """Submit new order to Aster DEX Futures V3 (Testnet or Mainnet when unlocked)."""
+        if self.live_trading_locked:
             raise ExchangeAPIError(
-                "Live trading is permanently locked (live_trading_locked=True). "
-                "Mainnet account balance is strictly protected. Real-money orders are forbidden."
+                "Live trading is locked (live_trading_locked=True). "
+                "Real-money orders are forbidden until unlocked."
             )
 
-        if "testnet" not in self.base_url.lower():
-            raise ExchangeAPIError(f"Safety violation: Testnet order routing to non-testnet URL '{self.base_url}' is blocked.")
-
-        if self.signer.chain_id != 714:
-            raise ExchangeAPIError(f"Safety violation: Testnet order requires Chain ID 714, found {self.signer.chain_id}.")
-
-        # Guard: Ensure mainnet wallet is NEVER accidentally used on testnet
-        mainnet_user = os.getenv("ASTER_USER_ADDRESS", "").strip()
-        mainnet_signer = os.getenv("ASTER_SIGNER_ADDRESS", "").strip()
-        if (mainnet_user and self.signer.user_address.lower() == mainnet_user.lower()) or (
-            mainnet_signer and self.signer.signer_address.lower() == mainnet_signer.lower()
-        ):
-            raise ExchangeAPIError(
-                "Safety violation: Mainnet credentials detected on testnet profile! "
-                "To protect your 16 USDT mainnet balance, you must configure and use dedicated ASTER_TESTNET_* credentials."
-            )
+        if self.is_testnet:
+            if "testnet" not in self.base_url.lower():
+                raise ExchangeAPIError(f"Safety violation: Testnet order routing to non-testnet URL '{self.base_url}' is blocked.")
+            if self.signer.chain_id != 714:
+                raise ExchangeAPIError(f"Safety violation: Testnet order requires Chain ID 714, found {self.signer.chain_id}.")
+            mainnet_user = os.getenv("ASTER_USER_ADDRESS", "").strip()
+            mainnet_signer = os.getenv("ASTER_SIGNER_ADDRESS", "").strip()
+            if (mainnet_user and self.signer.user_address.lower() == mainnet_user.lower()) or (
+                mainnet_signer and self.signer.signer_address.lower() == mainnet_signer.lower()
+            ):
+                raise ExchangeAPIError(
+                    "Safety violation: Mainnet credentials detected on testnet profile! "
+                    "To protect mainnet balance, configure dedicated ASTER_TESTNET_* credentials."
+                )
 
         clean_symbol = symbol.upper().replace(".P", "")
         params: Dict[str, Any] = {
@@ -383,14 +406,15 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
             params["price"] = str(price)
         if stop_price is not None:
             params["stopPrice"] = str(stop_price)
-        if time_in_force:
+        if time_in_force and order_type.upper() == "LIMIT":
             params["timeInForce"] = time_in_force
         if reduce_only:
             params["reduceOnly"] = "true"
         if client_order_id:
             params["newClientOrderId"] = client_order_id
 
-        logger.info(f"[TESTNET] Submitting {order_type} {side} order for {quantity} {clean_symbol} on Aster Testnet...")
+        venue_label = "TESTNET" if self.is_testnet else "MAINNET LIVE"
+        logger.info(f"[{venue_label}] Submitting {order_type} {side} order for {quantity} {clean_symbol} on Aster DEX V3...")
         return self._signed_request("POST", "/fapi/v3/order", params=params, include_user=True)
 
     def cancel_order(
@@ -399,10 +423,10 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
         order_id: Optional[Union[str, int]] = None,
         client_order_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Cancel an open order strictly isolated to Aster Futures Testnet only."""
-        if not self.is_testnet:
-            raise ExchangeAPIError("Live trading is permanently locked (live_trading_locked=True).")
-        if "testnet" not in self.base_url.lower() or self.signer.chain_id != 714:
+        """Cancel an open order on Aster Futures."""
+        if self.live_trading_locked:
+            raise ExchangeAPIError("Live trading is locked (live_trading_locked=True).")
+        if self.is_testnet and ("testnet" not in self.base_url.lower() or self.signer.chain_id != 714):
             raise ExchangeAPIError("Safety violation: Testnet order cancellation requires testnet environment.")
 
         params: Dict[str, Any] = {"symbol": symbol.upper().replace(".P", "")}
@@ -411,7 +435,7 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
         if client_order_id:
             params["origClientOrderId"] = str(client_order_id)
 
-        logger.info(f"[TESTNET] Cancelling order {order_id or client_order_id} on {symbol}...")
+        logger.info(f"Cancelling order {order_id or client_order_id} on {symbol}...")
         return self._signed_request("DELETE", "/fapi/v3/order", params=params, include_user=True)
 
     def cancel_all_open_orders(self, symbol: str) -> Dict[str, Any]:

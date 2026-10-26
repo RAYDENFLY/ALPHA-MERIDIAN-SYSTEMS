@@ -11,87 +11,130 @@
         const MODEL_B_HEAVY_POLL_INTERVAL_MS = 15000; // 15 seconds for heavy tables
 
         function updateModelBBotModeUI(modelId, parallelInstances = null) {
+            const isV3 = modelId === 'MODEL_B_V3';
             const isFast = modelId === 'MODEL_B_FAST';
             const btnNormal = document.getElementById('btnModelBModeNormal');
             const btnFast = document.getElementById('btnModelBModeFast');
-            if (btnNormal && btnFast) {
-                if (isFast) {
-                    btnNormal.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-indigo-500/50 hover:text-indigo-300 transition-all flex items-center gap-2 cursor-pointer';
-                    btnFast.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-cyan-600 text-white shadow-md shadow-cyan-950/80 ring-2 ring-cyan-400 transition-all flex items-center gap-2 cursor-pointer';
-                } else {
-                    btnNormal.className = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md shadow-indigo-950/80 ring-2 ring-indigo-400 transition-all flex items-center gap-2 cursor-pointer';
-                    btnFast.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 hover:text-cyan-300 transition-all flex items-center gap-2 cursor-pointer';
-                }
-            }
+            const btnV3 = document.getElementById('btnModelBModeV3');
+
+            const activeNormalClass = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-md shadow-indigo-950/80 ring-2 ring-indigo-400 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap';
+            const inactiveNormalClass = 'px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-indigo-500/50 hover:text-indigo-300 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap';
+
+            const activeFastClass = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-cyan-600 text-white shadow-md shadow-cyan-950/80 ring-2 ring-cyan-400 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap';
+            const inactiveFastClass = 'px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 hover:text-cyan-300 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap';
+
+            const activeV3Class = 'px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-md shadow-emerald-950/80 ring-2 ring-emerald-400 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap';
+            const inactiveV3Class = 'px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-300 bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap';
+
+            if (btnNormal) btnNormal.className = (!isFast && !isV3) ? activeNormalClass : inactiveNormalClass;
+            if (btnFast) btnFast.className = isFast ? activeFastClass : inactiveFastClass;
+            if (btnV3) btnV3.className = isV3 ? activeV3Class : inactiveV3Class;
 
             if (parallelInstances) {
                 const normInfo = parallelInstances.MODEL_B || {};
                 const fastInfo = parallelInstances.MODEL_B_FAST || {};
+                const v3Info = parallelInstances.MODEL_B_V3 || {};
                 const badgeNorm = document.getElementById('badgeModelBModeNormal');
                 const badgeFast = document.getElementById('badgeModelBModeFast');
+                const badgeV3 = document.getElementById('badgeModelBModeV3');
                 if (badgeNorm && normInfo.current_equity_usdt !== undefined) {
                     badgeNorm.innerText = `1H SWING \u2022 $${Number(normInfo.current_equity_usdt).toFixed(2)} (${normInfo.open_positions_count || 0} Open)`;
                 }
                 if (badgeFast && fastInfo.current_equity_usdt !== undefined) {
                     badgeFast.innerText = `15M SCALP \u2022 $${Number(fastInfo.current_equity_usdt).toFixed(2)} (${fastInfo.open_positions_count || 0} Open)`;
                 }
+                if (badgeV3 && v3Info.current_equity_usdt !== undefined) {
+                    badgeV3.innerText = `V1-PRO \u2022 $${Number(v3Info.current_equity_usdt).toFixed(2)} (${v3Info.open_positions_count || 0} Open)`;
+                }
                 const dualBadge = document.getElementById('modelBDualRuntimeStatusBadge');
                 if (dualBadge) {
-                    const bothRunning = Boolean(normInfo.is_running && fastInfo.is_running);
-                    dualBadge.innerText = bothRunning ? '2 PARALLEL BOTS RUNNING' : 'PARALLEL ENGINE ACTIVE';
+                    const allRunning = Boolean(normInfo.is_running && fastInfo.is_running && v3Info.is_running);
+                    dualBadge.innerText = allRunning ? '3 PARALLEL BOTS RUNNING' : 'PARALLEL ENGINES ACTIVE';
                 }
             }
 
             const configSummary = document.getElementById('modelBActiveConfigSummary');
             if (configSummary) {
-                configSummary.innerText = isFast
-                    ? 'Trigger: 15m | Trend: 1H EMA20/50 | Stop Floor: 0.80% (1.25x ATR) | TTL: 8 Bars (2.0h)'
-                    : 'Trigger: 1H | Trend: 4H EMA20/50 | Stop Floor: 1.50% (1.25x ATR) | TTL: 6 Bars (6.0h)';
+                if (isV3) {
+                    configSummary.innerText = 'Trigger: 15m | Trend: 1H | V1 Responsive Reclaim | LONG-Only | Stop Floor: 1.00% | Full Exit TP1 (1.50R) | Max 1 Open/Dir';
+                } else if (isFast) {
+                    configSummary.innerText = 'Trigger: 15m | Trend: 1H EMA20/50 | Stop Floor: 0.80% (1.25x ATR) | TTL: 8 Bars (2.0h)';
+                } else {
+                    configSummary.innerText = 'Trigger: 1H | Trend: 4H EMA20/50 | Stop Floor: 1.50% (1.25x ATR) | TTL: 6 Bars (6.0h)';
+                }
             }
 
             const titleEl = document.getElementById('modelBActiveBotTitle');
             if (titleEl) {
-                titleEl.innerText = isFast
-                    ? 'Model B Fast Scalper: 15m Liquidity Sweep Engine (15m / 1H Trend)'
-                    : 'Model B: Aggressive Liquidity Research Engine (1H / 4H Swing)';
+                if (isV3) {
+                    titleEl.innerText = 'Model B V1-Pro: 15m Fast Long-Biased Engine (15m / 1H Full-TP1)';
+                } else if (isFast) {
+                    titleEl.innerText = 'Model B Fast Scalper: 15m Liquidity Sweep Engine (15m / 1H Trend)';
+                } else {
+                    titleEl.innerText = 'Model B: Aggressive Liquidity Research Engine (1H / 4H Swing)';
+                }
             }
 
             const tfBadge = document.getElementById('modelBActiveTimeframeBadge');
             if (tfBadge) {
-                tfBadge.innerText = isFast ? '15M TRIGGER / 1H TREND' : '1H TRIGGER / 4H TREND';
-                tfBadge.className = isFast
-                    ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-600'
-                    : 'px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700';
+                if (isV3) {
+                    tfBadge.innerText = '15M TRIGGER / 1H TREND (V1-PRO LONG)';
+                    tfBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-600';
+                } else if (isFast) {
+                    tfBadge.innerText = '15M TRIGGER / 1H TREND';
+                    tfBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-600';
+                } else {
+                    tfBadge.innerText = '1H TRIGGER / 4H TREND';
+                    tfBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700';
+                }
             }
 
             const descEl = document.getElementById('modelBActiveDescription');
             if (descEl) {
-                descEl.innerText = isFast
-                    ? 'Fast-timeframe parallel paper bot scanning closed 15m sweep-reclaims aligned with 1H EMA20/EMA50 structure, >=$5,000 L2 depth, 0.80% stop floor, and >=1.5R dynamic TP rescaling ($100.00 isolated paper equity).'
-                    : 'Scans the universal perpetual universe (~578 contracts) using 1H structural sweep-reclaims, 4H EMA20/EMA50 trend alignment, multi-exchange order book depth (>=$5,000), and dynamic >=1.5R TP rescaling.';
+                if (isV3) {
+                    descEl.innerText = 'Original V1 responsive 15m sweep-reclaim engine with anti-short bleed filter (LONG-only bias), strict correlation cap (max 1 open per direction, max 2 total), and 100% full exit at 1.50R TP1 ($100.00 isolated paper equity).';
+                } else if (isFast) {
+                    descEl.innerText = 'Fast-timeframe parallel paper bot scanning closed 15m sweep-reclaims aligned with 1H EMA20/EMA50 structure, >=$5,000 L2 depth, 0.80% stop floor, and >=1.5R dynamic TP rescaling ($100.00 isolated paper equity).';
+                } else {
+                    descEl.innerText = 'Scans the universal perpetual universe (~578 contracts) using 1H structural sweep-reclaims, 4H EMA20/EMA50 trend alignment, multi-exchange order book depth (>=$5,000), and dynamic >=1.5R TP rescaling.';
+                }
             }
 
             const pipeTitle = document.getElementById('modelBCandidatesPipelineTitle');
             if (pipeTitle) {
-                pipeTitle.innerText = isFast
-                    ? 'Model B Fast (15m / 1H) Candidates Pipeline'
-                    : 'Model B Normal (1H / 4H) Candidates Pipeline';
+                if (isV3) {
+                    pipeTitle.innerText = 'Model B V1-Pro (15m Fast Long-Biased) Candidates Pipeline';
+                } else if (isFast) {
+                    pipeTitle.innerText = 'Model B Fast (15m / 1H) Candidates Pipeline';
+                } else {
+                    pipeTitle.innerText = 'Model B Normal (1H / 4H) Candidates Pipeline';
+                }
             }
 
             const journalTitle = document.getElementById('modelBJournalPanelTitle');
             if (journalTitle) {
-                journalTitle.innerText = isFast
-                    ? 'Model B Fast Scalper (15m / 1H) Paper Portfolio & Journal'
-                    : 'Model B Normal (1H / 4H) Paper Portfolio & Journal';
+                if (isV3) {
+                    journalTitle.innerText = 'Model B V1-Pro (15m Fast Long-Biased) Paper Portfolio & Journal';
+                } else if (isFast) {
+                    journalTitle.innerText = 'Model B Fast Scalper (15m / 1H) Paper Portfolio & Journal';
+                } else {
+                    journalTitle.innerText = 'Model B Normal (1H / 4H) Paper Portfolio & Journal';
+                }
             }
 
             const v2Label = document.getElementById('modelBCohortV2Label');
             const btnV1 = document.getElementById('modelBCohortFilterV1');
             if (v2Label) {
-                v2Label.innerText = isFast ? '15M SCALP (FAST)' : '1H SWING (V2)';
+                if (isV3) {
+                    v2Label.innerText = '15M V1-PRO';
+                } else if (isFast) {
+                    v2Label.innerText = '15M SCALP (FAST)';
+                } else {
+                    v2Label.innerText = '1H SWING (V2)';
+                }
             }
             if (btnV1) {
-                if (isFast) {
+                if (isFast || isV3) {
                     btnV1.classList.add('hidden');
                 } else {
                     btnV1.classList.remove('hidden');
@@ -99,14 +142,16 @@
             }
         }
 
-        window.switchModelBInstance = async function(modelId) {
-            const cleanId = (String(modelId || 'MODEL_B').toUpperCase() === 'MODEL_B_FAST') ? 'MODEL_B_FAST' : 'MODEL_B';
+        async function switchModelBInstance(modelId) {
+            const raw = String(modelId || 'MODEL_B').toUpperCase();
+            const cleanId = raw === 'MODEL_B_V3' ? 'MODEL_B_V3' : (raw === 'MODEL_B_FAST' ? 'MODEL_B_FAST' : 'MODEL_B');
             currentModelBInstance = cleanId;
-            if (cleanId === 'MODEL_B_FAST' && currentModelBCohortFilter === 'V1') {
+            if ((cleanId === 'MODEL_B_FAST' || cleanId === 'MODEL_B_V3') && currentModelBCohortFilter === 'V1') {
                 currentModelBCohortFilter = 'ALL';
                 updateModelBCohortButtonsUI('ALL');
             }
             updateModelBBotModeUI(cleanId);
+
             if (modelBStatusAbortController) {
                 try { modelBStatusAbortController.abort(); } catch (e) {}
                 modelBStatusAbortController = null;
@@ -120,7 +165,8 @@
                 fetchModelBJournal(),
                 fetchModelBDiagnosticReport(),
             ]);
-        };
+        }
+        window.switchModelBInstance = switchModelBInstance;
 
         function isModelBTabActive() {
             const tab = document.getElementById('tab-model_b');
@@ -930,10 +976,10 @@
 
         function isV2Trade(t) {
             if (!t) return false;
-            if (t.cohort === 'V2' || t.cohort === 'FAST_V2') return true;
-            if (t.cohort_version === 'MODEL_B_V2_REMEDIATED' || t.cohort_version === 'MODEL_B_FAST_V2') return true;
-            if (typeof t.details_json === 'string' && (t.details_json.includes('MODEL_B_V2_REMEDIATED') || t.details_json.includes('MODEL_B_FAST_V2'))) return true;
-            if (t.trade_id && t.trade_id.startsWith('PTRD_FAST_')) return true;
+            if (t.cohort === 'V2' || t.cohort === 'FAST_V2' || t.cohort === 'V3_TUNED' || t.cohort === 'V1_PRO') return true;
+            if (t.cohort_version === 'MODEL_B_V2_REMEDIATED' || t.cohort_version === 'MODEL_B_FAST_V2' || t.cohort_version === 'MODEL_B_V3_TUNED' || t.cohort_version === 'MODEL_B_V1_PRO') return true;
+            if (typeof t.details_json === 'string' && (t.details_json.includes('MODEL_B_V2_REMEDIATED') || t.details_json.includes('MODEL_B_FAST_V2') || t.details_json.includes('MODEL_B_V3_TUNED'))) return true;
+            if (t.trade_id && (t.trade_id.startsWith('PTRD_FAST_') || t.trade_id.startsWith('PTRD_V3_'))) return true;
             const entryTs = Number(t.entry_timestamp_ms || 0);
             if (entryTs >= 1792838400000 && t.exit_reason !== 'COHORT_CUTOVER_V2') return true;
             return false;
@@ -1054,25 +1100,33 @@
                     ? 'bg-purple-950/20 hover:bg-purple-900/30 border-l-4 border-l-purple-400 transition'
                     : 'hover:bg-slate-800/40 border-l-4 border-l-slate-700 transition';
 
-                const isFastTrade = (t.cohort === 'FAST_V2' || t.cohort_version === 'MODEL_B_FAST_V2' || (t.trade_id && t.trade_id.startsWith('PTRD_FAST_')) || (typeof t.details_json === 'string' && t.details_json.includes('MODEL_B_FAST')));
-                const cohortBadge = isFastTrade
-                    ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide bg-cyan-900/90 text-cyan-200 border border-cyan-400 shadow-sm shadow-cyan-950/60 uppercase" title="15M Scalp Fast Cohort">
-                         <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                         15M SCALP (FAST)
+                const isV3Trade = (t.cohort === 'V3_TUNED' || t.cohort === 'V1_PRO' || t.cohort_version === 'MODEL_B_V3_TUNED' || t.cohort_version === 'MODEL_B_V1_PRO' || (t.trade_id && t.trade_id.startsWith('PTRD_V3_')) || (typeof t.details_json === 'string' && (t.details_json.includes('MODEL_B_V3') || t.details_json.includes('MODEL_B_V1_PRO'))));
+                const isFastTrade = !isV3Trade && (t.cohort === 'FAST_V2' || t.cohort_version === 'MODEL_B_FAST_V2' || (t.trade_id && t.trade_id.startsWith('PTRD_FAST_')) || (typeof t.details_json === 'string' && t.details_json.includes('MODEL_B_FAST')));
+                const cohortBadge = isV3Trade
+                    ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide bg-emerald-900/90 text-emerald-200 border border-emerald-400 shadow-sm shadow-emerald-950/60 uppercase" title="15M V3 Tuned Full-TP1 Cohort">
+                         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                         15M V1-PRO
                        </span>`
-                    : (isV2
-                        ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide bg-purple-900/90 text-purple-200 border border-purple-400 shadow-sm shadow-purple-950/60 uppercase" title="Remediated V2 Cohort">
-                             <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
-                             1H SWING (V2)
+                    : (isFastTrade
+                        ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide bg-cyan-900/90 text-cyan-200 border border-cyan-400 shadow-sm shadow-cyan-950/60 uppercase" title="15M Scalp Fast Cohort">
+                             <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                             15M SCALP (FAST)
                            </span>`
-                        : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide bg-slate-800 text-slate-400 border border-slate-700 uppercase" title="${escapeHtml(t.cohort_label || 'Legacy V1 Cohort')}">
-                             <span class="w-2 h-2 rounded-full bg-slate-500"></span>
-                             V1 LEGACY
-                           </span>`);
+                        : (isV2
+                            ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black tracking-wide bg-purple-900/90 text-purple-200 border border-purple-400 shadow-sm shadow-purple-950/60 uppercase" title="Remediated V2 Cohort">
+                                 <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                                 1H SWING (V2)
+                               </span>`
+                            : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide bg-slate-800 text-slate-400 border border-slate-700 uppercase" title="${escapeHtml(t.cohort_label || 'Legacy V1 Cohort')}">
+                                 <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                                 V1 LEGACY
+                               </span>`));
 
-                const symbolCohortPill = isV2
-                    ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-black bg-purple-600 text-white shadow-sm ring-1 ring-purple-300/40">V2</span>`
-                    : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">V1</span>`;
+                const symbolCohortPill = isV3Trade
+                    ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-black bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-300/40">V3</span>`
+                    : (isV2
+                        ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-black bg-purple-600 text-white shadow-sm ring-1 ring-purple-300/40">V2</span>`
+                        : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">V1</span>`);
 
                 const isArchived = t.exit_reason === 'COHORT_CUTOVER_V2';
 

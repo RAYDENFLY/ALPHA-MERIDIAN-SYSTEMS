@@ -44,7 +44,7 @@ class RiskConfig(BaseModel):
     risk_per_trade_usdt: float = Field(default=0.25, gt=0, description="Nominal risk per trade in USDT")
     daily_loss_limit_usdt: float = Field(default=0.50, gt=0, description="Tier 1 daily loss cap ($0.50)")
     weekly_loss_limit_usdt: float = Field(default=1.25, gt=0, description="Approved Tier 1 weekly loss cap ($1.25)")
-    max_open_positions: int = Field(default=1, ge=1, le=1)
+    max_open_positions: int = Field(default=3, ge=1, le=10)
     max_entries_per_week: Optional[int] = Field(default=None, description="Deprecated weekly entry hard cap; entry frequency governed by risk controls")
     min_notional_usdt: float = Field(default=5.0, gt=0)
     buffer_pct_for_fees: float = Field(default=0.02, ge=0)
@@ -68,6 +68,20 @@ class StrategyConfig(BaseModel):
     min_reward_to_risk: float = 1.5
     fvg_min_size_atr_ratio: float = 0.1
     sr_cluster_tolerance_pct: float = 0.015
+    # Tuned SMC & Dealing Range Parameters (MODEL_A_PAPER_V2)
+    premium_threshold: float = 0.70
+    discount_threshold: float = 0.30
+    min_extension_48h: float = 0.035
+    min_impulse_12h: float = 0.012
+    short_macro_cap_168h: float = 0.120
+    bull_breakout_pos_72h: float = 0.85
+    bull_breakout_ret_24h: float = 0.035
+    bull_breakout_ret_48h: float = 0.045
+    bull_breakout_ret_168h: float = 0.060
+    bull_variance_ratio_min: float = 1.05
+    full_exit_at_tp1: bool = True
+    tp1_rr_multiple: float = 1.65
+    min_stop_distance_pct: float = 0.012
 
 
 class MLConfig(BaseModel):
@@ -117,7 +131,7 @@ DEFAULT_WATCHLIST = [
 
 
 class PaperExecutionConfig(BaseModel):
-    enabled: bool = False
+    enabled: bool = True
     slippage_rate: float = Field(default=0.0005, ge=0.0001, le=0.005)  # 0.05% default (0.02%-0.06% typical)
     maker_fee_rate: float = Field(default=0.0002, ge=0.0)             # 0.02% maker
     taker_fee_rate: float = Field(default=0.0005, ge=0.0)             # 0.05% taker
@@ -136,6 +150,10 @@ class PaperExecutionConfig(BaseModel):
     )
     move_sl_to_breakeven_on_tp1: bool = Field(
         default=True, description="Automatically move stop-loss to fee-adjusted break-even when TP1 is hit"
+    )
+    full_exit_at_tp1: bool = Field(
+        default=True,
+        description="When True, closes 100% of the position immediately at take_profit_1 with no trailing runner",
     )
 
 
@@ -213,6 +231,45 @@ class ModelBConfig(BaseModel):
     discord_webhook_url: Optional[str] = Field(
         default=None, description="Optional Discord webhook for Model B notifications"
     )
+    # Light-Touch V3 Tuned Parameters (Proven on 1H and 15m)
+    min_rejection_wick_ratio: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimum rejection wick ratio (wick / (high-low)) required for sweep-reclaim confirmation",
+    )
+    min_volume_sma_mult: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=10.0,
+        description="Minimum trigger candle volume multiple over 20-period volume SMA",
+    )
+    full_exit_at_tp1: bool = Field(
+        default=True,
+        description="When True, close 100% of position at TP1 with no trailing runner",
+    )
+    tp1_rr_multiple: float = Field(
+        default=1.50,
+        ge=1.0,
+        le=5.0,
+        description="Take profit 1 reward-to-risk multiple (default 1.50R for 1H, 1.65R for V3)",
+    )
+    symbol_blacklist: List[str] = Field(
+        default_factory=list,
+        description="Symbols excluded from Model B evaluation (e.g. structural chop pairs)",
+    )
+    allowed_directions: List[str] = Field(
+        default_factory=lambda: ["LONG", "SHORT"],
+        description="Permitted trade directions (e.g. ['LONG'] for long-only bias)",
+    )
+    require_confirmed_body: bool = Field(
+        default=True,
+        description="When True, require candle close > open for Long, close < open for Short (V2). When False, use original responsive V1 sweep-reclaim.",
+    )
+    require_htf_ema_alignment: bool = Field(
+        default=True,
+        description="When True, enforces HTF EMA trend alignment veto. When False (V1-Pro), restores responsive mean-reversion bottom sweep entries.",
+    )
 
 
 def create_model_b_fast_config(base_config: Optional[ModelBConfig] = None) -> ModelBConfig:
@@ -231,12 +288,52 @@ def create_model_b_fast_config(base_config: Optional[ModelBConfig] = None) -> Mo
         "initial_equity_usdt": 100.0,
         "target_account_equity_usdt": 100.0,
         "target_trade_risk_usdt": 1.00,
-        "max_open_positions": 6,
-        "max_open_per_direction": 3,
+        "max_open_positions": 2,
+        "max_open_per_direction": 1,
         "daily_loss_limit_usdt": 3.00,
         "weekly_loss_limit_usdt": 7.50,
+        "min_rejection_wick_ratio": 0.0,
+        "min_volume_sma_mult": 0.0,
+        "full_exit_at_tp1": False,
+        "tp1_rr_multiple": 1.50,
+        "symbol_blacklist": [],
     })
     return ModelBConfig(**data)
+
+
+def create_model_b_v3_config(base_config: Optional[ModelBConfig] = None) -> ModelBConfig:
+    """Create the parallel V1-Pro instance configuration (MODEL_B_V3: 15m V1 Responsive Core + Long-Only + Correlation Protection)."""
+    data = base_config.model_dump() if base_config is not None else {}
+    data.update({
+        "enabled": True,
+        "model_id": "MODEL_B_V3",
+        "cohort_version": "MODEL_B_V1_PRO",
+        "trigger_timeframe": "15m",
+        "trend_timeframe": "1h",
+        "min_stop_distance_pct": 0.010,
+        "min_stop_atr_multiple": 1.25,
+        "pending_expiry_bars": 8,
+        "pending_order_ttl_hours": 2.0,
+        "initial_equity_usdt": 100.0,
+        "target_account_equity_usdt": 100.0,
+        "target_trade_risk_usdt": 1.00,
+        "max_open_positions": 2,
+        "max_open_per_direction": 1,
+        "daily_loss_limit_usdt": 3.00,
+        "weekly_loss_limit_usdt": 7.50,
+        "require_confirmed_body": False,
+        "require_htf_ema_alignment": False,
+        "allowed_directions": ["LONG"],
+        "min_rejection_wick_ratio": 0.0,
+        "min_volume_sma_mult": 0.0,
+        "full_exit_at_tp1": True,
+        "tp1_rr_multiple": 1.50,
+        "symbol_blacklist": [],
+    })
+    return ModelBConfig(**data)
+
+
+create_model_b_v1_pro_config = create_model_b_v3_config
 
 
 class ModelCConfig(BaseModel):
@@ -292,10 +389,107 @@ class ModelDConfig(BaseModel):
     wallet_confirmation_depths: Dict[int, int] = Field(default_factory=lambda: {1: 12, 56: 15, 42161: 20, 8453: 20})
 
 
+class GroqAutoTraderConfig(BaseModel):
+    """Configuration for Groq AI 10 -> 3 -> 1 Funnel Screener & Auto-Execution Pipeline."""
+    api_key: Optional[str] = Field(default=None, description="Groq API Key (Free tier)")
+    model: str = Field(default="qwen/qwen3.8-27b", description="Primary Groq model ID")
+    base_url: str = Field(default="https://api.groq.com/openai/v1", description="Groq API endpoint URL")
+    auto_execution_venue: str = Field(default="PAPER", description="Default execution venue: PAPER or LIVE")
+    temperature: float = Field(default=0.1, ge=0.0, le=1.0)
+    timeout_sec: float = Field(default=25.0, ge=5.0, le=60.0)
+
+
+class LiveMicroRiskConfig(BaseModel):
+    fixed_risk_usd: float = Field(default=0.20, description="Fixed dollar risk per trade ($0.20). Not a percentage of equity.")
+    max_filled_entries_per_day: int = Field(default=3, ge=1, le=10)
+    daily_loss_limit_usd: float = Field(default=0.45, ge=0.10)
+    max_drawdown_from_equity_peak_pct: float = Field(default=25.0, ge=5.0, le=50.0)
+    max_global_open_positions: int = Field(default=1, ge=1, le=1)
+    max_isolated_margin_usd: float = Field(default=7.00, ge=1.0, le=20.0)
+    max_isolated_margin_equity_pct: float = Field(default=45.0, ge=10.0, le=100.0)
+    leverage: int = Field(default=10, ge=1, le=10)
+    margin_mode: str = Field(default="isolated", pattern="^(isolated|ISOLATED)$")
+
+    @field_validator("fixed_risk_usd")
+    @classmethod
+    def lock_fixed_risk(cls, v: float) -> float:
+        if v > 0.20:
+            raise ValueError(f"LIVE_MICRO_V1 fixed risk is locked at $0.20 USD max. Configured: {v}")
+        return v
+
+    @property
+    def max_drawdown_from_peak_pct(self) -> float:
+        return self.max_drawdown_from_equity_peak_pct
+
+    @property
+    def max_margin_usd(self) -> float:
+        return self.max_isolated_margin_usd
+
+
+class LiveMicroStrategyConfig(BaseModel):
+    live_strategy_id: str = Field(default="EMA20_RECLAIM_5M_V1")
+    shadow_strategy_id: str = Field(default="SWEEP_1M_V1")
+    shadow_strategy_live_enabled: bool = Field(default=False)
+
+    @field_validator("shadow_strategy_live_enabled")
+    @classmethod
+    def lock_shadow_mode(cls, v: bool) -> bool:
+        if v:
+            raise ValueError("SWEEP_1M_V1 is shadow-only and cannot be enabled for live orders in LIVE_MICRO_V1.")
+        return False
+
+
+class LiveMicroCalibrationConfig(BaseModel):
+    minimum_filled_trades_before_parameter_review: int = Field(default=100)
+    allow_live_parameter_optimization: bool = Field(default=False)
+
+    @field_validator("allow_live_parameter_optimization")
+    @classmethod
+    def lock_parameter_optimization(cls, v: bool) -> bool:
+        if v:
+            raise ValueError("Live parameter optimization is forbidden before the first 100 filled trades.")
+        return False
+
+    @property
+    def parameter_optimization_enabled(self) -> bool:
+        return self.allow_live_parameter_optimization
+
+
+class LiveMicroCostsConfig(BaseModel):
+    maker_fee_rate: float = Field(default=0.0002)
+    taker_fee_rate: float = Field(default=0.0005)
+    slippage_rate: float = Field(default=0.0005)
+    funding_fee_rate_est: float = Field(default=0.0001)
+    min_net_rr: float = Field(default=1.50)
+    min_stop_distance_pct: float = Field(default=0.0040)
+    max_stop_distance_pct: float = Field(default=0.0080)
+
+
+class LiveMicroV1Config(BaseModel):
+    config_version: str = Field(default="LIVE_MICRO_V1")
+    risk: LiveMicroRiskConfig = Field(default_factory=LiveMicroRiskConfig)
+    strategy: LiveMicroStrategyConfig = Field(default_factory=LiveMicroStrategyConfig)
+    calibration: LiveMicroCalibrationConfig = Field(default_factory=LiveMicroCalibrationConfig)
+    costs: LiveMicroCostsConfig = Field(default_factory=LiveMicroCostsConfig)
+
+    @classmethod
+    def load_from_yaml(cls, path: Optional[Path] = None) -> "LiveMicroV1Config":
+        config_path = path or Path("config/live_micro_v1.yaml")
+        if not config_path.exists():
+            return cls()
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return cls(**data)
+
+
+def load_live_micro_v1_config(path: Optional[Path] = None) -> LiveMicroV1Config:
+    return LiveMicroV1Config.load_from_yaml(path)
+
+
 class AppConfig(BaseModel):
     app_name: str = "SMC-SNR ML Perpetual Scanner"
     version: str = "1.0.0"
-    mode: ExecutionMode = ExecutionMode.RESEARCH
+    mode: ExecutionMode = ExecutionMode.PAPER
     live_trading_locked: bool = True
     host: str = Field(default="127.0.0.1", description="Default local loopback bind address")
     port: int = Field(default=8000, ge=1, le=65535)
@@ -313,6 +507,8 @@ class AppConfig(BaseModel):
     model_b: ModelBConfig = Field(default_factory=ModelBConfig)
     model_c: ModelCConfig = Field(default_factory=ModelCConfig)
     model_d: ModelDConfig = Field(default_factory=ModelDConfig)
+    groq_autotrader: GroqAutoTraderConfig = Field(default_factory=GroqAutoTraderConfig)
+    live_micro_v1: LiveMicroV1Config = Field(default_factory=LiveMicroV1Config)
     discord_price_alert_webhook_url: Optional[str] = Field(
         default=None,
         description="Optional Discord webhook URL for universal perpetual price alerts notifications",
@@ -449,6 +645,20 @@ def _apply_env_overrides(cfg: AppConfig) -> AppConfig:
             cfg.model_d.wallet_rpc_urls[chain_id] = env_rpc.strip()
     # Paper-only is not operator-overridable: accepting false here would weaken the invariant.
     cfg.model_d.paper_only = True
+
+    # Groq AutoTrader Environment Overrides
+    env_groq_key = os.getenv("GROQ_API_KEY") or os.getenv("groq")
+    if env_groq_key:
+        cfg.groq_autotrader.api_key = env_groq_key.strip()
+    env_groq_model = os.getenv("GROQ_MODEL")
+    if env_groq_model:
+        cfg.groq_autotrader.model = env_groq_model.strip()
+    env_groq_base_url = os.getenv("GROQ_BASE_URL")
+    if env_groq_base_url:
+        cfg.groq_autotrader.base_url = env_groq_base_url.strip()
+    env_groq_venue = os.getenv("GROQ_AUTO_EXECUTION_VENUE")
+    if env_groq_venue and env_groq_venue.strip().upper() in ("PAPER", "LIVE"):
+        cfg.groq_autotrader.auto_execution_venue = env_groq_venue.strip().upper()
 
     return cfg
 
