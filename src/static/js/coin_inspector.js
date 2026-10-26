@@ -915,6 +915,15 @@ function updateLiveSessionUI(data) {
             statusMsg.classList.add('hidden');
         }
     }
+
+    // Live Screening Log Feed auto-sync
+    if (data.latest_screening) {
+        renderScreeningFeed(data.latest_screening);
+    }
+    if (data.screening_history_count !== undefined) {
+        const countBadge = document.getElementById('screeningHistoryCountBadge');
+        if (countBadge) countBadge.textContent = data.screening_history_count;
+    }
 }
 
 async function startLiveAutoSession() {
@@ -1683,9 +1692,367 @@ function loadGroqSetupIntoExecutor() {
 }
 
 
-// Start polling live session state
+// --- GROQ AI AUTO-HUNTER SCREENING FEED & TELEMETRY CONTROLLER (10 -> 3 -> 1) ---
+let cachedScreeningHistory = [];
+let lastRenderedCycleId = null;
+
+function formatWIBTime(isoStr) {
+    if (!isoStr) return '--';
+    try {
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false }) + ' WIB';
+    } catch (e) {
+        return isoStr;
+    }
+}
+
+function toggleScreeningHistoryDrawer() {
+    const drawer = document.getElementById('screeningHistoryDrawer');
+    if (!drawer) return;
+    drawer.classList.toggle('hidden');
+    if (!drawer.classList.contains('hidden')) {
+        refreshScreeningFeed(false);
+    }
+}
+
+async function refreshScreeningFeed(manual = false) {
+    const icon = document.getElementById('refreshScreeningFeedIcon');
+    if (icon && manual) icon.classList.add('fa-spin');
+    try {
+        const resp = await fetch('/api/autotrader/screening-log?limit=10');
+        if (!resp.ok) return;
+        const res = await resp.json();
+        if (res.history) {
+            cachedScreeningHistory = res.history;
+            renderScreeningHistory(res.history);
+            const countBadge = document.getElementById('screeningHistoryCountBadge');
+            if (countBadge) countBadge.textContent = res.history.length;
+        }
+        if (res.latest) {
+            renderScreeningFeed(res.latest);
+        }
+    } catch (e) {
+        console.warn('Failed to refresh screening feed:', e);
+    } finally {
+        if (icon && manual) {
+            setTimeout(() => icon.classList.remove('fa-spin'), 600);
+        }
+    }
+}
+
+function inspectHistoricalCycle(cycleId) {
+    const found = cachedScreeningHistory.find(c => c.cycle_id === cycleId);
+    if (found) {
+        renderScreeningFeed(found);
+        const activeContainer = document.getElementById('groqScreeningFeedPanel');
+        if (activeContainer) {
+            activeContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+}
+
+function renderScreeningHistory(historyList) {
+    const tbody = document.getElementById('screeningHistoryTableBody');
+    if (!tbody) return;
+    if (!historyList || historyList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-center text-slate-500">No cycle history yet</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = historyList.map(item => {
+        const timeStr = formatWIBTime(item.timestamp_utc);
+        const cycleShort = (item.cycle_id || '--').replace('cycle-', '').slice(0, 8);
+        const s1Count = item.stage1?.total_screened_pairs || item.stage1?.top_10?.length || 10;
+        const finalists = (item.stage2?.top_3 || []).map(f => f.symbol).join(', ') || '--';
+        const s3 = item.stage3 || {};
+        const winSym = s3.symbol || '--';
+        const side = s3.direction || 'LONG';
+        const sideClass = side === 'LONG' ? 'text-emerald-400' : 'text-rose-400';
+
+        let statusClass = 'bg-slate-800 text-slate-300 border-slate-700';
+        if (item.status === 'OPEN' || item.status === 'PROTECTED') {
+            statusClass = 'bg-emerald-950 text-emerald-300 border-emerald-600';
+        } else if (item.status === 'REJECTED') {
+            statusClass = 'bg-rose-950 text-rose-300 border-rose-800';
+        } else if (item.status === 'PREVIEW') {
+            statusClass = 'bg-cyan-950 text-cyan-300 border-cyan-800';
+        }
+
+        return `
+            <tr class="hover:bg-slate-800/40 transition">
+                <td class="px-3 py-2 text-slate-300 whitespace-nowrap">${timeStr}</td>
+                <td class="px-3 py-2 text-slate-400 font-mono text-[10px]">${cycleShort}</td>
+                <td class="px-3 py-2 text-slate-300">${s1Count} pairs</td>
+                <td class="px-3 py-2 text-purple-300 font-bold">${finalists}</td>
+                <td class="px-3 py-2 font-bold"><span class="${sideClass}">${side}</span> ${winSym}</td>
+                <td class="px-3 py-2"><span class="px-2 py-0.5 rounded text-[10px] border font-bold ${statusClass}">${item.status || 'DONE'}</span></td>
+                <td class="px-3 py-2 text-right">
+                    <button type="button" onclick="inspectHistoricalCycle('${item.cycle_id}')" class="px-2 py-0.5 bg-purple-900/40 hover:bg-purple-900 text-purple-300 border border-purple-700/60 rounded text-[10px] transition">
+                        Inspect
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderScreeningFeed(cycle) {
+    if (!cycle) return;
+    const placeholder = document.getElementById('screeningFeedEmptyPlaceholder');
+    const content = document.getElementById('screeningFeedContent');
+    const badge = document.getElementById('screeningFeedStatusBadge');
+    const timeBadge = document.getElementById('screeningFeedTimestamp');
+    const cycleBadge = document.getElementById('screeningFeedCycleId');
+
+    if (placeholder) placeholder.classList.add('hidden');
+    if (content) content.classList.remove('hidden');
+
+    const s1 = cycle.stage1 || {};
+    const s2 = cycle.stage2 || {};
+    const s3 = cycle.stage3 || {};
+    const top10 = s1.top_10 || [];
+    const top3 = s2.top_3 || [];
+    const eliminated = s2.eliminated_summary || {};
+    const regime = s1.market_regime || {};
+    const top3Symbols = new Set(top3.map(f => f.symbol));
+
+    if (cycleBadge) {
+        cycleBadge.textContent = (cycle.cycle_id || 'cycle-unknown').replace('cycle-', '#').slice(0, 10);
+        cycleBadge.classList.remove('hidden');
+    }
+
+    if (timeBadge) {
+        timeBadge.innerHTML = `Last Scan: <strong class="text-white">${formatWIBTime(cycle.timestamp_utc)}</strong>`;
+    }
+
+    // Status Badge
+    if (badge) {
+        const st = s3.status || cycle.status || 'DONE';
+        badge.textContent = st;
+        if (st === 'PROTECTED' || st === 'OPEN') {
+            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-600';
+        } else if (st === 'REJECTED') {
+            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-950 text-rose-300 border border-rose-800';
+        } else if (st === 'PREVIEW') {
+            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-700';
+        } else {
+            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700';
+        }
+    }
+
+    // Build Stage 1 HTML (10 Screened Coins)
+    const stage1Rows = top10.map((c, i) => {
+        const inTop3 = top3Symbols.has(c.symbol);
+        const rangePct = Number(c.range_72h_pct || 0);
+        let rangeClass = 'text-amber-400';
+        let rangeLabel = 'Neutral';
+        if (rangePct <= 38.0) { rangeClass = 'text-emerald-400 font-bold'; rangeLabel = 'Discount'; }
+        else if (rangePct >= 65.0) { rangeClass = 'text-rose-400 font-bold'; rangeLabel = 'Premium'; }
+
+        return `
+            <tr class="hover:bg-slate-800/40 transition border-b border-slate-800/40 text-[11px] font-mono ${inTop3 ? 'bg-purple-950/20' : ''}">
+                <td class="px-2.5 py-1.5 text-slate-500">#${i + 1}</td>
+                <td class="px-2.5 py-1.5 font-bold text-white cursor-pointer hover:text-cyan-400 flex items-center gap-1.5" onclick="selectInspectorSymbol('${c.symbol}')">
+                    <span>${c.symbol}</span>
+                    ${inTop3 ? '<span class="px-1 py-0.2 rounded bg-purple-900 text-purple-200 text-[8px] font-bold uppercase tracking-wider">Top 3</span>' : ''}
+                </td>
+                <td class="px-2.5 py-1.5 text-slate-200">$${c.mark_price}</td>
+                <td class="px-2.5 py-1.5 ${c.change_24h_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${c.change_24h_pct >= 0 ? '+' : ''}${Number(c.change_24h_pct).toFixed(2)}%</td>
+                <td class="px-2.5 py-1.5 text-slate-300">${c.rel_strength_vs_btc >= 0 ? '+' : ''}${Number(c.rel_strength_vs_btc).toFixed(2)}%</td>
+                <td class="px-2.5 py-1.5 text-slate-400">$${Number(c.turnover_24h_m).toFixed(1)}M</td>
+                <td class="px-2.5 py-1.5 ${rangeClass}">${rangePct.toFixed(1)}% (${rangeLabel})</td>
+                <td class="px-2.5 py-1.5 text-[10px] text-slate-400 max-w-xs truncate" title="${c.reason_selected}">${c.reason_selected}</td>
+            </tr>
+        `;
+    }).join('');
+
+    // Build Stage 2 HTML (Top 3 Finalists + 7 Eliminated Candidates)
+    const stage2FinalistsHtml = top3.map((cand, idx) => {
+        const isWinner = cand.symbol === s3.symbol;
+        let catBadgeColor = 'bg-cyan-950 text-cyan-300 border-cyan-800';
+        if (cand.category === 'LIQUIDITY_SWEEP_RECLAIM') catBadgeColor = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+        else if (cand.category === 'MOMENTUM_CONTINUATION') catBadgeColor = 'bg-blue-950 text-blue-300 border-blue-800';
+
+        return `
+            <div class="p-3 rounded-xl border ${isWinner ? 'bg-purple-950/40 border-purple-500/80 ring-1 ring-purple-500/50' : 'bg-slate-900/80 border-slate-800'} space-y-2 flex flex-col justify-between">
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="w-5 h-5 rounded-full ${isWinner ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-300'} flex items-center justify-center text-[10px] font-bold">#${cand.rank || idx + 1}</span>
+                            <span class="font-bold text-white font-mono cursor-pointer hover:text-cyan-400" onclick="selectInspectorSymbol('${cand.symbol}')">${cand.symbol}</span>
+                            ${isWinner ? '<span class="px-1.5 py-0.2 rounded bg-purple-900 text-purple-200 text-[9px] font-bold uppercase">#1 Winner</span>' : ''}
+                        </div>
+                        <span class="text-xs font-mono font-bold text-purple-300">${Number(cand.score || 0).toFixed(1)}/10</span>
+                    </div>
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-mono border ${catBadgeColor}">${cand.category || 'SMC'}</span>
+                    <p class="text-[11px] text-slate-300 leading-relaxed font-sans">${cand.thesis || 'No thesis provided.'}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const eliminatedKeys = Object.keys(eliminated);
+    const eliminatedHtml = eliminatedKeys.length > 0 ? `
+        <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2">
+            <div class="flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                <span class="flex items-center gap-1.5 text-slate-400">
+                    <i class="fa-solid fa-filter text-purple-400"></i>
+                    <span>Pruned Candidates (${eliminatedKeys.length} Coins Eliminated by Qwen)</span>
+                </span>
+                <span class="text-[10px] text-slate-500">Reasons candidates were rejected</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-mono">
+                ${eliminatedKeys.map(sym => `
+                    <div class="p-2 rounded bg-slate-950/80 border border-slate-800/80 space-y-0.5">
+                        <div class="font-bold text-slate-200">${sym}:</div>
+                        <div class="text-slate-400 text-[10px] font-sans leading-tight">${eliminated[sym]}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    ` : '';
+
+    // Build Stage 3 & Confluence HTML
+    const isLong = s3.direction === 'LONG';
+    const sideColor = isLong ? 'emerald' : 'rose';
+    const isEligible = s3.strategy_eligible && s3.status !== 'REJECTED';
+
+    let verdictBadgeHtml = isEligible
+        ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-600"><i class="fa-solid fa-check mr-1"></i>CONFLUENCE APPROVED FOR EXECUTION</span>`
+        : `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-600"><i class="fa-solid fa-shield-halved mr-1"></i>CONFLUENCE VETO / REJECTED</span>`;
+
+    const confluenceHtml = `
+        <div class="p-4 rounded-xl bg-gradient-to-br from-slate-900 via-purple-950/20 to-slate-900 border-2 border-purple-500/70 space-y-3 font-mono text-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-${sideColor}-950 text-${sideColor}-300 border border-${sideColor}-800">
+                        STAGE 3 WINNER: ${s3.direction} ${s3.symbol}
+                    </span>
+                    <span class="text-purple-300 font-bold">@ $${s3.entry_price || '--'}</span>
+                    ${verdictBadgeHtml}
+                </div>
+                <div class="text-slate-400 text-[11px]">
+                    Risk: <strong class="text-amber-300">$${(s3.max_risk_usdt || 0.20).toFixed(2)}</strong> &bull;
+                    Stop: <strong class="text-rose-400">${s3.stop_distance_pct || 1.25}%</strong> &bull;
+                    Net-R:R: <strong class="text-emerald-400">${s3.expected_net_rr || s3.rr_ratio || 1.50}R</strong>
+                </div>
+            </div>
+
+            <!-- Trade Numbers -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div class="p-2 rounded bg-slate-950/80 border border-slate-800">Entry Limit: <strong class="text-cyan-300">$${s3.entry_price || '--'}</strong></div>
+                <div class="p-2 rounded bg-slate-950/80 border border-slate-800">Stop Loss: <strong class="text-rose-400">$${s3.stop_loss_price || '--'}</strong></div>
+                <div class="p-2 rounded bg-slate-950/80 border border-slate-800">Take Profit: <strong class="text-emerald-400">$${s3.take_profit_price || '--'}</strong></div>
+                <div class="p-2 rounded bg-slate-950/80 border border-slate-800">Order Qty: <strong class="text-white">${s3.qty || '--'}</strong></div>
+            </div>
+
+            <!-- 4 Dashboard Confluence Gates Audit -->
+            <div class="p-3 rounded-lg bg-slate-950/90 border border-slate-800 space-y-2">
+                <div class="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <i class="fa-solid fa-scale-balanced text-purple-400"></i>
+                    <span>Dashboard Intelligence Confluence Audit:</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-sans">
+                    <div class="p-2 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+                        <div class="font-bold text-slate-200 font-mono text-[10px]">1. 15M Sweep &amp; Reclaim:</div>
+                        <div class="text-slate-300 text-[10px] leading-relaxed">${s3.sweep_reclaim_evidence || 'Confirmed structural sweep at dealing range discount boundary.'}</div>
+                    </div>
+                    <div class="p-2 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+                        <div class="font-bold text-slate-200 font-mono text-[10px]">2. Order Flow &amp; Walls:</div>
+                        <div class="text-slate-300 text-[10px] leading-relaxed">${s3.orderflow_wall_evidence || 'Orderbook depth verified; no opposing wall blocking entry path.'}</div>
+                    </div>
+                    <div class="p-2 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+                        <div class="font-bold text-slate-200 font-mono text-[10px]">3. Anti-Revenge Memory Guard:</div>
+                        <div class="text-slate-300 text-[10px] leading-relaxed">${s3.why_not_repeating_past_sl || 'Priced structurally outside previous 6-hour stop-loss liquidity zones.'}</div>
+                    </div>
+                    <div class="p-2 rounded bg-slate-900/80 border border-slate-800 space-y-1">
+                        <div class="font-bold text-slate-200 font-mono text-[10px]">4. Stop Breathing Room:</div>
+                        <div class="text-slate-300 text-[10px] leading-relaxed">Stop distance: <strong class="font-mono text-white">${s3.stop_distance_pct}%</strong> (Safety bounds: 1.15% - 1.45%).</div>
+                    </div>
+                </div>
+
+                ${!isEligible ? `
+                    <div class="p-2 rounded bg-amber-950/60 border border-amber-700/80 text-amber-200 text-[11px] font-sans">
+                        <strong class="font-mono text-amber-300">VETO REASON:</strong> ${s3.strategy_rejection_reason || s3.rejection_reason || 'Candidate did not meet all 4 hard confluence gates; order was safely withheld.'}
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+
+    // Render Full Content Container
+    content.innerHTML = `
+        <!-- STAGE 1: MARKET SCREEN (TOP 10) -->
+        <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                <span class="flex items-center gap-1.5 text-purple-300">
+                    <span class="w-5 h-5 rounded-full bg-purple-900 text-purple-200 flex items-center justify-center text-[10px]">1</span>
+                    <span>Stage 1: Aster DEX Market Discovery (${top10.length} Pairs Screened)</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-normal">
+                    Regime: <strong class="text-white">${regime.regime || 'CHOP_RANGE'}</strong> &bull;
+                    BTC 24h: <strong class="${(regime.btc_change_24h || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${(regime.btc_change_24h || 0) >= 0 ? '+' : ''}${Number(regime.btc_change_24h || 0).toFixed(2)}%</strong> &bull;
+                    Screened in ${Number(s1.execution_time_ms || 0).toFixed(0)}ms
+                </span>
+            </div>
+            <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60">
+                <table class="w-full text-left font-mono text-[11px]">
+                    <thead class="bg-slate-900 text-slate-400 text-[10px] uppercase border-b border-slate-800">
+                        <tr>
+                            <th class="px-2.5 py-1.5">#</th>
+                            <th class="px-2.5 py-1.5">Symbol</th>
+                            <th class="px-2.5 py-1.5">Mark Price</th>
+                            <th class="px-2.5 py-1.5">24h Chg</th>
+                            <th class="px-2.5 py-1.5">RS vs BTC</th>
+                            <th class="px-2.5 py-1.5">Turnover</th>
+                            <th class="px-2.5 py-1.5">72h Range</th>
+                            <th class="px-2.5 py-1.5">Python Screener Rationale</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60 text-slate-300">
+                        ${stage1Rows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- STAGE 2: GROQ QWEN TOP 3 RANKING & ELIMINATION -->
+        <div class="space-y-2 pt-2">
+            <div class="flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                <span class="flex items-center gap-1.5 text-purple-300">
+                    <span class="w-5 h-5 rounded-full bg-purple-900 text-purple-200 flex items-center justify-center text-[10px]">2</span>
+                    <span>Stage 2: Groq Qwen Finalists Selection (10 &rarr; Top 3)</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">
+                    Model: <strong class="text-purple-300">${s2.model_used || 'qwen/qwen3.8-27b'}</strong>
+                </span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                ${stage2FinalistsHtml}
+            </div>
+            ${eliminatedHtml}
+        </div>
+
+        <!-- STAGE 3 & 4: SETUP BRACKET & CONFLUENCE AUDIT -->
+        <div class="space-y-2 pt-2">
+            <div class="flex items-center justify-between text-xs font-mono font-bold text-slate-300">
+                <span class="flex items-center gap-1.5 text-purple-300">
+                    <span class="w-5 h-5 rounded-full bg-purple-900 text-purple-200 flex items-center justify-center text-[10px]">3</span>
+                    <span>Stage 3 &amp; 4: Selected Setup &amp; Confluence Audit (Top 3 &rarr; #1)</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">
+                    Strategy: <strong class="text-purple-300">15M_SWEEP_RECLAIM_SMC</strong>
+                </span>
+            </div>
+            ${confluenceHtml}
+        </div>
+    `;
+}
+
+// Start polling live session state & screening log
 if (typeof window !== 'undefined') {
     fetchLiveSessionState();
+    refreshScreeningFeed(false);
     if (!liveSessionPollTimer) {
         liveSessionPollTimer = setInterval(fetchLiveSessionState, 5000);
     }

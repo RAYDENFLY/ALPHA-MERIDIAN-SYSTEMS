@@ -192,6 +192,8 @@ class GroqAutoTrader:
         self._telemetry_lock = threading.RLock()
         self._active_cycle_telemetry: Optional[Dict[str, Any]] = None
         self._last_cycle_telemetry: Optional[Dict[str, Any]] = None
+        self._screening_history: List[Dict[str, Any]] = []
+        self._latest_screening_result: Optional[Dict[str, Any]] = None
 
     @staticmethod
     def _utc_now() -> str:
@@ -248,6 +250,16 @@ class GroqAutoTrader:
             out["last_cycle_duration_ms"] = self._last_cycle_telemetry.get("duration_ms") if self._last_cycle_telemetry else None
             out["last_cycle_status"] = self._last_cycle_telemetry.get("status", "IDLE") if self._last_cycle_telemetry else ("RUNNING" if self._active_cycle_telemetry else "IDLE")
             return out
+
+    def get_latest_screening(self) -> Optional[Dict[str, Any]]:
+        with self._telemetry_lock:
+            if not self._latest_screening_result:
+                return None
+            return dict(self._latest_screening_result)
+
+    def get_screening_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        with self._telemetry_lock:
+            return [dict(x) for x in self._screening_history[:limit]]
 
     @staticmethod
     def _configured_live_strategy_id(coordinator: Any) -> Tuple[Optional[str], str]:
@@ -1660,4 +1672,33 @@ class GroqAutoTrader:
             timestamp_utc=datetime.now(timezone.utc).isoformat(),
         )
         self._finish_cycle(cycle, "SUCCESS")
+
+        cycle_record = {
+            "cycle_id": cycle.get("cycle_id", f"cycle-{uuid.uuid4().hex[:8]}"),
+            "timestamp_utc": result.timestamp_utc,
+            "status": result.status,
+            "execution_venue": result.execution_venue,
+            "strategy_id": result.strategy_id,
+            "duration_ms": cycle.get("duration_ms", 0.0),
+            "market_regime": result.stage1.market_regime,
+            "stage1": {
+                "total_screened_pairs": result.stage1.total_screened_pairs,
+                "execution_time_ms": result.stage1.execution_time_ms,
+                "top_10": [item.model_dump() for item in result.stage1.top_10],
+            },
+            "stage2": {
+                "model_used": result.stage2.model_used,
+                "top_3": [item.model_dump() for item in result.stage2.top_3],
+                "eliminated_summary": result.stage2.eliminated_summary,
+            },
+            "stage3": result.stage3.model_dump(),
+            "execution_receipt": result.execution_receipt,
+            "risk_gate_status": result.risk_gate_status,
+        }
+        with self._telemetry_lock:
+            self._latest_screening_result = cycle_record
+            self._screening_history.insert(0, cycle_record)
+            if len(self._screening_history) > 20:
+                self._screening_history = self._screening_history[:20]
+
         return result

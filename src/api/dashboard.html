@@ -4315,6 +4315,90 @@
 
                 <div id="groqFunnelResult" class="hidden space-y-4 pt-2"></div>
 
+                <!-- ================================================================= -->
+                <!-- GROQ AI AUTO-HUNTER SCREENING FEED & DECISION AUDIT (10 -> 3 -> 1)-->
+                <!-- ================================================================= -->
+                <div id="groqScreeningFeedPanel" class="p-4 md:p-5 rounded-xl bg-slate-950/70 border border-purple-900/50 shadow-2xl space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-3">
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="w-6 h-6 rounded bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center text-xs">
+                                    <i class="fa-solid fa-list-check"></i>
+                                </span>
+                                <h4 class="text-sm sm:text-base font-bold text-white tracking-wide">
+                                    Groq AI Auto-Hunter Screening Log (10 &rarr; 3 &rarr; 1)
+                                </h4>
+                                <span id="screeningFeedStatusBadge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                                    AWAITING SCAN
+                                </span>
+                                <span id="screeningFeedCycleId" class="hidden px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-950 text-purple-300 border border-purple-800">
+                                    --
+                                </span>
+                            </div>
+                            <p class="text-xs text-slate-400">
+                                Real-time verification of candidate discovery: Top 10 Aster DEX pairs &rarr; Qwen Top 3 ranking &amp; pruning &rarr; Final #1 confluence decision.
+                            </p>
+                        </div>
+
+                        <div class="flex items-center gap-2 flex-wrap text-xs">
+                            <span id="screeningFeedTimestamp" class="text-slate-400 font-mono text-[11px]">
+                                Last Scan: <strong class="text-slate-300">--</strong>
+                            </span>
+                            <button type="button" onclick="refreshScreeningFeed(true)" id="btnRefreshScreeningFeed"
+                                class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono flex items-center gap-1.5 border border-slate-700 transition" title="Refresh Live Telemetry Feed">
+                                <i class="fa-solid fa-rotate text-purple-400" id="refreshScreeningFeedIcon"></i>
+                                <span>Refresh Log</span>
+                            </button>
+                            <button type="button" onclick="toggleScreeningHistoryDrawer()" id="btnToggleScreeningHistory"
+                                class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-purple-300 rounded-lg text-xs font-mono flex items-center gap-1.5 border border-purple-900/60 transition">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                                <span>History (<span id="screeningHistoryCountBadge">0</span>)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Screening Active Stage / Placeholder Container -->
+                    <div id="screeningFeedActiveContainer" class="space-y-4">
+                        <div id="screeningFeedEmptyPlaceholder" class="p-6 rounded-xl bg-slate-900/50 border border-slate-800 text-center space-y-2 font-mono text-xs text-slate-400">
+                            <div class="text-purple-400 text-base"><i class="fa-solid fa-satellite-dish"></i></div>
+                            <div>No screening cycle recorded yet for this session.</div>
+                            <div class="text-[11px] text-slate-500 font-sans">
+                                The autonomous scanner evaluates candidates every cycle, or click <strong>Preview Setup (Read-Only)</strong> above to trigger an immediate live screen.
+                            </div>
+                        </div>
+                        <div id="screeningFeedContent" class="hidden space-y-4"></div>
+                    </div>
+
+                    <!-- Past Cycles Historical Drawer -->
+                    <div id="screeningHistoryDrawer" class="hidden pt-3 border-t border-slate-800/80 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h5 class="text-xs font-bold text-slate-300 font-mono flex items-center gap-1.5">
+                                <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
+                                <span>Recent Screening Cycles History (Last 10 Runs)</span>
+                            </h5>
+                            <span class="text-[10px] text-slate-500 font-mono">Click any cycle to inspect historical funnel</span>
+                        </div>
+                        <div class="overflow-x-auto rounded-lg border border-slate-800">
+                            <table class="w-full text-left font-mono text-[11px]">
+                                <thead class="bg-slate-900 text-slate-400 text-[10px] uppercase border-b border-slate-800">
+                                    <tr>
+                                        <th class="px-3 py-2">Time (WIB)</th>
+                                        <th class="px-3 py-2">Cycle ID</th>
+                                        <th class="px-3 py-2">Screened</th>
+                                        <th class="px-3 py-2">Top 3 Finalists</th>
+                                        <th class="px-3 py-2">Winner Choice</th>
+                                        <th class="px-3 py-2">Status / Verdict</th>
+                                        <th class="px-3 py-2 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="screeningHistoryTableBody" class="divide-y divide-slate-800/60 text-slate-300">
+                                    <tr><td colspan="7" class="px-3 py-4 text-center text-slate-500">No cycle history yet</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Modal for Operator Confirmation of Real LIVE Aster DEX Order -->
                 <div id="groqLiveConfirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
                     <div class="card-bg max-w-lg w-full p-5 rounded-2xl border-2 border-rose-600/80 shadow-2xl space-y-4 relative">

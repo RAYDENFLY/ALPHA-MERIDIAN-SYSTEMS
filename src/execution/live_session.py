@@ -213,6 +213,7 @@ class LiveAutoSessionManager:
         self.recovery_reason: Optional[str] = None
 
         self.autotrader: Optional[Any] = None
+        self.last_pipeline_result: Optional[Any] = None
         self._scanner_running: bool = False
         self._scanner_stop_event = threading.Event()
         self._scanner_thread: Optional[threading.Thread] = None
@@ -783,7 +784,7 @@ class LiveAutoSessionManager:
                     else:
                         logger.info("Running automatic 10 -> 3 -> 1 scan cycle in LIVE_AUTO mode...")
                         from src.ai.groq_autotrader import ExecutionVenue
-                        self.autotrader.run_full_pipeline(
+                        pipeline_result = self.autotrader.run_full_pipeline(
                             execution_venue=ExecutionVenue.LIVE_AUTO,
                             execution_mode=ExecutionMode.LIVE_AUTO,
                             auto_fire_limit_order=True,
@@ -793,6 +794,7 @@ class LiveAutoSessionManager:
                             automated_journal=self.automated_journal,
                             session_manager=self,
                         )
+                        self.last_pipeline_result = pipeline_result
                         self._cycle_status = "SUCCESS"
                 # This timestamp means a cycle completed, not merely that the
                 # thread woke up. Failed/skipped cycles remain observable via
@@ -1267,6 +1269,8 @@ class LiveAutoSessionManager:
             telemetry["next_cycle_due_utc"] = getattr(self, "_next_cycle_due_utc", None)
             telemetry["last_cycle_status"] = telemetry.get("last_cycle_status", cycle_status)
             info["cycle_telemetry"] = telemetry
+            info["latest_screening"] = autotrader.get_latest_screening() if autotrader and hasattr(autotrader, "get_latest_screening") else None
+            info["screening_history_count"] = len(autotrader.get_screening_history(limit=20)) if autotrader and hasattr(autotrader, "get_screening_history") else 0
             if self.coordinator:
                 is_live_mode = self.mode in (ExecutionMode.LIVE_AUTO, ExecutionMode.LIVE_MANUAL)
                 live_snapshot = None

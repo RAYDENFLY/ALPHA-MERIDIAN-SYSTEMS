@@ -2107,6 +2107,26 @@ async def run_groq_auto_setup(req: GroqAutoSetupRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/autotrader/screening-log")
+def get_autotrader_screening_log(limit: int = 10):
+    """Return real-time Groq AI Auto-Hunter 10 -> 3 -> 1 screening log and history."""
+    try:
+        lim = max(1, min(int(limit), 50))
+        history = groq_autotrader.get_screening_history(limit=lim)
+        latest = groq_autotrader.get_latest_screening()
+        active_telemetry = groq_autotrader.get_cycle_telemetry()
+        return {
+            "status": "SUCCESS",
+            "active_cycle": active_telemetry,
+            "latest": latest,
+            "history": history,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching autotrader screening log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/symbols")
 def get_symbols() -> List[Dict[str, Any]]:
     """Return watchlist symbols with enabled toggle status and contract specifications."""
