@@ -9,7 +9,7 @@ Coordinates:
 - Shadow & Counterfactual journal tracking for SWEEP_1M_V1 and LLM vetoes.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -27,6 +27,15 @@ from src.strategy.sweep_1m import Sweep1MSetup, Sweep1MStrategy
 from src.strategy.sweep_reclaim_15m import SweepReclaim15MSetup, SweepReclaim15MStrategy
 
 logger = logging.getLogger("src.scheduler.live_micro_runner")
+
+WIB_TIMEZONE = timezone(timedelta(hours=7))
+
+def get_daily_reset_timezone(tz_name: str = "WIB") -> timezone:
+    tz_clean = str(tz_name or "WIB").strip().upper()
+    if tz_clean in ("UTC", "GMT", "+00:00", "Z"):
+        return timezone.utc
+    return WIB_TIMEZONE
+
 
 
 class LiveMicroCoordinator:
@@ -77,7 +86,8 @@ class LiveMicroCoordinator:
         # Dynamic risk tracking state
         self.current_equity = 15.72  # Micro account baseline
         self.peak_equity = 15.72
-        self.current_day_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        tz = self.reset_timezone
+        self.current_day_str = datetime.now(tz).strftime("%Y-%m-%d")
         self.daily_filled_entries = 0
         self.daily_realized_loss = 0.0  # Positive number representing accumulated loss
         self.kill_switch_triggered = False
@@ -86,11 +96,19 @@ class LiveMicroCoordinator:
         # blocks new entries; it never cancels or changes an existing position.
         self.entries_paused = False
 
+    @property
+    def reset_timezone(self) -> timezone:
+        cfg_risk = getattr(self.config, "risk", None) if hasattr(self, "config") else None
+        tz_name = getattr(cfg_risk, "daily_reset_timezone", "WIB") if cfg_risk else "WIB"
+        return get_daily_reset_timezone(tz_name)
+
     def _reset_daily_metrics_if_new_day(self) -> None:
-        """Reset daily counters at UTC midnight rollover."""
-        now_day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        """Reset daily counters at configured timezone (WIB/UTC) midnight rollover."""
+        tz = self.reset_timezone
+        now_day = datetime.now(tz).strftime("%Y-%m-%d")
         if now_day != self.current_day_str:
-            logger.info("New UTC day %s detected. Resetting daily counters.", now_day)
+            tz_label = "WIB" if tz == WIB_TIMEZONE else "UTC"
+            logger.info("New %s day %s detected. Resetting daily counters.", tz_label, now_day)
             self.current_day_str = now_day
             self.daily_filled_entries = 0
             self.daily_realized_loss = 0.0
@@ -204,18 +222,20 @@ class LiveMicroCoordinator:
         self.check_risk_limits()
 
     def get_daily_loss_snapshot(self) -> Dict[str, Any]:
-        """Return the persistent LIVE ledger loss for the current UTC day.
+        """Return the persistent LIVE ledger loss for the current day in configured timezone (WIB/UTC).
 
         The in-memory counter is intentionally not authoritative: it disappears
         on restart and can diverge from exchange-reconciled fills.
         """
-        day = datetime.now(timezone.utc).date().isoformat()
+        tz = self.reset_timezone
+        tz_name = "WIB" if tz == WIB_TIMEZONE else "UTC"
+        day_str = datetime.now(tz).date().isoformat()
         daily_limit = getattr(self.config.risk, "daily_loss_limit_usdt", getattr(self.config.risk, "daily_loss_limit_usd", 0.45))
         result: Dict[str, Any] = {
             "used_usdt": None,
             "limit_usdt": float(daily_limit),
             "status": "UNVERIFIED",
-            "timezone": "UTC",
+            "timezone": tz_name,
             "trades_count": 0,
             "reason": "LIVE journal unavailable",
         }
@@ -228,9 +248,7 @@ class LiveMicroCoordinator:
                        FROM automated_trade_journal
                        WHERE mode = 'LIVE' AND status = 'CLOSED'
                          AND reconciliation_status = 'RECONCILED'
-                         AND exit_timestamp_utc IS NOT NULL
-                         AND substr(exit_timestamp_utc, 1, 10) = ?""",
-                    (day,),
+                         AND exit_timestamp_utc IS NOT NULL"""
                 ).fetchall()
                 open_unreconciled = conn.execute(
                     """SELECT COUNT(*) FROM automated_trade_journal
@@ -238,20 +256,53 @@ class LiveMicroCoordinator:
                          AND status IN ('OPEN','PENDING')
                          AND reconciliation_status != 'RECONCILED'"""
                 ).fetchone()[0]
-                closed_unreconciled = conn.execute(
-                    """SELECT COUNT(*) FROM automated_trade_journal
+                closed_unreconciled_rows = conn.execute(
+                    """SELECT exit_timestamp_utc FROM automated_trade_journal
                        WHERE mode = 'LIVE' AND status = 'CLOSED'
                          AND exit_timestamp_utc IS NOT NULL
-                         AND substr(exit_timestamp_utc, 1, 10) = ?
-                         AND reconciliation_status != 'RECONCILED'""",
-                    (day,),
-                ).fetchone()[0]
-            used = sum(max(0.0, -float(row[0] or 0.0)) for row in rows)
-            unresolved = bool(open_unreconciled or closed_unreconciled)
+                         AND reconciliation_status != 'RECONCILED'"""
+                ).fetchall()
+
+            today_rows = []
+            for row in rows:
+                dt_str = str(row[3] or "").strip()
+                if not dt_str:
+                    continue
+                try:
+                    if dt_str.endswith("Z"):
+                        dt_str = dt_str[:-1] + "+00:00"
+                    dt = datetime.fromisoformat(dt_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt.astimezone(tz).date().isoformat() == day_str:
+                        today_rows.append(row)
+                except Exception:
+                    if dt_str.startswith(day_str):
+                        today_rows.append(row)
+
+            unresolved_today = 0
+            for row in closed_unreconciled_rows:
+                dt_str = str(row[0] or "").strip()
+                if not dt_str:
+                    continue
+                try:
+                    if dt_str.endswith("Z"):
+                        dt_str = dt_str[:-1] + "+00:00"
+                    dt = datetime.fromisoformat(dt_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt.astimezone(tz).date().isoformat() == day_str:
+                        unresolved_today += 1
+                except Exception:
+                    if dt_str.startswith(day_str):
+                        unresolved_today += 1
+
+            used = sum(max(0.0, -float(row[0] or 0.0)) for row in today_rows)
+            unresolved = bool(open_unreconciled or unresolved_today)
             result.update({
                 "used_usdt": round(used, 6),
                 "status": "UNVERIFIED" if unresolved else "VERIFIED",
-                "trades_count": len(rows),
+                "trades_count": len(today_rows),
                 "reason": "LIVE trade reconciliation incomplete" if unresolved else "Exchange-reconciled closed LIVE journal",
             })
             return result

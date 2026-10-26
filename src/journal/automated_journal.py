@@ -9,7 +9,7 @@ Fulfills Section 15 specifications:
 - Strict isolation between LIVE, SHADOW, and PAPER activity.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import logging
 import sqlite3
@@ -1040,19 +1040,37 @@ class AutomatedTradeJournal:
         closed_trades = [t for t in trades if t.status == TradeStatus.CLOSED.value]
         open_trades_count = sum(1 for t in trades if t.status == TradeStatus.OPEN.value)
 
-        # UTC today metrics for risk limits
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # Daily metrics for risk limits based on WIB (UTC+7)
+        wib_tz = timezone(timedelta(hours=7))
+        today_wib = datetime.now(wib_tz).date().isoformat()
+
+        def is_wib_today(ts_val: Optional[str]) -> bool:
+            if not ts_val:
+                return False
+            clean_ts = str(ts_val).strip()
+            if not clean_ts:
+                return False
+            try:
+                if clean_ts.endswith("Z"):
+                    clean_ts = clean_ts[:-1] + "+00:00"
+                dt = datetime.fromisoformat(clean_ts)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(wib_tz).date().isoformat() == today_wib
+            except Exception:
+                return clean_ts.startswith(today_wib)
+
         today_closed = [
             t for t in closed_trades
-            if (t.exit_timestamp_utc and t.exit_timestamp_utc.startswith(today_str))
-            or (t.updated_at_utc and t.updated_at_utc.startswith(today_str))
-            or (t.created_at_utc and t.created_at_utc.startswith(today_str))
+            if is_wib_today(t.exit_timestamp_utc)
+            or (not t.exit_timestamp_utc and is_wib_today(t.updated_at_utc))
+            or (not t.exit_timestamp_utc and not t.updated_at_utc and is_wib_today(t.created_at_utc))
         ]
         daily_loss_usage = abs(sum(t.net_pnl_usd for t in today_closed if t.net_pnl_usd < 0))
         daily_filled = sum(
             1 for t in trades
-            if (t.first_fill_timestamp_utc and t.first_fill_timestamp_utc.startswith(today_str))
-            or (t.status in (TradeStatus.OPEN.value, TradeStatus.CLOSED.value) and t.created_at_utc.startswith(today_str))
+            if (is_wib_today(t.first_fill_timestamp_utc))
+            or (t.status in (TradeStatus.OPEN.value, TradeStatus.CLOSED.value) and is_wib_today(t.created_at_utc))
         )
         daily_loss_limit = 0.45
         daily_entries_allowance = 3

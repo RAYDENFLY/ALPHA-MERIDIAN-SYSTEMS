@@ -4,6 +4,7 @@ risk:
   fixed_risk_usd: 0.20
   max_filled_entries_per_day: 3
   daily_loss_limit_usd: 0.45
+  daily_reset_timezone: WIB
   max_drawdown_from_equity_peak_pct: 25.0
   max_global_open_positions: 1
   max_isolated_margin_usd: 7.00

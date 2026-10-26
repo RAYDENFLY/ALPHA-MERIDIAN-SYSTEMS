@@ -826,9 +826,10 @@ function updateLiveSessionUI(data) {
     if (metricDailyLoss) {
         const lossSnapshot = data.daily_loss_snapshot || {};
         const lossVal = Number(lossSnapshot.used_usdt);
+        const tzLabel = lossSnapshot.timezone ? ` (${lossSnapshot.timezone})` : ' (WIB)';
         metricDailyLoss.textContent = Number.isFinite(lossVal) && lossSnapshot.status === 'VERIFIED'
-            ? `$${lossVal.toFixed(2)} / $${Number(lossSnapshot.limit_usdt || 0.45).toFixed(2)}`
-            : `UNVERIFIED / $${Number(lossSnapshot.limit_usdt || 0.45).toFixed(2)}`;
+            ? `$${lossVal.toFixed(2)} / $${Number(lossSnapshot.limit_usdt || 0.45).toFixed(2)}${tzLabel}`
+            : `UNVERIFIED / $${Number(lossSnapshot.limit_usdt || 0.45).toFixed(2)}${tzLabel}`;
     }
     if (metricEntries) {
         const entriesVal = data.daily_filled_entries !== undefined ? data.daily_filled_entries : 0;

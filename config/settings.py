@@ -403,6 +403,7 @@ class LiveMicroRiskConfig(BaseModel):
     fixed_risk_usd: float = Field(default=0.20, description="Fixed dollar risk per trade ($0.20). Not a percentage of equity.")
     max_filled_entries_per_day: int = Field(default=3, ge=1, le=10)
     daily_loss_limit_usd: float = Field(default=0.45, ge=0.10)
+    daily_reset_timezone: str = Field(default="WIB", description="Timezone for daily loss & entry limits reset (WIB or UTC)")
     max_drawdown_from_equity_peak_pct: float = Field(default=25.0, ge=5.0, le=50.0)
     max_global_open_positions: int = Field(default=1, ge=1, le=1)
     max_isolated_margin_usd: float = Field(default=7.00, ge=1.0, le=20.0)

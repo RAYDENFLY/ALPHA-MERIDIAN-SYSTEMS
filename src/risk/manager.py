@@ -8,7 +8,7 @@ Enforces:
 - Weekly entry count tracked as telemetry (no hard entry quota cap).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, List, Optional, Tuple
 from src.core.types import Direction, EntryCategory, TradeRecord
 
@@ -44,7 +44,7 @@ class RiskManager:
 
     def _sync_calendar_buckets(self, current_ts_ms: int) -> None:
         """Reset loss counters at 00:00 UTC and weekly counters on Mondays."""
-        dt = datetime.fromtimestamp(current_ts_ms / 1000.0, tz=timezone.utc)
+        dt = datetime.fromtimestamp(current_ts_ms / 1000.0, tz=timezone(timedelta(hours=7)))
         day_str = dt.strftime("%Y-%m-%d")
         week_str = dt.strftime("%Y-W%W")
 
@@ -106,7 +106,7 @@ class RiskManager:
 
             # Check weekly entry bucket using entry_ts
             if entry_ts > 0:
-                entry_dt = datetime.fromtimestamp(entry_ts / 1000.0, tz=timezone.utc)
+                entry_dt = datetime.fromtimestamp(entry_ts / 1000.0, tz=timezone(timedelta(hours=7)))
                 entry_week_str = entry_dt.strftime("%Y-W%W")
                 if entry_week_str == self.current_week_str:
                     weekly_entries.add(trade_id)
@@ -174,7 +174,7 @@ class RiskManager:
                 # Check loss in current calendar buckets (using exit_ts)
                 if pnl_net < 0:
                     loss_amount = abs(pnl_net)
-                    exit_dt = datetime.fromtimestamp(exit_ts / 1000.0, tz=timezone.utc)
+                    exit_dt = datetime.fromtimestamp(exit_ts / 1000.0, tz=timezone(timedelta(hours=7)))
                     exit_day_str = exit_dt.strftime("%Y-%m-%d")
                     exit_week_str = exit_dt.strftime("%Y-W%W")
 
