@@ -1,0 +1,5 @@
+strategy,side,status,reason
+EMA20_RECLAIM_5M_V1,LONG,NOT_RUN,No faithful four-year 5m dataset/harness
+EMA20_RECLAIM_5M_V1,SHORT,NOT_RUN,No faithful four-year 5m dataset/harness
+15M_SWEEP_RECLAIM_SMC,LONG,NOT_RUN,No faithful four-year 15m/1h harness
+15M_SWEEP_RECLAIM_SMC,SHORT,NOT_RUN,No faithful four-year 15m/1h harness

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 from src.core.types import Candle, Direction
 from src.risk.live_micro_sizing import LiveMicroSizingEngine, LiveMicroSizingResult, normalize_price_to_tick
+from src.strategy.dealing_range import check_dealing_range_zone_lock, compute_dealing_range
 from config.settings import LiveMicroCostsConfig, LiveMicroRiskConfig
 
 
@@ -78,7 +79,7 @@ class EMA20ReclaimStrategy:
     """Deterministic 5m EMA20 Reclaim-Pullback Strategy Evaluator."""
 
     strategy_id: str = "EMA20_RECLAIM_5M_V1"
-    is_live: bool = True
+    is_live: bool = False  # STRICTLY FORBIDDEN FOR LIVE
 
     def __init__(
         self,
@@ -103,8 +104,11 @@ class EMA20ReclaimStrategy:
         account_equity: float = 16.0,
         funding_rate_est: Optional[float] = None,
         htf_trend: Optional[str] = None,  # Optional 1H or 15M trend filter
+        candles_1h: Optional[List[Candle]] = None,
+        dealing_range_position_pct: Optional[float] = None,
+        has_bull_fvg_pullback: bool = False,
     ) -> Tuple[Optional[EMA20ReclaimSetup], str]:
-        """Evaluate recent 5m candle series for EMA20 reclaim setup."""
+        """Evaluate recent 5m candle series for EMA20 reclaim setup with Dealing Range Zone Locks."""
         if len(candles_5m) < 25:
             return None, "INSUFFICIENT_DATA: Need at least 25 5m candles"
 
@@ -118,13 +122,36 @@ class EMA20ReclaimStrategy:
         prev_candle = candles_5m[-2]
         prev_ema20 = ema20_series[-2]
 
+        # 0. Calculate Dealing Range Position (48H / 72H)
+        if dealing_range_position_pct is not None:
+            pos_pct: Optional[float] = dealing_range_position_pct
+        elif candles_1h and len(candles_1h) >= 10:
+            dr = compute_dealing_range(candles_1h, curr_candle.close, lookback_bars=72)
+            pos_pct = dr.position_pct
+        else:
+            pos_pct = None
+
         # ---------------------------------------------------------------------
         # 1. Evaluate LONG Reclaim
         # Condition:
         # - Prior pullback below EMA20 (within last 2 to 6 bars: low < EMA20 or close < EMA20)
         # - Reclaim bar: current candle closed firmly above EMA20 (close > curr_ema20 and close > open)
+        # - Dealing Range Lock: NEVER long if position_pct > 38.0% (unless Bull FVG + Bull trend)
         # ---------------------------------------------------------------------
         can_eval_long = htf_trend is None or htf_trend.upper() in ("BULLISH", "NEUTRAL", "SIDEWAYS")
+        long_rejection_reason = ""
+        if pos_pct is not None:
+            dr_ok, dr_msg = check_dealing_range_zone_lock(
+                position_pct=pos_pct,
+                direction="LONG",
+                has_bull_fvg_pullback=has_bull_fvg_pullback,
+                trend_1h=htf_trend or "NEUTRAL",
+                long_max_discount_pct=38.0,
+            )
+            if not dr_ok:
+                can_eval_long = False
+                long_rejection_reason = dr_msg
+
         if can_eval_long and curr_candle.close > curr_ema20 and curr_candle.close > curr_candle.open:
             # Check if there was a pullback below EMA20 in the preceding 2 to 6 bars
             pullback_bars = []
@@ -138,7 +165,8 @@ class EMA20ReclaimStrategy:
             if pullback_bars:
                 # Lowest low of the pullback below EMA20
                 raw_pullback_low = min(c.low for c in pullback_bars)
-                raw_entry_price = curr_candle.close
+                # Anti-chasing limit entry: place limit at pullback support / EMA20 rather than top tick
+                raw_entry_price = min(curr_candle.close, max(raw_pullback_low * 1.002, curr_ema20 * 1.001))
 
                 # Deterministic tick-size normalization
                 entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
@@ -206,8 +234,20 @@ class EMA20ReclaimStrategy:
         # Condition:
         # - Prior rally above EMA20 (within last 2 to 6 bars: high > EMA20 or close > EMA20)
         # - Reclaim bar: current candle closed firmly below EMA20 (close < curr_ema20 and close < open)
+        # - Dealing Range Lock: NEVER short if position_pct < 65.0% (Hard Law 1)
         # ---------------------------------------------------------------------
         can_eval_short = htf_trend is None or htf_trend.upper() in ("BEARISH", "NEUTRAL", "SIDEWAYS")
+        short_rejection_reason = ""
+        if pos_pct is not None:
+            dr_ok, dr_msg = check_dealing_range_zone_lock(
+                position_pct=pos_pct,
+                direction="SHORT",
+                short_min_premium_pct=65.0,
+            )
+            if not dr_ok:
+                can_eval_short = False
+                short_rejection_reason = dr_msg
+
         if can_eval_short and curr_candle.close < curr_ema20 and curr_candle.close < curr_candle.open:
             pullback_bars = []
             lookback = min(len(candles_5m) - 1, 6)
@@ -219,7 +259,8 @@ class EMA20ReclaimStrategy:
 
             if pullback_bars:
                 raw_pullback_high = max(c.high for c in pullback_bars)
-                raw_entry_price = curr_candle.close
+                # Anti-chasing limit entry: place limit at pullback resistance / EMA20 rather than bottom tick
+                raw_entry_price = max(curr_candle.close, min(raw_pullback_high * 0.998, curr_ema20 * 0.999))
 
                 # Deterministic tick-size normalization
                 entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
@@ -279,5 +320,10 @@ class EMA20ReclaimStrategy:
                             f"STOP_DISTANCE_OUT_OF_BOUNDS: Stop distance {stop_dist_pct * 100:.3f}% "
                             f"not in [{min_stop * 100:.2f}%, {max_stop * 100:.2f}%]"
                         )
+
+        if short_rejection_reason and not can_eval_short:
+            return None, short_rejection_reason
+        if long_rejection_reason and not can_eval_long:
+            return None, long_rejection_reason
 
         return None, "NO_RECLAIM_TRIGGER"

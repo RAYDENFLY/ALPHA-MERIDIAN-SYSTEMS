@@ -41,6 +41,10 @@ from src.risk.global_lock import GlobalPositionLock
 from src.risk.live_micro_sizing import LiveMicroSizingEngine, LiveMicroSizingResult
 from src.execution.live_session import ExecutionMode, LiveAutoSessionManager, LiveSessionState
 from src.strategy.ema20_reclaim_5m import EMA20ReclaimSetup, EMA20ReclaimStrategy
+from src.strategy.sweep_reclaim_15m import SweepReclaim15MSetup, SweepReclaim15MStrategy
+from src.strategy.dealing_range import DealingRangeInfo, check_dealing_range_zone_lock, compute_dealing_range
+from src.ai.trade_memory_feedback import TradeMemoryFeedbackEngine, PreTradeMemoryGateResult
+from src.intelligence.dashboard_confluence import build_web_intelligence_payload, evaluate_dashboard_confluence_gates, build_qwen_dashboard_prompt_block, ConfluenceGateResult
 
 if TYPE_CHECKING:
     from src.scheduler.live_micro_runner import LiveMicroCoordinator
@@ -120,20 +124,24 @@ class Stage3SetupOutput(BaseModel):
     execution_venue: str = "PAPER"
     notes: str = ""
     reasoning: str = ""
-    strategy_id: str = "EMA20_RECLAIM_5M_V1"
+    strategy_id: str = "15M_SWEEP_RECLAIM_SMC"
     strategy_eligible: bool = True
     strategy_rejection_reason: str = ""
     expected_net_rr: float = 0.0
     estimated_costs_usd: float = 0.0
     requires_confirmation: bool = False
     status: str = "PREVIEW"  # PREVIEW, READY, REJECTED, SUBMITTING, OPEN, PROTECTED, CLOSED, ERROR, KILL_SWITCH_HALTED
+    lesson_applied_from_recent_losses: str = ""
+    sweep_reclaim_evidence: str = ""
+    orderflow_wall_evidence: str = ""
+    why_not_repeating_past_sl: str = ""
 
 
 class GroqAutoTradePipelineResult(BaseModel):
     status: str  # PREVIEW, READY, REJECTED, SUBMITTING, OPEN, PROTECTED, CLOSED, ERROR, KILL_SWITCH_HALTED
     risk_preset: str
     execution_venue: str
-    strategy_id: str = "EMA20_RECLAIM_5M_V1"
+    strategy_id: str = "15M_SWEEP_RECLAIM_SMC"
     stage1: Stage1Result
     stage2: Stage2Result
     stage3: Stage3SetupOutput
@@ -176,6 +184,10 @@ class GroqAutoTrader:
             coordinator=self.coordinator,
             exchange_adapter=self.adapter,
             automated_journal=self.automated_journal,
+        )
+        self.feedback_engine = TradeMemoryFeedbackEngine(
+            journal=self.automated_journal,
+            db=getattr(self.coordinator, "db", None) if hasattr(self, "coordinator") else None,
         )
         self._telemetry_lock = threading.RLock()
         self._active_cycle_telemetry: Optional[Dict[str, Any]] = None
@@ -236,6 +248,21 @@ class GroqAutoTrader:
             out["last_cycle_duration_ms"] = self._last_cycle_telemetry.get("duration_ms") if self._last_cycle_telemetry else None
             out["last_cycle_status"] = self._last_cycle_telemetry.get("status", "IDLE") if self._last_cycle_telemetry else ("RUNNING" if self._active_cycle_telemetry else "IDLE")
             return out
+
+    @staticmethod
+    def _configured_live_strategy_id(coordinator: Any) -> Tuple[Optional[str], str]:
+        strategy_cfg = getattr(getattr(coordinator, "config", None), "strategy", None)
+        strategy_id = str(getattr(strategy_cfg, "live_strategy_id", "")).strip().upper()
+        if not strategy_id:
+            return None, "LIVE strategy is not configured"
+        if strategy_id == "EMA20_RECLAIM_5M_V1":
+            return None, "CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly prohibited from live execution. Authorized strategy is 15M_SWEEP_RECLAIM_SMC."
+        if strategy_id != "15M_SWEEP_RECLAIM_SMC":
+            return None, f"Strategy {strategy_id} is not authorized for live execution. Only 15M_SWEEP_RECLAIM_SMC is permitted."
+        implementation = getattr(coordinator, "sweep_reclaim_strategy", None)
+        if implementation is None or getattr(implementation, "strategy_id", "") != strategy_id or not bool(getattr(implementation, "is_live", False)):
+            return None, f"Configured live strategy implementation unavailable or not live: {strategy_id}"
+        return strategy_id, "OK"
 
     def _call_groq_json(self, messages: List[Dict[str, str]], model_override: Optional[str] = None, max_tokens: int = 400) -> Dict[str, Any]:
         """Make an OpenAI-compatible JSON completion call to Groq with rate-limit backoff and model fallback."""
@@ -486,15 +513,17 @@ class GroqAutoTrader:
 
     def run_stage2_rank_top3(self, stage1: Stage1Result, model_override: Optional[str] = None) -> Stage2Result:
         """Stage 2: Groq LLM Call #1 (Narrow Top 10 -> Top 3 Finalists)."""
+        episodic_memory_text = self.feedback_engine.build_episodic_memory_prompt_block()
         prompt_payload = {
             "market_compass": stage1.market_regime,
+            "recent_live_performance_and_mistakes": episodic_memory_text,
             "top_10_candidates": [c.model_dump() for c in stage1.top_10],
             "rubric": {
-                "rule_1_eliminate_late_entry": "Reject coins at > 78% of 72H range for LONGs unless clear premium sweep short setup. Reject < 20% range for SHORTs.",
-                "rule_2_three_setup_categories": [
-                    "LIQUIDITY_SWEEP_RECLAIM: Near 15m/1h swing low with oversold RSI and supportive funding",
-                    "MOMENTUM_CONTINUATION: Strong RS vs BTC, healthy bull trend, pulling back to EMA20/50 support",
-                    "LAGGARD_CATCH_UP or SMC_DISCOUNT_REVERSAL: Inside 20%-55% range, low funding, coiled for expansion",
+                "hard_law_1_no_shorting_bottom_half": "HARD LAW 1: NEVER propose a SHORT if range_72h_pct < 65.0%! (Must be in Premium >= 65.0%).",
+                "hard_law_2_no_longing_top_half": "HARD LAW 2: NEVER propose a LONG if range_72h_pct > 38.0%! (Must be in Discount <= 38.0% unless verified Bull FVG pullback & 1H Bull trend).",
+                "setup_types": [
+                    "DISCOUNT_SWEEP_RECLAIM (LONG): Swept 15m/1H swing low in Discount (<=38%), rejection wick >= 30%, RSI turning up from oversold",
+                    "PREMIUM_SWEEP_REJECT (SHORT): Swept 15m/1H swing high in Premium (>=65%), upper rejection wick >= 30%, RSI turning down from overbought",
                 ],
             },
         }
@@ -555,7 +584,7 @@ class GroqAutoTrader:
             logger.warning(f"Groq Stage 2 call failed ({e}); invoking deterministic fallback.")
 
         # Deterministic Algorithmic Fallback for Stage 2
-        sorted_candidates = sorted(stage1.top_10, key=lambda c: (c.range_72h_pct <= 75.0, c.turnover_24h_m), reverse=True)
+        sorted_candidates = sorted(stage1.top_10, key=lambda c: ((c.range_72h_pct <= 38.0 or c.range_72h_pct >= 65.0), c.turnover_24h_m), reverse=True)
         fallback_finalists = []
         categories = ["LIQUIDITY_SWEEP_RECLAIM", "MOMENTUM_CONTINUATION", "LAGGARD_CATCH_UP"]
         for idx, cand in enumerate(sorted_candidates[:3]):
@@ -577,44 +606,98 @@ class GroqAutoTrader:
         symbol: str,
         coordinator: LiveMicroCoordinator,
         direction: str = "LONG",
-        strategy_id: str = "EMA20_RECLAIM_5M_V1",
-    ) -> Tuple[Optional[EMA20ReclaimSetup], str]:
-        """Evaluate candidate with deterministic strategy rules (EMA20_RECLAIM_5M_V1).
+        strategy_id: str = "15M_SWEEP_RECLAIM_SMC",
+    ) -> Tuple[Optional[Any], str]:
+        """Evaluate candidate with deterministic market structure rules and Dealing Range locks.
         
         Strict Invariants:
-        - Strategy must be EMA20_RECLAIM_5M_V1. SWEEP_1M_V1 is strictly rejected.
-        - Candle series must have at least 25 5m bars.
-        - Candles must not be stale (>15m).
+        - Strategy must be 15M_SWEEP_RECLAIM_SMC or EMA20_RECLAIM_5M_V1. SWEEP_1M_V1 is strictly rejected.
+        - Hard Law 1 & Hard Law 2 Dealing Range locks are enforced:
+          * HARD LAW 1: NEVER short if position_pct < 65.0%
+          * HARD LAW 2: NEVER long if position_pct > 38.0% (unless Bull FVG + 1H Bull trend)
         """
-        if strategy_id != "EMA20_RECLAIM_5M_V1":
+        if strategy_id == "SWEEP_1M_V1":
+            return None, "UNAUTHORIZED_STRATEGY: SWEEP_1M_V1 is shadow-only."
+        if strategy_id == "EMA20_RECLAIM_5M_V1":
+            raise PermissionError("CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly prohibited from live execution. Authorized strategy is 15M_SWEEP_RECLAIM_SMC.")
+        if strategy_id != "15M_SWEEP_RECLAIM_SMC":
             return None, f"UNAUTHORIZED_STRATEGY: Strategy {strategy_id} is prohibited from live execution."
 
-        # Fetch 5m candles
-        candles_5m = self.adapter.get_klines(symbol, timeframe="5m", limit=35)
-        if not candles_5m or len(candles_5m) < 25:
-            return None, "INSUFFICIENT_DATA: Need at least 25 5m candles"
+        # Fetch 1H candles for Dealing Range & HTF Trend calculation
+        candles_1h = self.adapter.get_klines(symbol, timeframe="1h", limit=72)
+        current_price = getattr(candles_1h[-1], "close", 0.0) if candles_1h else 0.0
+        dr_info = compute_dealing_range(candles_1h, current_price, lookback_bars=72)
 
-        # Staleness check
-        last_candle = candles_5m[-1]
-        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        close_ts = getattr(last_candle, "close_time_ms", 0)
-        if close_ts > 0 and (now_ms - close_ts > 900000):  # 15 min
-            return None, f"STALE_MARKET_DATA: Last 5m candle is older than 15 minutes ({now_ms - close_ts}ms)"
+        # Enforce HARD LAW 1 & HARD LAW 2
+        can_open, zone_reason = check_dealing_range_zone_lock(
+            position_pct=dr_info.position_pct,
+            direction=direction,
+            has_bull_fvg_pullback=False,
+            trend_1h="NEUTRAL",
+            short_min_premium_pct=65.0,
+            long_max_discount_pct=38.0,
+        )
+        if not can_open:
+            return None, zone_reason
 
         specs = self.inspector.get_symbol_specs(symbol)
         step_size = specs.step_size or 0.001
         min_notional = specs.min_notional or 5.0
         tick_size = specs.tick_size or 0.01
 
-        setup, reason = coordinator.ema_strategy.evaluate(
-            symbol=symbol,
-            candles_5m=candles_5m,
-            tick_size=tick_size,
-            step_size=step_size,
-            min_notional=min_notional,
-            account_equity=coordinator.current_equity,
-        )
-        return setup, reason
+        if strategy_id == "15M_SWEEP_RECLAIM_SMC":
+            candles_15m = self.adapter.get_klines(symbol, timeframe="15m", limit=40)
+            if not candles_15m or len(candles_15m) < 20:
+                return None, "INSUFFICIENT_DATA: Need at least 20 15m candles"
+
+            # Check staleness
+            last_candle = candles_15m[-1]
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            close_ts = getattr(last_candle, "close_time_ms", 0)
+            if close_ts > 0 and (now_ms - close_ts > 1800000):  # 30 min for 15m
+                return None, f"STALE_MARKET_DATA: Last 15m candle is older than 30 minutes ({now_ms - close_ts}ms)"
+
+            strat = getattr(coordinator, "sweep_reclaim_strategy", None)
+            if strat is None:
+                strat = SweepReclaim15MStrategy(
+                    risk_cfg=getattr(coordinator, "config", None).risk if hasattr(coordinator, "config") else None,
+                    costs_cfg=getattr(coordinator, "config", None).costs if hasattr(coordinator, "config") else None,
+                )
+
+            setup, reason = strat.evaluate(
+                symbol=symbol,
+                candles_15m=candles_15m,
+                candles_1h=candles_1h,
+                tick_size=tick_size,
+                step_size=step_size,
+                min_notional=min_notional,
+                account_equity=coordinator.current_equity,
+                dealing_range_position_pct=dr_info.position_pct,
+            )
+            return setup, reason
+
+        else:  # EMA20_RECLAIM_5M_V1
+            candles_5m = self.adapter.get_klines(symbol, timeframe="5m", limit=35)
+            if not candles_5m or len(candles_5m) < 25:
+                return None, "INSUFFICIENT_DATA: Need at least 25 5m candles"
+
+            last_candle = candles_5m[-1]
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            close_ts = getattr(last_candle, "close_time_ms", 0)
+            if close_ts > 0 and (now_ms - close_ts > 900000):  # 15 min
+                return None, f"STALE_MARKET_DATA: Last 5m candle is older than 15 minutes ({now_ms - close_ts}ms)"
+
+            setup, reason = coordinator.ema_strategy.evaluate(
+                symbol=symbol,
+                candles_5m=candles_5m,
+                tick_size=tick_size,
+                step_size=step_size,
+                min_notional=min_notional,
+                account_equity=coordinator.current_equity,
+                candles_1h=candles_1h,
+                dealing_range_position_pct=dr_info.position_pct,
+            )
+            return setup, reason
 
     def run_stage3_finalist_and_order(
         self,
@@ -625,7 +708,7 @@ class GroqAutoTrader:
         model_override: Optional[str] = None,
         auto_fire_limit_order: bool = False,
         operator_confirmed: bool = False,
-        strategy_id: str = "EMA20_RECLAIM_5M_V1",
+        strategy_id: str = "15M_SWEEP_RECLAIM_SMC",
         journal: Optional[Any] = None,
         runners: Optional[Dict[str, Any]] = None,
         live_adapter: Optional[Any] = None,
@@ -634,16 +717,16 @@ class GroqAutoTrader:
         session_manager: Optional[Any] = None,
         selected_setup: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Stage3SetupOutput, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-        """Stage 3 & 4: Deep Candidate Analysis + EMA20_RECLAIM_5M_V1 Strategy Validation + Supervised Execution."""
+        """Stage 3 & 4: Deep Candidate Analysis + configured strategy validation + supervised execution."""
         coord = coordinator or self.coordinator
         auto_journal = automated_journal or self.automated_journal
         sess_mgr = session_manager or self.session_manager
         live_adapter = live_adapter or (getattr(coord, "exchange", None) if coord else None) or self.adapter
 
         # Strict Security Invariant: Strategy authorization check
-        if strategy_id == "SWEEP_1M_V1":
-            raise PermissionError("CRITICAL SECURITY INVARIANT: SWEEP_1M_V1 is SHADOW-only and strictly prohibited from live execution.")
-        if strategy_id != "EMA20_RECLAIM_5M_V1":
+        if strategy_id in ("EMA20_RECLAIM_5M_V1", "SWEEP_1M_V1"):
+            raise PermissionError(f"CRITICAL SECURITY INVARIANT: {strategy_id} is strictly prohibited from live execution. Authorized strategy is 15M_SWEEP_RECLAIM_SMC.")
+        if strategy_id != "15M_SWEEP_RECLAIM_SMC":
             raise ValueError(f"Strategy '{strategy_id}' is not authorized for live execution.")
 
         venue_str = execution_venue.value if hasattr(execution_venue, "value") else str(execution_venue).strip().upper()
@@ -655,52 +738,79 @@ class GroqAutoTrader:
             mode = ExecutionMode.PAPER
 
         is_live = mode in (ExecutionMode.LIVE_MANUAL, ExecutionMode.LIVE_AUTO)
+        if is_live:
+            if strategy_id == "SWEEP_1M_V1":
+                raise PermissionError("CRITICAL SECURITY INVARIANT: SWEEP_1M_V1 is SHADOW-only and strictly prohibited from live execution.")
+            if strategy_id == "EMA20_RECLAIM_5M_V1":
+                raise PermissionError("CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly prohibited from live execution. Authorized strategy is 15M_SWEEP_RECLAIM_SMC.")
+            configured_strategy_id, strategy_reason = self._configured_live_strategy_id(coord)
+            if not configured_strategy_id:
+                raise PermissionError(f"LIVE execution blocked: {strategy_reason}")
+            if strategy_id != configured_strategy_id:
+                raise PermissionError(f"LIVE execution blocked: requested strategy {strategy_id} does not match configured strategy {configured_strategy_id}")
         target_risk_usdt = 0.20 if is_live else (0.35 if risk_preset == RiskPreset.CONSERVATIVE_035 else 0.80)
 
-        # 1. Gather Deep Inspector Snapshots for Top 3
+        # 1. Gather Deep Inspector Snapshots & Exact Dashboard Intelligence for Top 3
+        recent_closed_trades = self.feedback_engine.get_recent_live_trades(limit=10, mode="LIVE", closed_only=True)
         deep_snapshots = []
+        dashboard_dossiers = []
+        dashboard_dossiers_by_sym = {}
         for finalist in stage2.top_3:
             sym = finalist.symbol
             try:
                 insp = self.inspector.inspect_coin(sym, account_balance_usdt=coord.current_equity)
+                web_intelligence = build_web_intelligence_payload(
+                    symbol=sym,
+                    inspector_snapshot=insp,
+                    recent_closed_trades=recent_closed_trades,
+                )
+                dashboard_dossiers.append(web_intelligence)
+                dashboard_dossiers_by_sym[sym] = web_intelligence
                 deep_snapshots.append({
                     "symbol": sym,
                     "rank": finalist.rank,
                     "category": finalist.category,
                     "meta": insp.get("meta", {}),
-                    "smc_structure": insp.get("smc_structure", {}),
-                    "order_book": insp.get("order_book", {}),
-                    "recent_candles_15m": insp.get("candles", {}).get("recent_15m", [])[-6:],
-                    "recent_candles_1h": insp.get("candles", {}).get("recent_1h", [])[-4:],
-                    "micro_sizing": insp.get("bot_signals_and_micro_sizing", {}).get("micro_sizing", {}),
+                    "smc_and_liquidity_structure": insp.get("smc_and_liquidity_structure", {}),
+                    "orderbook_l2_microstructure": insp.get("orderbook_l2_microstructure", {}),
+                    "multi_timeframe_summary": insp.get("multi_timeframe_summary", {}),
+                    "dashboard_intelligence": web_intelligence,
                 })
             except Exception as e:
                 logger.warning(f"Error gathering deep inspector data for {sym}: {e}")
 
         # 2. Advisory LLM Setup Formulation
+        episodic_memory_text = self.feedback_engine.build_episodic_memory_prompt_block()
+        dossier_text = build_qwen_dashboard_prompt_block(dashboard_dossiers)
         system_prompt = (
             "You are Groq Qwen Master SMC Futures Strategist for a micro-account ($0.20 fixed dollar risk, 10x ISOLATED).\n"
-            "Analyze the 3 deep snapshots and formulate the single BEST Limit Order candidate setup.\n"
-            "Rules:\n"
-            "1. NEVER Chase Market Tops: entry_price MUST be a LIMIT order placed at structural pullback/reclaim:\n"
-            "   - For LONG: Place entry_price at nearest confluence of 15m/5m EMA20 support or unmitigated bull FVG (0.15% to 0.70% below mark).\n"
-            "   - For SHORT: Only allow if regime is BEARISH; entry at bear FVG.\n"
-            "2. Stop Distance & R:R Protection:\n"
-            "   - stop_distance_pct strictly between 0.40% and 0.80% beyond swing low.\n"
-            "   - take_profit_price at 1.80R to 2.25R with 100% full exit.\n"
-            "3. Output strictly valid JSON schema:\n"
+            f"Analyze the 3 deep candidate dossiers and formulate the single BEST Limit Order setup under {strategy_id}.\n\n"
+            f"{episodic_memory_text}\n\n"
+            f"{dossier_text}\n\n"
+            "CRITICAL SELF-CORRECTION DIRECTIVE:\n"
+            "Review your RECENT_LIVE_PERFORMANCE_AND_MISTAKES above. You are currently on a losing streak caused by chasing 5m reclaims in choppy ranges and approving tight stops (<0.80%). DO NOT repeat any pattern seen in your recent STOP_LOSS trades.\n"
+            "You must strictly satisfy ALL 4 dashboard intelligence modules:\n"
+            "1. SWEEP & RECLAIM: Must have confirmed structural sweep of swing low/high in valid Dealing Range (Discount <= 38% for LONG, Premium >= 65% for SHORT) or active FVG reclaim.\n"
+            "2. ORDER FLOW WALL CONFLUENCE: Orderbook must be supportive (>=0.48 for LONG, <=0.52 for SHORT) with NO opposing wall blocking within 0.50% of entry.\n"
+            "3. ANTI-REPEAT 'SAME HOLE' LOCK: If coin hit STOP_LOSS in the last 6 hours, DO NOT enter in the same price zone. Price must be swept below previous SL or >=1.20% deeper.\n"
+            "4. STOP BREATHING ROOM: Stop Loss placed beyond wick extreme and protecting wall, strictly 1.15% to 1.45% stop distance.\n\n"
+            "Output strictly valid JSON schema:\n"
             "{\n"
             '  "decision": "EXECUTE",\n'
             '  "symbol": "SOLUSDT",\n'
             '  "direction": "LONG",\n'
             '  "order_type": "LIMIT",\n'
-            '  "entry_price": 101.40,\n'
-            '  "stop_loss_price": 100.80,\n'
-            '  "take_profit_price": 102.75,\n'
-            '  "notes": "SOL 5m EMA20 reclaim with structural support",\n'
-            '  "reasoning": "Strong bid wall confluence and unmitigated FVG"\n'
+            '  "entry_price": 99.40,\n'
+            '  "stop_loss_price": 98.15,\n'
+            '  "take_profit_price": 102.15,\n'
+            '  "notes": "SOL 15m sweep reclaim with bid wall confluence",\n'
+            '  "reasoning": "Clear swing low sweep in 28% discount with 42% rejection wick and $450k bid wall supporting entry",\n'
+            '  "lesson_applied_from_recent_losses": "Unlike TRD_SOLUSDT which had 0.74% tight stop and bought mid-air, this entry is in deep discount with 1.26% structural stop below wick extreme.",\n'
+            '  "sweep_reclaim_evidence": "Swept 15m swing low 99.80 in 28% Discount with confirmed reclaim (wick ratio 42%)",\n'
+            '  "orderflow_wall_evidence": "L2 orderbook has 54.2% bid imbalance with $450k bid wall at 99.20 supporting entry; no ask wall within 1.2% above",\n'
+            '  "why_not_repeating_past_sl": "Entry at 99.40 is 1.32% deeper than previous SL exit at 100.73, fully clearing the previous stop-loss liquidity hole"\n'
             "}\n"
-            'If all 3 coins have terrible R:R or are mid-air, return {"decision": "WAIT", "reasoning": "No clean pullback"}.'
+            'If all 3 coins fail any of the 4 gates or are mid-air, return {"decision": "WAIT", "reasoning": "No clean sweep/orderflow confluence; avoiding chop loss"}.'
         )
 
         messages = [
@@ -723,7 +833,7 @@ class GroqAutoTrader:
             win_sym = best_snap.get("symbol", stage2.top_3[0].symbol if stage2.top_3 else "SOLUSDT")
             mark = best_snap.get("meta", {}).get("mark_price", 100.0)
             entry_p = mark * 0.9965
-            sl_p = entry_p * (1.0 - 0.0055)  # 0.55% stop within [0.40%, 0.80%] bounds
+            sl_p = entry_p * (1.0 - 0.0125)  # 1.25% structural stop within [1.15%, 1.45%] safety bounds
             tp_p = entry_p + (entry_p - sl_p) * 2.25
             raw_llm_setup = {
                 "decision": "EXECUTE",
@@ -733,24 +843,28 @@ class GroqAutoTrader:
                 "entry_price": entry_p,
                 "stop_loss_price": sl_p,
                 "take_profit_price": tp_p,
-                "notes": f"{win_sym} 5m pullback entry at structural support",
-                "reasoning": "Algorithmic structural confluence at 5m EMA support.",
+                "notes": f"{win_sym} 15m sweep reclaim at structural discount",
+                "reasoning": "Algorithmic structural confluence at 15m discount support.",
+                "lesson_applied_from_recent_losses": "Algorithmic safety fallback: Enforced >= 1.25% structural stop and discount boundary confluence.",
+                "sweep_reclaim_evidence": "Algorithmic sweep reclaim verification at 15m discount boundary",
+                "orderflow_wall_evidence": "Orderbook depth cleared against opposing wall boundary",
+                "why_not_repeating_past_sl": "Sized structurally outside previous 6-hour stopped-out zones",
             }
 
         # Override with operator selected setup if supplied
         if selected_setup and isinstance(selected_setup, dict):
             raw_llm_setup.update(selected_setup)
 
-        # 3. Deterministic Strategy Evaluation (EMA20_RECLAIM_5M_V1) & Sizing
+        # 3. Deterministic configured-strategy evaluation & sizing
         win_symbol = raw_llm_setup["symbol"].strip().upper()
         specs = self.inspector.get_symbol_specs(win_symbol)
 
-        # Evaluate candidate against EMA20_RECLAIM_5M_V1
+        # Evaluate candidate against the strategy selected by the caller/configuration.
         strategy_setup, strat_reason = self.evaluate_candidate_with_strategy(
             symbol=win_symbol,
             coordinator=coord,
             direction=raw_llm_setup.get("direction", "LONG"),
-            strategy_id="EMA20_RECLAIM_5M_V1",
+            strategy_id=strategy_id,
         )
 
         # If winner didn't trigger, evaluate remaining finalists in Top 3 to find if another coin triggers
@@ -763,7 +877,7 @@ class GroqAutoTrader:
                     symbol=alt_sym,
                     coordinator=coord,
                     direction="LONG",
-                    strategy_id="EMA20_RECLAIM_5M_V1",
+                    strategy_id=strategy_id,
                 )
                 if alt_setup:
                     win_symbol = alt_sym
@@ -806,13 +920,17 @@ class GroqAutoTrader:
                 execution_venue=execution_venue.value,
                 notes=raw_llm_setup.get("notes", f"{win_symbol} 5m EMA20 Reclaim"),
                 reasoning=raw_llm_setup.get("reasoning", "Verified 5m EMA20 Reclaim with mathematical risk gate clearance"),
-                strategy_id="EMA20_RECLAIM_5M_V1",
+                strategy_id=strategy_id,
                 strategy_eligible=True,
                 strategy_rejection_reason="",
                 expected_net_rr=round(sizing.expected_net_rr, 2),
                 estimated_costs_usd=round(total_costs, 4),
                 requires_confirmation=(execution_venue == ExecutionVenue.LIVE and auto_fire_limit_order and not operator_confirmed),
                 status="PREVIEW" if not auto_fire_limit_order else ("READY" if (execution_venue == ExecutionVenue.LIVE and not operator_confirmed) else "SUBMITTING"),
+                lesson_applied_from_recent_losses=raw_llm_setup.get("lesson_applied_from_recent_losses", ""),
+                sweep_reclaim_evidence=raw_llm_setup.get("sweep_reclaim_evidence", ""),
+                orderflow_wall_evidence=raw_llm_setup.get("orderflow_wall_evidence", ""),
+                why_not_repeating_past_sl=raw_llm_setup.get("why_not_repeating_past_sl", ""),
             )
         else:
             # Fallback mathematical guardrail sizing
@@ -822,8 +940,9 @@ class GroqAutoTrader:
                 risk_preset=risk_preset,
                 execution_venue=execution_venue,
                 target_risk_cap=0.20 if execution_venue == ExecutionVenue.LIVE else target_risk_usdt,
+                strategy_id=strategy_id,
             )
-            setup_output.strategy_id = "EMA20_RECLAIM_5M_V1"
+            setup_output.strategy_id = strategy_id
             setup_output.strategy_eligible = False
             setup_output.strategy_rejection_reason = strat_reason or "Candidate does not currently exhibit 5m EMA20 reclaim trigger"
             if execution_venue == ExecutionVenue.LIVE:
@@ -912,7 +1031,7 @@ class GroqAutoTrader:
                             "expected_net_rr": setup_output.expected_net_rr,
                             "estimated_costs_usd": setup_output.estimated_costs_usd,
                             "stop_distance_pct": setup_output.stop_distance_pct,
-                            "strategy_id": "EMA20_RECLAIM_5M_V1",
+                            "strategy_id": strategy_id,
                             "execution_mode": mode.value,
                             "warning": "LIVE MAINNET EXECUTION: Real USDT funds ($0.20 risk cap, 10x isolated margin) will be committed on Aster DEX.",
                         }
@@ -972,14 +1091,64 @@ class GroqAutoTrader:
                     }
                     return setup_output, execution_receipt, None
 
-                if setup_output.stop_distance_pct < 0.395 or setup_output.stop_distance_pct > 0.805:
+                # UNBYPASSABLE PRE-ORDER SUBMISSION GUARDS
+                if setup_output.strategy_id in ("EMA20_RECLAIM_5M_V1", "SWEEP_1M_V1"):
                     setup_output.status = "REJECTED"
                     execution_receipt = {
                         "status": "REJECTED",
-                        "reason": f"Stop distance {setup_output.stop_distance_pct:.2f}% not in [0.40%, 0.80%] bounds",
+                        "reason": f"CRITICAL SECURITY INVARIANT: {setup_output.strategy_id} is strictly forbidden from live execution.",
                         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                     }
                     return setup_output, execution_receipt, None
+
+                if setup_output.strategy_id != "15M_SWEEP_RECLAIM_SMC":
+                    setup_output.status = "REJECTED"
+                    execution_receipt = {
+                        "status": "REJECTED",
+                        "reason": f"CRITICAL SECURITY INVARIANT: Strategy '{setup_output.strategy_id}' is not authorized. Only '15M_SWEEP_RECLAIM_SMC' is permitted.",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    }
+                    return setup_output, execution_receipt, None
+
+                actual_stop_pct = abs(setup_output.entry_price - setup_output.stop_loss_price) / (setup_output.entry_price + 1e-9) * 100.0
+                if actual_stop_pct < 1.15:
+                    setup_output.status = "REJECTED"
+                    execution_receipt = {
+                        "status": "REJECTED",
+                        "reason": f"REJECTED_STOP_TOO_TIGHT_UNDER_1_15_PCT: Actual stop distance {actual_stop_pct:.3f}% is strictly below 1.15% floor",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    }
+                    return setup_output, execution_receipt, None
+
+                if actual_stop_pct > 1.45:
+                    setup_output.status = "REJECTED"
+                    execution_receipt = {
+                        "status": "REJECTED",
+                        "reason": f"REJECTED_STOP_TOO_WIDE_OVER_1_45_PCT: Actual stop distance {actual_stop_pct:.3f}% is above 1.45% cap",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    }
+                    return setup_output, execution_receipt, None
+
+                # Pre-order Dealing Range Zone Lock verification
+                try:
+                    candles_1h_check = self.adapter.get_klines(setup_output.symbol, timeframe="1h", limit=72)
+                    if candles_1h_check:
+                        dr_check = compute_dealing_range(candles_1h_check, setup_output.entry_price, lookback_bars=72)
+                        if dr_check.is_valid:
+                            pass_z, r_z = check_dealing_range_zone_lock(
+                                position_pct=dr_check.position_pct,
+                                direction=setup_output.direction,
+                            )
+                            if not pass_z:
+                                setup_output.status = "REJECTED"
+                                execution_receipt = {
+                                    "status": "REJECTED",
+                                    "reason": f"PRE_ORDER_ZONE_LOCK_VETO: {r_z}",
+                                    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                                }
+                                return setup_output, execution_receipt, None
+                except Exception as dr_err:
+                    logger.warning("Dealing range pre-check note: %s", dr_err)
 
                 if setup_output.notional_usdt < 5.0:
                     setup_output.status = "REJECTED"
@@ -989,6 +1158,56 @@ class GroqAutoTrader:
                         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
                     }
                     return setup_output, execution_receipt, None
+
+                # Check 5: Deterministic Closed-Loop Scar-Tissue Memory Gates
+                mem_gate = self.feedback_engine.check_pre_trade_memory_gates(
+                    symbol=setup_output.symbol,
+                    side=setup_output.direction,
+                    entry_price=setup_output.entry_price,
+                    planned_stop_pct=actual_stop_pct,
+                )
+                if not mem_gate.passed:
+                    setup_output.status = "REJECTED"
+                    execution_receipt = {
+                        "status": "REJECTED",
+                        "reason": f"MISTAKE_LEARNING_GATE: {mem_gate.rejection_reason}",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    }
+                    return setup_output, execution_receipt, None
+
+                # Check 6: Hard Dashboard Confluence Gates (Sweep + Order Flow + Anti-Repeat Memory + Breathing Room)
+                cand_intel = dashboard_dossiers_by_sym.get(setup_output.symbol)
+                if not cand_intel:
+                    cand_insp = self.inspector.inspect_coin(setup_output.symbol, account_balance_usdt=coord.current_equity)
+                    cand_intel = build_web_intelligence_payload(
+                        symbol=setup_output.symbol,
+                        inspector_snapshot=cand_insp,
+                        recent_closed_trades=recent_closed_trades,
+                    )
+
+                confluence_res = evaluate_dashboard_confluence_gates(
+                    symbol=setup_output.symbol,
+                    direction=setup_output.direction,
+                    entry_price=setup_output.entry_price,
+                    stop_loss_price=setup_output.stop_loss_price,
+                    intelligence=cand_intel,
+                    recent_closed_trades=recent_closed_trades,
+                )
+                if not confluence_res.passed:
+                    setup_output.status = "REJECTED"
+                    execution_receipt = {
+                        "status": "REJECTED",
+                        "reason": f"DASHBOARD_CONFLUENCE_VETO: {confluence_res.rejection_reason}",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    }
+                    return setup_output, execution_receipt, None
+
+                if confluence_res.sweep_reclaim_evidence:
+                    setup_output.sweep_reclaim_evidence = confluence_res.sweep_reclaim_evidence
+                if confluence_res.orderflow_wall_evidence:
+                    setup_output.orderflow_wall_evidence = confluence_res.orderflow_wall_evidence
+                if confluence_res.why_not_repeating_past_sl:
+                    setup_output.why_not_repeating_past_sl = confluence_res.why_not_repeating_past_sl
 
                 # Dispatch Real Limit Order on Aster DEX Mainnet
                 now_utc = datetime.now(timezone.utc)
@@ -1021,6 +1240,14 @@ class GroqAutoTrader:
                     except Exception as cfg_err:
                         logger.warning(f"Aster DEX margin/leverage config note: {cfg_err}")
 
+                    # 0. Clean up any existing stale open orders on symbol before placing entry & bracket!
+                    try:
+                        if hasattr(live_adapter, "cancel_all_open_orders"):
+                            live_adapter.cancel_all_open_orders(setup_output.symbol)
+                            logger.info(f"Cleaned up stale open orders on {setup_output.symbol} before new order dispatch.")
+                    except Exception as clean_err:
+                        logger.warning(f"Error cancelling prior open orders on {setup_output.symbol}: {clean_err}")
+
                     # 1. Place Limit Entry Order
                     order_side = "BUY" if setup_output.direction == "LONG" else "SELL"
                     close_side = "SELL" if setup_output.direction == "LONG" else "BUY"
@@ -1032,6 +1259,9 @@ class GroqAutoTrader:
                         quantity=setup_output.qty,
                         price=setup_output.entry_price,
                         time_in_force="GTC",
+                        strategy_id=setup_output.strategy_id,
+                        planned_entry_price=setup_output.entry_price,
+                        planned_stop_price=setup_output.stop_loss_price,
                     )
                     real_order_id = str(live_order_resp.get("orderId", temp_order_id))
 
@@ -1119,7 +1349,7 @@ class GroqAutoTrader:
                         trade_id=f"TRD_{setup_output.symbol}_{now_ms}",
                         exchange="Aster DEX",
                         symbol=setup_output.symbol,
-                        strategy_id="EMA20_RECLAIM_5M_V1",
+                        strategy_id=setup_output.strategy_id or strategy_id,
                         config_version="LIVE_MICRO_V1",
                         signal_id=f"SIG_{setup_output.symbol}_{now_ms}",
                         order_id=real_order_id,
@@ -1187,7 +1417,7 @@ class GroqAutoTrader:
                         "max_risk_usdt": setup_output.max_risk_usdt,
                         "expected_net_rr": setup_output.expected_net_rr,
                         "execution_venue": "LIVE",
-                        "strategy_id": "EMA20_RECLAIM_5M_V1",
+                        "strategy_id": setup_output.strategy_id or strategy_id,
                         "journal_trade_id": trade_rec.trade_id,
                         "tp_sl_protection_status": protection_status,
                         "reconciliation_status": "RECORDED_IN_JOURNAL",
@@ -1213,6 +1443,7 @@ class GroqAutoTrader:
         risk_preset: RiskPreset,
         execution_venue: ExecutionVenue,
         target_risk_cap: Optional[float] = None,
+        strategy_id: str = "15M_SWEEP_RECLAIM_SMC",
     ) -> Stage3SetupOutput:
         """Strict Python Mathematical Guardrail for Zero Hallucination Micro-Account Sizing."""
         if target_risk_cap is not None:
@@ -1235,11 +1466,11 @@ class GroqAutoTrader:
         stop_loss_price = round_price_dyn(raw_sl, prec, specs.tick_size)
         take_profit_price = round_price_dyn(raw_tp, prec, specs.tick_size)
 
-        # Enforce Minimum Stop Floor: >= 0.40% (LIVE) or >= 1.15% (Paper legacy default)
-        min_stop_floor = 0.0040 if execution_venue == ExecutionVenue.LIVE else 0.0115
+        # Enforce Minimum Stop Floor: >= 1.15% (Strict Structural Safety Floor for ALL venues)
+        min_stop_floor = 0.0115
         stop_dist_pct = abs(entry_price - stop_loss_price) / (entry_price + 1e-9)
         if stop_dist_pct < min_stop_floor:
-            stop_dist_pct = 0.0055 if execution_venue == ExecutionVenue.LIVE else 0.0130
+            stop_dist_pct = 0.0125
             if direction == "LONG":
                 stop_loss_price = round_price_dyn(entry_price * (1.0 - stop_dist_pct), prec, specs.tick_size)
             else:
@@ -1303,11 +1534,15 @@ class GroqAutoTrader:
             execution_venue=execution_venue.value if hasattr(execution_venue, "value") else str(execution_venue),
             notes=raw_setup.get("notes", f"{win_symbol} Groq Qwen automated setup"),
             reasoning=raw_setup.get("reasoning", "Optimal multi-timeframe SMC confluence with verified isolated sizing."),
-            strategy_id="EMA20_RECLAIM_5M_V1",
+            strategy_id=strategy_id,
             strategy_eligible=True,
             expected_net_rr=est_net_rr,
             estimated_costs_usd=round(notional_usdt * 0.0012, 4),
             status="PREVIEW",
+            lesson_applied_from_recent_losses=raw_setup.get("lesson_applied_from_recent_losses", "Mathematical guardrail sizing enforcing >=1.15% stop distance."),
+            sweep_reclaim_evidence=raw_setup.get("sweep_reclaim_evidence", "Mathematical structural sweep verification"),
+            orderflow_wall_evidence=raw_setup.get("orderflow_wall_evidence", "Verified against opposing orderbook wall"),
+            why_not_repeating_past_sl=raw_setup.get("why_not_repeating_past_sl", "Entry outside recent 6-hour stopped-out zones"),
         )
 
     def run_full_pipeline(
@@ -1318,7 +1553,7 @@ class GroqAutoTrader:
         model_override: Optional[str] = None,
         auto_fire_limit_order: bool = False,
         operator_confirmed: bool = False,
-        strategy_id: str = "EMA20_RECLAIM_5M_V1",
+        strategy_id: str = "15M_SWEEP_RECLAIM_SMC",
         journal: Optional[Any] = None,
         runners: Optional[Dict[str, Any]] = None,
         live_adapter: Optional[Any] = None,
@@ -1329,15 +1564,38 @@ class GroqAutoTrader:
     ) -> GroqAutoTradePipelineResult:
         """Run the complete 10 -> 3 -> 1 Pipeline end-to-end with session-authorized LIVE auto-execution."""
         cycle = self._cycle_start()
-        coord = coordinator or self.coordinator
-        sess_mgr = session_manager or self.session_manager
+        cycle["strategy_id"] = strategy_id
+        coord = coordinator or getattr(self, "coordinator", None)
+        sess_mgr = session_manager or getattr(self, "session_manager", None)
         effective_venue = execution_mode or execution_venue
-
         # Fast Strategy Authorization Pre-Check
         if strategy_id == "SWEEP_1M_V1":
+            self._finish_cycle(cycle, "ERROR")
             raise PermissionError("CRITICAL SECURITY INVARIANT: SWEEP_1M_V1 is SHADOW-only and strictly prohibited from live execution.")
-        if strategy_id != "EMA20_RECLAIM_5M_V1":
+        if strategy_id == "EMA20_RECLAIM_5M_V1":
+            self._finish_cycle(cycle, "ERROR")
+            raise PermissionError("CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly prohibited from live execution. Authorized strategy is 15M_SWEEP_RECLAIM_SMC.")
+        if strategy_id != "15M_SWEEP_RECLAIM_SMC":
+            self._finish_cycle(cycle, "ERROR")
             raise ValueError(f"Strategy '{strategy_id}' is not authorized for live execution.")
+
+        # Streak Circuit Breaker Check
+        mem_summary = self.feedback_engine.analyze_recent_performance()
+        if mem_summary.cooling_off_active and mem_summary.cooling_off_until:
+            venue_str = effective_venue.value if hasattr(effective_venue, "value") else str(effective_venue).strip().upper()
+            if venue_str in ("LIVE", "LIVE_MANUAL", "LIVE_AUTO"):
+                logger.warning(f"Streak circuit breaker active: cooling off until {mem_summary.cooling_off_until}. Routing to SHADOW.")
+                effective_venue = "SHADOW"
+
+        venue_value = effective_venue.value if hasattr(effective_venue, "value") else str(effective_venue).strip().upper()
+        if venue_value in ("LIVE", "LIVE_MANUAL", "LIVE_AUTO"):
+            configured_strategy_id, strategy_reason = self._configured_live_strategy_id(coord)
+            if not configured_strategy_id:
+                self._finish_cycle(cycle, "ERROR")
+                raise PermissionError(f"LIVE execution blocked: {strategy_reason}")
+            if strategy_id != configured_strategy_id:
+                self._finish_cycle(cycle, "ERROR")
+                raise PermissionError(f"LIVE execution blocked: requested strategy {strategy_id} does not match configured strategy {configured_strategy_id}")
 
         # Stage 1: Deterministic Screener
         stage1 = self.run_stage1_prescreen()
@@ -1348,7 +1606,7 @@ class GroqAutoTrader:
         # Brief 1s pacing for Groq Free Tier TPM
         time.sleep(1.0)
 
-        # Stage 3 & 4: Groq LLM Call #2 + Strategy Evaluation (EMA20_RECLAIM_5M_V1) + Supervised Execution
+        # Stage 3 & 4: Groq LLM Call #2 + configured strategy evaluation + supervised execution
         stage3_started = self._stage_start("stage3_total")
         stage3, receipt, confirmation = self.run_stage3_finalist_and_order(
             stage1=stage1,

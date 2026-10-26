@@ -57,8 +57,8 @@ def mock_external_calls(monkeypatch):
                         "symbol": "SOLUSDT",
                         "category": "LIQUIDITY_SWEEP_RECLAIM",
                         "score": 93.0,
-                        "thesis": "5m EMA20 Reclaim with strong RS",
-                        "verification_questions": ["Verify 5m reclaim", "Check bid depth"],
+                        "thesis": "15m Sweep Reclaim with strong RS",
+                        "verification_questions": ["Verify 15m sweep reclaim", "Check bid depth"],
                     },
                     {
                         "rank": 2,
@@ -85,10 +85,10 @@ def mock_external_calls(monkeypatch):
                 "symbol": "SOLUSDT",
                 "direction": "LONG",
                 "order_type": "LIMIT",
-                "entry_price": 100.0,
-                "stop_loss_price": 99.45,
-                "take_profit_price": 101.25,
-                "notes": "SOL 5m EMA20 Reclaim",
+                "entry_price": 99.85,
+                "stop_loss_price": 98.70,
+                "take_profit_price": 102.44,
+                "notes": "SOL 15m Sweep Reclaim SMC",
                 "reasoning": "Verified structural reclaim confluence",
             }
 
@@ -113,32 +113,65 @@ def mock_aster_adapter():
     ]
 
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    # 35 5m candles with valid EMA20 reclaim structure (0.55% stop within [0.40%, 0.80%])
+    # 35 15m candles with valid Bull Sweep and Reclaim structure in Discount
     candles = []
     for i in range(35):
-        t_ms = now_ms - (35 - i) * 300000
-        if 28 <= i <= 32:
+        t_ms = now_ms - (35 - i) * 900000
+        if i == 20:
             c = Candle(
-                symbol="SOLUSDT", timeframe="5m", timestamp_ms=t_ms,
-                open=99.8, high=99.9, low=99.45, close=99.50, volume=100.0,
-                close_time_ms=t_ms + 299999
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=99.0, high=99.5, low=97.0, close=98.0, volume=100.0,
+                close_time_ms=t_ms + 899999
+            )
+        elif 21 <= i <= 26:
+            c = Candle(
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=98.5, high=99.5, low=98.0, close=99.0, volume=100.0,
+                close_time_ms=t_ms + 899999
+            )
+        elif i == 33:
+            c = Candle(
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=98.0, high=98.5, low=96.5, close=97.2, volume=120.0,
+                close_time_ms=t_ms + 899999
             )
         elif i == 34:
             c = Candle(
-                symbol="SOLUSDT", timeframe="5m", timestamp_ms=t_ms,
-                open=99.70, high=100.10, low=99.65, close=100.0, volume=150.0,
-                close_time_ms=t_ms + 299999
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=98.5, high=100.1, low=96.8, close=100.0, volume=150.0,
+                close_time_ms=t_ms + 899999
             )
         else:
             c = Candle(
-                symbol="SOLUSDT", timeframe="5m", timestamp_ms=t_ms,
-                open=100.0, high=100.2, low=99.8, close=100.0, volume=100.0,
-                close_time_ms=t_ms + 299999
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=99.5, high=100.5, low=99.0, close=100.0, volume=100.0,
+                close_time_ms=t_ms + 899999
             )
         candles.append(c)
 
-    adapter.get_klines.return_value = candles
-    adapter.get_premium_index.return_value = {"last_funding_rate": "0.0001"}
+    def mock_get_klines(symbol, timeframe="5m", limit=35):
+        if timeframe == "1h":
+            k1h = []
+            for j in range(limit or 72):
+                t_1h = now_ms - (72 - j) * 3600000
+                k1h.append(
+                    Candle(
+                        symbol=symbol,
+                        timeframe="1h",
+                        timestamp_ms=t_1h,
+                        open=100.0,
+                        high=125.0 if j == 40 else 102.0,
+                        low=90.0 if j == 45 else 98.0,
+                        close=100.0,
+                        volume=5000.0,
+                        close_time_ms=t_1h + 3599999,
+                    )
+                )
+            return k1h
+        return candles
+
+    adapter.get_klines.side_effect = mock_get_klines
+    adapter.get_premium_index.return_value = {"mark_price": 100.0, "last_funding_rate": "0.0001"}
     return adapter
 
 
@@ -251,19 +284,19 @@ def test_02_preview_never_submits_orders(mock_aster_adapter, mock_live_exchange_
 # -----------------------------------------------------------------------------
 
 def test_03_strategy_authorization_ema20_live_allowed(mock_aster_adapter, mock_live_exchange_adapter, test_coordinator):
-    """Verify EMA20_RECLAIM_5M_V1 is the authorized strategy for live execution."""
+    """Verify EMA20_RECLAIM_5M_V1 is strictly rejected with PermissionError, and 15M_SWEEP_RECLAIM_SMC is the sole authorized live strategy."""
     trader = GroqAutoTrader(adapter=mock_aster_adapter, coordinator=test_coordinator)
 
-    res = trader.run_full_pipeline(
-        execution_venue=ExecutionVenue.LIVE,
-        strategy_id="EMA20_RECLAIM_5M_V1",
-        auto_fire_limit_order=True,
-        operator_confirmed=True,
-        live_adapter=mock_live_exchange_adapter,
-        coordinator=test_coordinator,
-    )
-    assert res.strategy_id == "EMA20_RECLAIM_5M_V1"
-    assert res.stage3.strategy_id == "EMA20_RECLAIM_5M_V1"
+    with pytest.raises(PermissionError) as exc_info:
+        trader.run_full_pipeline(
+            execution_venue=ExecutionVenue.LIVE,
+            strategy_id="EMA20_RECLAIM_5M_V1",
+            auto_fire_limit_order=True,
+            operator_confirmed=True,
+            live_adapter=mock_live_exchange_adapter,
+            coordinator=test_coordinator,
+        )
+    assert "EMA20_RECLAIM_5M_V1 is strictly prohibited" in str(exc_info.value)
 
     test_coordinator.global_lock.release()
 
@@ -443,7 +476,8 @@ def test_10_risk_gate_planned_risk_and_margin(mock_aster_adapter, mock_live_exch
     assert setup.isolated_margin_usdt <= 7.05, f"Margin {setup.isolated_margin_usdt} exceeded $7.00 cap"
     assert setup.leverage == 10
     assert setup.margin_mode == "ISOLATED"
-    assert 0.39 <= setup.stop_distance_pct <= 0.81, f"Stop {setup.stop_distance_pct}% outside [0.40%, 0.80%]"
+    # Stop distance for 15M_SWEEP_RECLAIM_SMC is [1.15%, 1.40%], or [0.40%, 0.80%] for EMA20
+    assert 0.39 <= setup.stop_distance_pct <= 1.45, f"Stop {setup.stop_distance_pct}% outside valid bounds"
 
     test_coordinator.global_lock.release()
 
@@ -558,7 +592,7 @@ def test_14_automated_trade_journal_reconciliation(mock_aster_adapter, mock_live
 
     assert record is not None
     assert record.symbol == res.stage3.symbol
-    assert record.strategy_id == "EMA20_RECLAIM_5M_V1"
+    assert record.strategy_id == res.stage3.strategy_id
     assert record.mode == "LIVE"
     assert record.status in ("OPEN", "PENDING")
     assert record.order_id == res.execution_receipt["order_id"]

@@ -703,7 +703,7 @@ function syncGroqVenueVisuals(venue) {
         if (warningBanner) {
             warningBanner.classList.remove('hidden');
             if (warningTitle) warningTitle.textContent = 'SESSION-AUTHORIZED LIVE AUTO-EXECUTION (ASTER DEX MAINNET)';
-            if (warningDesc) warningDesc.textContent = 'Autonomous background scanner executes eligible EMA20_RECLAIM_5M_V1 setups directly on Aster DEX Mainnet without per-order confirmation once a session is active. Managed via Session Controls above.';
+            if (warningDesc) warningDesc.textContent = 'Autonomous background scanner executes eligible 15M_SWEEP_RECLAIM_SMC setups directly on Aster DEX Mainnet without per-order confirmation once a session is active. Managed via Session Controls above.';
         }
         // In LIVE_AUTO mode, hide redundant manual order button; show autonomous scanner status pill
         if (autoBtn) {
@@ -1148,7 +1148,7 @@ async function runGroqAutoTrader(autoFire = false, operatorConfirmed = false) {
     const timer2 = setTimeout(() => {
         setFunnelStepState(2, 'complete');
         setFunnelStepState(3, 'active');
-        if (loadingSubtext) loadingSubtext.textContent = 'Stage 3 & 4: Deep Order Book Analysis + EMA20_RECLAIM_5M_V1 Strategy & Sizing...';
+        if (loadingSubtext) loadingSubtext.textContent = 'Stage 3 & 4: Deep Order Book Analysis + 15M_SWEEP_RECLAIM_SMC Strategy & Sizing...';
     }, 4500);
 
     try {
@@ -1157,7 +1157,7 @@ async function runGroqAutoTrader(autoFire = false, operatorConfirmed = false) {
             execution_venue: venue,
             auto_fire_limit_order: !!autoFire,
             operator_confirmed: !!operatorConfirmed,
-            strategy_id: "EMA20_RECLAIM_5M_V1",
+            strategy_id: "15M_SWEEP_RECLAIM_SMC",
             model_override: modelOverride,
             selected_setup: currentPendingGroqLiveSetup || null
         };
@@ -1261,7 +1261,7 @@ function openGroqConfirmModal(p) {
             <div>Risk Budget: <strong class="text-amber-400">$${p.max_risk_usdt} (Max $0.20)</strong></div>
             <div>Net R:R: <strong class="text-emerald-400">${p.expected_net_rr}R (Gate &ge; 1.50)</strong></div>
             <div class="col-span-2 text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
-                Strategy: <strong class="text-white">EMA20_RECLAIM_5M_V1</strong> &bull; Estimated Roundtrip Fees: <strong class="text-slate-300">$${p.estimated_costs_usd}</strong>
+                Strategy: <strong class="text-white">15M_SWEEP_RECLAIM_SMC</strong> &bull; Estimated Roundtrip Fees: <strong class="text-slate-300">$${p.estimated_costs_usd}</strong>
             </div>
         </div>
     `;
@@ -1499,7 +1499,7 @@ function renderGroqFunnelResult(data, autoFired) {
                                 ${s3.direction} LIMIT
                             </span>
                             <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
-                                ${s3.strategy_id || 'EMA20_RECLAIM_5M_V1'}
+                                ${s3.strategy_id || '15M_SWEEP_RECLAIM_SMC'}
                             </span>
                             <span class="px-2 py-0.5 rounded text-[10px] font-mono border font-bold ${statusBadgeColor}">
                                 ${statusLabel}

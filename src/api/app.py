@@ -610,6 +610,12 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down scanner API server...")
+    # Deterministically stop LIVE protection reconciliation and scanner workers.
+    # This never authorizes LIVE_AUTO or mutates exchange state.
+    try:
+        live_auto_session_manager.stop_scanner()
+    except Exception as e:
+        logger.warning("LIVE session worker shutdown warning: %s", e)
     stop_event.set()
     if bg_task and not bg_task.done():
         bg_task.cancel()
@@ -827,6 +833,8 @@ def get_system_status() -> Dict[str, Any]:
         "scanner": {
             "state": computed_state,
             "process_status": "STOPPED" if is_stopped else ("RUNNING" if is_worker_alive else "IDLE"),
+            "configured_live_strategy_id": live_info.get("configured_live_strategy_id"),
+            "configured_live_strategy_status": live_info.get("configured_live_strategy_status"),
             "has_completed_scan": bool(getattr(runner, "has_completed_scan", False)) if runner else False,
             "scan_count": int(getattr(runner, "scan_count", 0)) if runner else 0,
             "last_scan_status": getattr(runner, "last_scan_status", "NEVER_RUN") if runner else "NEVER_RUN",
@@ -840,6 +848,7 @@ def get_system_status() -> Dict[str, Any]:
             "background_worker_active": is_worker_alive,
             "is_stale": is_stale,
             "cycle_telemetry": live_info.get("cycle_telemetry", {}),
+            "protection_reconciliation_worker": live_info.get("protection_reconciliation_worker", {}),
         },
         "paper": {
             "enabled": cfg.paper.enabled,
@@ -1932,7 +1941,7 @@ class GroqAutoSetupRequest(BaseModel):
     execution_venue: str = "PAPER"
     auto_fire_limit_order: bool = False
     operator_confirmed: bool = False
-    strategy_id: str = "EMA20_RECLAIM_5M_V1"
+    strategy_id: str = "15M_SWEEP_RECLAIM_SMC"
     model_override: Optional[str] = None
     selected_setup: Optional[Dict[str, Any]] = None
 

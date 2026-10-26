@@ -406,6 +406,16 @@ class AutomatedTradeJournal:
                     except Exception:
                         pass
 
+                # Post-Loss Quantitative Autopsy Tagging
+                if "STOP_LOSS" in str(trade.exit_reason).upper() and "[AUTOPSY:" not in str(trade.notes):
+                    try:
+                        from src.ai.trade_memory_feedback import generate_post_loss_autopsy_tags
+                        tags = generate_post_loss_autopsy_tags(trade)
+                        if tags:
+                            trade.notes = f"{trade.notes}; [AUTOPSY: {', '.join(tags)}]".strip("; ")
+                    except Exception as autopsy_err:
+                        logger.warning(f"Failed to generate autopsy tags for {trade.trade_id}: {autopsy_err}")
+
         trade.updated_at_utc = datetime.now(timezone.utc).isoformat()
         self.record_trade_intent(trade)
 
@@ -654,6 +664,13 @@ class AutomatedTradeJournal:
                             inst = exchange_adapter._catalog_cache.get(tr.symbol.upper())
                             if inst and getattr(inst, "tick_size", None):
                                 tick_size = float(inst.tick_size)
+                        elif hasattr(exchange_adapter, "get_symbol_specs"):
+                            try:
+                                s_spec = exchange_adapter.get_symbol_specs(tr.symbol.upper())
+                                if s_spec and getattr(s_spec, "tick_size", None):
+                                    tick_size = float(s_spec.tick_size)
+                            except Exception:
+                                pass
                     raw_tp = float(tr.planned_take_profit_price or 0.0)
                     tp_price = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST") if raw_tp > 0 else 0.0
 
@@ -724,6 +741,11 @@ class AutomatedTradeJournal:
                             reconciliation_summary["details"].append(f"Cancelled sibling SL {tr.sl_order_id} after TP fill")
                         except Exception as e:
                             logger.warning("Failed to cancel sibling SL %s: %s", tr.sl_order_id, e)
+                    if exchange_adapter and hasattr(exchange_adapter, "cancel_all_open_orders"):
+                        try:
+                            exchange_adapter.cancel_all_open_orders(tr.symbol)
+                        except Exception as e:
+                            logger.warning("Failed to cancel open orders for %s after TP fill: %s", tr.symbol, e)
                 elif not is_sl_open and is_tp_open:
                     # SL order filled! Cancel sibling TP
                     tr.sl_status = "FILLED"
@@ -737,6 +759,11 @@ class AutomatedTradeJournal:
                             reconciliation_summary["details"].append(f"Cancelled sibling TP {tr.tp_order_id} after SL fill")
                         except Exception as e:
                             logger.warning("Failed to cancel sibling TP %s: %s", tr.tp_order_id, e)
+                    if exchange_adapter and hasattr(exchange_adapter, "cancel_all_open_orders"):
+                        try:
+                            exchange_adapter.cancel_all_open_orders(tr.symbol)
+                        except Exception as e:
+                            logger.warning("Failed to cancel open orders for %s after SL fill: %s", tr.symbol, e)
                 elif not is_sl_open and not is_tp_open and tr.status != TradeStatus.CLOSED.value:
                     # Fallback Order Status Query: query exchange directly via get_order
                     if exchange_adapter and hasattr(exchange_adapter, "get_order"):
@@ -827,6 +854,14 @@ class AutomatedTradeJournal:
             # F. Final Protection Status Update
             if tr.status == TradeStatus.CLOSED.value:
                 tr.protection_status = "CLOSED"
+                if "STOP_LOSS" in str(tr.exit_reason).upper() and "[AUTOPSY:" not in str(tr.notes):
+                    try:
+                        from src.ai.trade_memory_feedback import generate_post_loss_autopsy_tags
+                        tags = generate_post_loss_autopsy_tags(tr)
+                        if tags:
+                            tr.notes = f"{tr.notes}; [AUTOPSY: {', '.join(tags)}]".strip("; ")
+                    except Exception as autopsy_err:
+                        logger.warning(f"Failed to generate autopsy tags for {tr.trade_id}: {autopsy_err}")
             elif tr.sl_status == "PLACED" and tr.tp_status == "PLACED":
                 tr.protection_status = "PROTECTED"
             elif tr.sl_status == "PLACED" and tr.tp_status != "PLACED":

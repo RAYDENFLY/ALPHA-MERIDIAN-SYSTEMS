@@ -72,6 +72,7 @@ def reset_singletons():
 @pytest.fixture
 def mock_groq_llm(monkeypatch):
     """Mock Groq LLM API responses for stage 2 and stage 3."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
     def mock_groq_json(self, messages, model_override=None, max_tokens=400):
         content = " ".join([m.get("content", "") for m in messages])
         if "Analyze candidates and output Top 3" in content:
@@ -82,8 +83,8 @@ def mock_groq_llm(monkeypatch):
                         "symbol": "SOLUSDT",
                         "category": "LIQUIDITY_SWEEP_RECLAIM",
                         "score": 93.0,
-                        "thesis": "5m EMA20 Reclaim with strong RS",
-                        "verification_questions": ["Verify 5m reclaim", "Check bid depth"],
+                        "thesis": "15m Sweep Reclaim with strong RS",
+                        "verification_questions": ["Verify 15m sweep reclaim", "Check bid depth"],
                     },
                     {
                         "rank": 2,
@@ -110,10 +111,10 @@ def mock_groq_llm(monkeypatch):
                 "symbol": "SOLUSDT",
                 "direction": "LONG",
                 "order_type": "LIMIT",
-                "entry_price": 100.0,
-                "stop_loss_price": 99.45,
-                "take_profit_price": 101.25,
-                "notes": "SOL 5m EMA20 Reclaim",
+                "entry_price": 99.85,
+                "stop_loss_price": 98.70,
+                "take_profit_price": 102.44,
+                "notes": "SOL 15m Sweep Reclaim SMC",
                 "reasoning": "Verified structural reclaim confluence",
             }
 
@@ -138,30 +139,67 @@ def mock_aster_adapter():
     ]
 
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    # 35 15m candles with valid Bull Sweep and Reclaim structure in Discount
     candles = []
     for i in range(35):
-        t_ms = now_ms - (35 - i) * 300000
-        if 28 <= i <= 32:
+        t_ms = now_ms - (35 - i) * 900000
+        if i == 20:
             c = Candle(
-                symbol="SOLUSDT", timeframe="5m", timestamp_ms=t_ms,
-                open=99.8, high=99.9, low=99.45, close=99.50, volume=100.0,
-                close_time_ms=t_ms + 299999
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=99.0, high=99.5, low=97.0, close=98.0, volume=100.0,
+                close_time_ms=t_ms + 899999
+            )
+        elif 21 <= i <= 26:
+            c = Candle(
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=98.5, high=99.5, low=98.0, close=99.0, volume=100.0,
+                close_time_ms=t_ms + 899999
+            )
+        elif i == 33:
+            c = Candle(
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=98.0, high=98.5, low=96.5, close=97.2, volume=120.0,
+                close_time_ms=t_ms + 899999
             )
         elif i == 34:
             c = Candle(
-                symbol="SOLUSDT", timeframe="5m", timestamp_ms=t_ms,
-                open=99.70, high=100.10, low=99.65, close=100.0, volume=150.0,
-                close_time_ms=t_ms + 299999
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=98.5, high=100.1, low=96.8, close=100.0, volume=150.0,
+                close_time_ms=t_ms + 899999
             )
         else:
             c = Candle(
-                symbol="SOLUSDT", timeframe="5m", timestamp_ms=t_ms,
-                open=100.0, high=100.2, low=99.8, close=100.0, volume=100.0,
-                close_time_ms=t_ms + 299999
+                symbol="SOLUSDT", timeframe="15m", timestamp_ms=t_ms,
+                open=99.5, high=100.5, low=99.0, close=100.0, volume=100.0,
+                close_time_ms=t_ms + 899999
             )
         candles.append(c)
 
-    adapter.get_klines.return_value = candles
+    def mock_get_klines(symbol, timeframe="5m", limit=35):
+        if timeframe == "1h":
+            k1h = []
+            for j in range(limit or 72):
+                t_1h = now_ms - (72 - j) * 3600000
+                k1h.append(
+                    Candle(
+                        symbol=symbol,
+                        timeframe="1h",
+                        timestamp_ms=t_1h,
+                        open=100.0,
+                        high=125.0 if j == 40 else 102.0,
+                        low=90.0 if j == 45 else 98.0,
+                        close=100.0,
+                        volume=5000.0,
+                        close_time_ms=t_1h + 3599999,
+                    )
+                )
+            return k1h
+        return candles
+
+    adapter.get_klines.side_effect = mock_get_klines
+    adapter.get_premium_index.return_value = {"mark_price": 100.0, "last_funding_rate": "0.0001"}
+
+    adapter.get_klines.side_effect = mock_get_klines
     adapter.get_premium_index.return_value = {"last_funding_rate": "0.0001"}
     return adapter
 
@@ -322,7 +360,7 @@ def test_05_live_auto_executes_eligible_trade_without_ui_confirmation(test_setup
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,  # NO per-order confirmation!
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -347,7 +385,7 @@ def test_06_live_manual_still_requires_operator_confirmation(test_setup, mock_gr
         execution_mode=ExecutionMode.LIVE_MANUAL,
         auto_fire_limit_order=True,
         operator_confirmed=False,  # NOT confirmed yet
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -371,7 +409,7 @@ def test_07_paper_mode_never_calls_exchange_regardless_of_session(test_setup, mo
         execution_mode=ExecutionMode.PAPER,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -395,7 +433,7 @@ def test_08_daily_entries_limit_blocks_auto_execution(test_setup, mock_groq_llm)
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -420,7 +458,7 @@ def test_09_daily_loss_limit_halts_auto_execution(test_setup, mock_groq_llm):
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -439,7 +477,7 @@ def test_10_global_position_lock_prevents_multiple_concurrent_positions(test_set
 
     sess_mgr.start_session(operator_id="OPERATOR")
     coord.global_lock.acquire(
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         symbol="ETHUSDT",
         order_id="EXISTING_ORDER_1",
         state="OPEN",
@@ -450,7 +488,7 @@ def test_10_global_position_lock_prevents_multiple_concurrent_positions(test_set
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -474,7 +512,7 @@ def test_11_duplicate_order_detection(test_setup, mock_groq_llm):
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -486,7 +524,7 @@ def test_11_duplicate_order_detection(test_setup, mock_groq_llm):
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -550,7 +588,7 @@ def test_13_sl_placement_failure_immediately_cancels_entry(test_setup, mock_groq
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -582,7 +620,7 @@ def test_14_pause_and_resume_lifecycle(test_setup, mock_groq_llm):
         execution_mode=ExecutionMode.LIVE_AUTO,
         auto_fire_limit_order=True,
         operator_confirmed=False,
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         session_manager=sess_mgr,
         live_adapter=mock_live,
     )
@@ -600,11 +638,13 @@ def test_15_stop_session_leaves_open_position_managed_by_sl_tp(test_setup):
     """Stop session leaves existing open position managed by exchange SL/TP."""
     sess_mgr = test_setup["sess_mgr"]
     coord = test_setup["coord"]
+    mock_live = test_setup["mock_live"]
 
     ok, _, _ = sess_mgr.start_session(operator_id="OPERATOR")
     assert ok
+    mock_live.get_positions.return_value = [{"symbol": "SOLUSDT", "positionAmt": "0.15"}]
     coord.global_lock.acquire(
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         symbol="SOLUSDT",
         order_id="ORDER_FILLED_88",
         state="FILLED",
@@ -627,7 +667,7 @@ def test_16_emergency_kill_switch_action(test_setup):
     ok, _, _ = sess_mgr.start_session(operator_id="OPERATOR")
     assert ok
     coord.global_lock.acquire(
-        strategy_id="EMA20_RECLAIM_5M_V1",
+        strategy_id="15M_SWEEP_RECLAIM_SMC",
         symbol="SOLUSDT",
         order_id="RESTING_ENTRY_1",
         state="OPEN",

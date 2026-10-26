@@ -412,6 +412,10 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
         time_in_force: Optional[str] = "GTC",
         reduce_only: bool = False,
         client_order_id: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+        planned_entry_price: Optional[float] = None,
+        planned_stop_price: Optional[float] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """Submit new order to Aster DEX Futures V3 (Testnet or Mainnet when unlocked)."""
         if self.live_trading_locked:
@@ -419,6 +423,17 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
                 "Live trading is locked (live_trading_locked=True). "
                 "Real-money orders are forbidden until unlocked."
             )
+
+        # UNBYPASSABLE PRE-ORDER SUBMISSION GUARDS
+        if strategy_id == "EMA20_RECLAIM_5M_V1":
+            raise PermissionError("CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly forbidden from live execution.")
+
+        if planned_entry_price is not None and planned_stop_price is not None and planned_entry_price > 0:
+            actual_stop_pct = abs(planned_entry_price - planned_stop_price) / planned_entry_price * 100.0
+            if actual_stop_pct < 1.15:
+                raise ValueError(
+                    f"REJECTED_STOP_TOO_TIGHT_UNDER_1_15_PCT: Actual stop distance {actual_stop_pct:.3f}% is strictly below 1.15% floor"
+                )
 
         if self.is_testnet:
             if "testnet" not in self.base_url.lower():

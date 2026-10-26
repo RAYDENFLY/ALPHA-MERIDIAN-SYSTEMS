@@ -1,7 +1,7 @@
 """Live Micro-Account Strategy Revision Coordinator (LIVE_MICRO_V1).
 
 Coordinates:
-- 5m EMA20 Reclaim-Pullback (EMA20_RECLAIM_5M_V1) as LIVE candidate.
+- Configured LIVE_MICRO_V1 strategy as the live candidate; EMA20 remains available only when explicitly configured.
 - 1m Sweep & Reclaim (SWEEP_1M_V1) as SHADOW-only (asserts NEVER live).
 - Global Position Lock (max 1 concurrent position across all strategies).
 - Risk limits: $0.20 fixed dollar risk, $0.45 daily loss limit, 3 filled entries/day, 25% peak DD.
@@ -24,6 +24,7 @@ from src.risk.live_micro_sizing import LiveMicroSizingEngine, LiveMicroSizingRes
 from src.scheduler.attrition_tracker import ScannerAttritionTracker
 from src.strategy.ema20_reclaim_5m import EMA20ReclaimSetup, EMA20ReclaimStrategy
 from src.strategy.sweep_1m import Sweep1MSetup, Sweep1MStrategy
+from src.strategy.sweep_reclaim_15m import SweepReclaim15MSetup, SweepReclaim15MStrategy
 
 logger = logging.getLogger("src.scheduler.live_micro_runner")
 
@@ -50,6 +51,11 @@ class LiveMicroCoordinator:
 
         # Strategies
         self.ema_strategy = EMA20ReclaimStrategy(
+            risk_cfg=self.config.risk,
+            costs_cfg=self.config.costs,
+            sizing_engine=self.sizing_engine,
+        )
+        self.sweep_reclaim_strategy = SweepReclaim15MStrategy(
             risk_cfg=self.config.risk,
             costs_cfg=self.config.costs,
             sizing_engine=self.sizing_engine,
@@ -184,6 +190,16 @@ class LiveMicroCoordinator:
         if realized_pnl < 0:
             self.daily_realized_loss += abs(realized_pnl)
 
+        # Clean up any resting open orders on the closed symbol
+        if self.exchange and hasattr(self.exchange, "cancel_all_open_orders"):
+            active_sym = getattr(self.global_lock, "active_symbol", None)
+            if active_sym:
+                try:
+                    self.exchange.cancel_all_open_orders(active_sym)
+                    logger.info("Purged remaining open orders on %s upon position close.", active_sym)
+                except Exception as clean_err:
+                    logger.warning("Failed to cancel open orders on %s after close: %s", active_sym, clean_err)
+
         # Re-evaluate kill switch
         self.check_risk_limits()
 
@@ -249,7 +265,7 @@ class LiveMicroCoordinator:
         market_snapshots: Dict[str, Dict[str, Any]],
         cycle_id: Optional[str] = None,
     ) -> ScannerAttritionTracker:
-        """Execute 5m scan cycle for EMA20_RECLAIM_5M_V1 through the 11-stage attrition pipeline."""
+        """Execute the configured live strategy through the 11-stage attrition pipeline."""
         tracker = ScannerAttritionTracker(cycle_id=cycle_id)
 
         # Stage 1: Universe
@@ -312,20 +328,37 @@ class LiveMicroCoordinator:
         passed_ranking = list(passed_volatility)
         tracker.record_stage("Candidate ranking", passed_count=len(passed_ranking))
 
-        # Stage 7: Strategy trigger (EMA20_RECLAIM_5M_V1)
-        triggered_candidates: List[Tuple[str, EMA20ReclaimSetup]] = []
+        # Stage 7: Strategy trigger. Strictly requires 15M_SWEEP_RECLAIM_SMC.
+        active_strat_id = getattr(getattr(self.config, "strategy", None), "live_strategy_id", None)
+        if active_strat_id == "EMA20_RECLAIM_5M_V1":
+            raise PermissionError("CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly prohibited from live execution. Only 15M_SWEEP_RECLAIM_SMC is authorized.")
+        if active_strat_id != "15M_SWEEP_RECLAIM_SMC":
+            raise ValueError(f"Unsupported configured live strategy: {active_strat_id}")
+        triggered_candidates: List[Tuple[str, Any]] = []
         for sym in passed_ranking:
             snap = market_snapshots[sym]
             step_size = snap.get("step_size", 0.01)
             min_notional = snap.get("min_notional", 5.0)
 
-            setup, reason = self.ema_strategy.evaluate(
-                symbol=sym,
-                candles_5m=snap["candles_5m"],
-                step_size=step_size,
-                min_notional=min_notional,
-                account_equity=self.current_equity,
-            )
+            if active_strat_id == "15M_SWEEP_RECLAIM_SMC":
+                candles_15m = snap.get("candles_15m") or snap.get("candles_5m") or []
+                setup, reason = self.sweep_15m_strategy.evaluate(
+                    symbol=sym,
+                    candles_15m=candles_15m,
+                    tick_size=snap.get("tick_size", 0.01),
+                    step_size=step_size,
+                    min_notional=min_notional,
+                    account_equity=self.current_equity,
+                    dealing_range_position_pct=snap.get("dealing_range_position_pct", 50.0),
+                )
+            else:
+                setup, reason = self.ema_strategy.evaluate(
+                    symbol=sym,
+                    candles_5m=snap.get("candles_5m", []),
+                    step_size=step_size,
+                    min_notional=min_notional,
+                    account_equity=self.current_equity,
+                )
             if not setup:
                 if "STOP_DISTANCE" in reason:
                     tracker.log_symbol_rejection(sym, "Cost gate", reason)
@@ -340,7 +373,7 @@ class LiveMicroCoordinator:
         tracker.record_stage("Strategy trigger", passed_count=len(triggered_candidates))
 
         # Stage 8: Risk gate
-        passed_risk_gate: List[Tuple[str, EMA20ReclaimSetup]] = []
+        passed_risk_gate: List[Tuple[str, Any]] = []
         risk_ok, risk_reason = self.check_risk_limits()
         if not risk_ok:
             for sym, _ in triggered_candidates:
@@ -373,6 +406,46 @@ class LiveMicroCoordinator:
         # Stage 11: Executor
         executable_signals: List[Dict[str, Any]] = []
         for sym, setup in passed_global_lock:
+            # Check Scar-Tissue Feedback Gates (Revenge Lock, Stop Escalation, Streak Cooldown)
+            try:
+                from src.ai.trade_memory_feedback import TradeMemoryFeedbackEngine
+                feedback_eng = TradeMemoryFeedbackEngine(journal=getattr(self, "journal", None), db=getattr(self, "db", None))
+                mem_gate = feedback_eng.check_pre_trade_memory_gates(
+                    symbol=sym,
+                    side=setup.direction.value if hasattr(setup.direction, "value") else str(setup.direction),
+                    entry_price=setup.entry_price,
+                    planned_stop_pct=setup.stop_distance_pct,
+                )
+                if not mem_gate.passed:
+                    tracker.log_symbol_rejection(sym, "Executor", f"Scar-Tissue Gate: {mem_gate.rejection_reason}")
+                    continue
+            except Exception as gate_err:
+                logger.warning(f"Note checking memory feedback gate: {gate_err}")
+
+            # Check Hard Dashboard Confluence Gates (Sweep + Order Flow + Anti-Repeat Memory + Breathing Room)
+            try:
+                from src.intelligence.dashboard_confluence import evaluate_dashboard_confluence_gates, build_web_intelligence_payload
+                from src.intelligence.coin_inspector import CoinInspectorService
+                inspector = CoinInspectorService(adapter=self.exchange)
+                insp_snap = inspector.inspect_coin(sym)
+                c_intel = build_web_intelligence_payload(
+                    symbol=sym,
+                    inspector_snapshot=insp_snap,
+                    recent_closed_trades=feedback_eng.get_recent_live_trades(limit=10, mode="LIVE", closed_only=True),
+                )
+                conf_res = evaluate_dashboard_confluence_gates(
+                    symbol=sym,
+                    direction=setup.direction.value if hasattr(setup.direction, "value") else str(setup.direction),
+                    entry_price=setup.entry_price,
+                    stop_loss_price=setup.stop_loss,
+                    intelligence=c_intel,
+                )
+                if not conf_res.passed:
+                    tracker.log_symbol_rejection(sym, "Executor", f"Dashboard Confluence Gate: {conf_res.rejection_reason}")
+                    continue
+            except Exception as conf_err:
+                logger.warning(f"Note checking dashboard confluence gate: {conf_err}")
+
             # Check duplicate signals
             is_dup, dup_reason = self.global_lock.check_duplicate_signal(sym, setup.strategy_id, setup.direction.value)
             if is_dup:

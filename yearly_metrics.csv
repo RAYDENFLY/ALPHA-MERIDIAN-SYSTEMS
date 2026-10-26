@@ -1,0 +1,6 @@
+period,status,reason
+2022,UNAVAILABLE,No required local 15m/1h history
+2023,UNAVAILABLE,No required local 15m/1h history
+2024,UNAVAILABLE,No required local 15m/1h history
+2025,PARTIAL,Relevant data begins 2025-10-14/2025-10-20
+2026,PARTIAL,Data available through 2026-10-26 but not full OOS design

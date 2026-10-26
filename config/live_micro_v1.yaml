@@ -12,7 +12,7 @@ risk:
   margin_mode: isolated
 
 strategy:
-  live_strategy_id: EMA20_RECLAIM_5M_V1
+  live_strategy_id: 15M_SWEEP_RECLAIM_SMC
   shadow_strategy_id: SWEEP_1M_V1
   shadow_strategy_live_enabled: false
 
@@ -26,5 +26,5 @@ costs:
   slippage_rate: 0.0005
   funding_fee_rate_est: 0.0001
   min_net_rr: 1.50
-  min_stop_distance_pct: 0.0040  # 0.40%
-  max_stop_distance_pct: 0.0080  # 0.80%
+  min_stop_distance_pct: 0.0115  # 1.15% (Strict Structural Safety Floor)
+  max_stop_distance_pct: 0.0150  # 1.50%

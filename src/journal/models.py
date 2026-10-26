@@ -112,7 +112,7 @@ class AutomatedTradeRecord:
     trade_id: str
     exchange: str = "Aster DEX"
     symbol: str = ""
-    strategy_id: str = "EMA20_RECLAIM_5M_V1"
+    strategy_id: str = "15M_SWEEP_RECLAIM_SMC"
     config_version: str = "LIVE_MICRO_V1"
     signal_id: str = ""
     order_id: str = ""

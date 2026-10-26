@@ -119,6 +119,17 @@ class AsterDexAdapter(BaseExchangeAdapter):
         """Retrieve specifications for a given symbol."""
         if not self._specs_cache:
             self.get_exchange_info()
+        # UNBYPASSABLE PRE-ORDER SUBMISSION GUARDS
+        if strategy_id == "EMA20_RECLAIM_5M_V1":
+            raise PermissionError("CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly forbidden from live execution.")
+
+        if planned_entry_price is not None and planned_stop_price is not None and planned_entry_price > 0:
+            actual_stop_pct = abs(planned_entry_price - planned_stop_price) / planned_entry_price * 100.0
+            if actual_stop_pct < 1.15:
+                raise ValueError(
+                    f"REJECTED_STOP_TOO_TIGHT_UNDER_1_15_PCT: Actual stop distance {actual_stop_pct:.3f}% is strictly below 1.15% floor"
+                )
+
         clean_symbol = symbol.upper().replace(".P", "")
         if clean_symbol not in self._specs_cache:
             raise SymbolNotFoundError(f"Symbol '{clean_symbol}' not found on Aster DEX perpetual market.")
@@ -340,8 +351,23 @@ class AsterDexAdapter(BaseExchangeAdapter):
         client_order_id: Optional[str] = None,
         reduce_only: bool = False,
         close_position: bool = False,
+        strategy_id: Optional[str] = None,
+        planned_entry_price: Optional[float] = None,
+        planned_stop_price: Optional[float] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """Submit a new order to Aster DEX."""
+        # UNBYPASSABLE PRE-ORDER SUBMISSION GUARDS
+        if strategy_id == "EMA20_RECLAIM_5M_V1":
+            raise PermissionError("CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly forbidden from live execution.")
+
+        if planned_entry_price is not None and planned_stop_price is not None and planned_entry_price > 0:
+            actual_stop_pct = abs(planned_entry_price - planned_stop_price) / planned_entry_price * 100.0
+            if actual_stop_pct < 1.15:
+                raise ValueError(
+                    f"REJECTED_STOP_TOO_TIGHT_UNDER_1_15_PCT: Actual stop distance {actual_stop_pct:.3f}% is strictly below 1.15% floor"
+                )
+
         clean_symbol = symbol.upper().replace(".P", "")
         payload: Dict[str, Any] = {
             "symbol": clean_symbol,

@@ -1,0 +1,7 @@
+variant,status,trade_count,net_pnl,reason
+full_strategy,NOT_RUN,,,No faithful research harness
+without_dealing_range_locks,NOT_RUN,,,No faithful research harness
+without_sweep_reclaim,NOT_RUN,,,No faithful research harness
+without_htf_context,NOT_RUN,,,No faithful research harness
+without_rsi,NOT_RUN,,,No faithful research harness
+without_wick_ratio,NOT_RUN,,,No faithful research harness

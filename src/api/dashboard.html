@@ -887,7 +887,8 @@
                         <!-- Strategy Selector -->
                         <select id="journalStrategySelect" onchange="handleJournalStrategyChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
                             <option value="ALL">All Strategies</option>
-                            <option value="EMA20_RECLAIM_5M_V1">EMA20_RECLAIM_5M_V1 (LIVE)</option>
+                            <option value="15M_SWEEP_RECLAIM_SMC" selected>15M_SWEEP_RECLAIM_SMC (LIVE)</option>
+                            <option value="EMA20_RECLAIM_5M_V1">EMA20_RECLAIM_5M_V1 (LEGACY)</option>
                             <option value="SWEEP_1M_V1">SWEEP_1M_V1 (SHADOW)</option>
                             <option value="MODEL_A">MODEL_A</option>
                             <option value="MODEL_B">MODEL_B</option>
@@ -4199,7 +4200,7 @@
                         <span id="groqMainnetWarningTitle">MAINNET LIVE EXECUTION MODE (ASTER DEX)</span>
                     </div>
                     <p id="groqMainnetWarningDesc" class="text-[11px] text-rose-200/90 leading-relaxed font-sans">
-                        Orders placed in LIVE mode use real USDT funds with ISOLATED 10x leverage and strict $0.20 dollar risk cap under LIVE_MICRO_V1 (EMA20_RECLAIM_5M_V1 authorized).
+                        Orders placed in LIVE mode use real USDT funds with ISOLATED 10x leverage and strict $0.20 dollar risk cap under LIVE_MICRO_V1 (15M_SWEEP_RECLAIM_SMC authorized).
                     </p>
                 </div>
 
@@ -4268,7 +4269,7 @@
                         </div>
                         <div class="p-2 rounded bg-slate-950/60 border border-slate-800 col-span-2 sm:col-span-1">
                             <span class="text-slate-500 block text-[10px]">Approved Strategy:</span>
-                            <span class="font-bold text-purple-400">EMA20_RECLAIM_5M_V1</span>
+                            <span class="font-bold text-purple-400">15M_SWEEP_RECLAIM_SMC</span>
                         </div>
                     </div>
 

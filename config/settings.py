@@ -427,7 +427,7 @@ class LiveMicroRiskConfig(BaseModel):
 
 
 class LiveMicroStrategyConfig(BaseModel):
-    live_strategy_id: str = Field(default="EMA20_RECLAIM_5M_V1")
+    live_strategy_id: str = Field(default="15M_SWEEP_RECLAIM_SMC")
     shadow_strategy_id: str = Field(default="SWEEP_1M_V1")
     shadow_strategy_live_enabled: bool = Field(default=False)
 
@@ -462,7 +462,7 @@ class LiveMicroCostsConfig(BaseModel):
     funding_fee_rate_est: float = Field(default=0.0001)
     min_net_rr: float = Field(default=1.50)
     min_stop_distance_pct: float = Field(default=0.0040)
-    max_stop_distance_pct: float = Field(default=0.0080)
+    max_stop_distance_pct: float = Field(default=0.0150)
 
 
 class LiveMicroV1Config(BaseModel):

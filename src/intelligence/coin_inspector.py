@@ -654,7 +654,7 @@ class CoinInspectorService:
         tick_size: float = 0.0,
     ) -> Dict[str, Any]:
         """Compute L2 depth, walls, and opposing imbalance ratio."""
-        if not book or not book.bids or not book.asks:
+        if not book or not getattr(book, "bids", None) or not getattr(book, "asks", None):
             return {
                 "spread_bps": 0.0,
                 "bid_depth_top20_usdt": 0.0,
@@ -665,40 +665,58 @@ class CoinInspectorService:
                 "l2_gate_passed": False,
             }
 
-        best_bid = book.bids[0].price
-        best_ask = book.asks[0].price
+        try:
+            bids = list(book.bids)
+            asks = list(book.asks)
+        except Exception:
+            bids = []
+            asks = []
+
+        if not bids or not asks:
+            return {
+                "spread_bps": 0.0,
+                "bid_depth_top20_usdt": 0.0,
+                "ask_depth_top20_usdt": 0.0,
+                "orderbook_imbalance_ratio": 0.5,
+                "nearest_bid_wall": None,
+                "nearest_ask_wall": None,
+                "l2_gate_passed": False,
+            }
+
+        best_bid = float(getattr(bids[0], "price", 0.0))
+        best_ask = float(getattr(asks[0], "price", 0.0))
         spread_bps = round(((best_ask - best_bid) / mid_price * 10000.0), 2) if mid_price > 0 else 0.0
 
-        top20_bids = book.bids[:20]
-        top20_asks = book.asks[:20]
+        top20_bids = bids[:20]
+        top20_asks = asks[:20]
 
-        bid_depth = sum(b.price * b.size for b in top20_bids)
-        ask_depth = sum(a.price * a.size for a in top20_asks)
+        bid_depth = sum(float(getattr(b, "price", 0.0)) * float(getattr(b, "size", 0.0)) for b in top20_bids)
+        ask_depth = sum(float(getattr(a, "price", 0.0)) * float(getattr(a, "size", 0.0)) for a in top20_asks)
         total_depth = bid_depth + ask_depth
         imbalance = round(bid_depth / total_depth, 3) if total_depth > 0 else 0.50
 
         # Nearest Walls (levels with size >= 2x average)
-        avg_bid_val = (bid_depth / len(top20_bids)) if top20_bids else 1.0
+        avg_bid_val = (bid_depth / len(top20_bids)) if len(top20_bids) > 0 else 1.0
         bid_wall = None
         for b in top20_bids:
-            val = b.price * b.size
+            val = float(getattr(b, "price", 0.0)) * float(getattr(b, "size", 0.0))
             if val >= avg_bid_val * 2.0 and val >= 1000.0:
-                dist_pct = round(abs(mid_price - b.price) / mid_price * 100.0, 2)
+                dist_pct = round(abs(mid_price - float(getattr(b, "price", 0.0))) / mid_price * 100.0, 2)
                 bid_wall = {
-                    "price": round_price_dyn(b.price, price_prec, tick_size),
+                    "price": round_price_dyn(float(getattr(b, "price", 0.0)), price_prec, tick_size),
                     "size_usdt": round(val, 2),
                     "distance_pct": dist_pct,
                 }
                 break
 
-        avg_ask_val = (ask_depth / len(top20_asks)) if top20_asks else 1.0
+        avg_ask_val = (ask_depth / len(top20_asks)) if len(top20_asks) > 0 else 1.0
         ask_wall = None
         for a in top20_asks:
-            val = a.price * a.size
+            val = float(getattr(a, "price", 0.0)) * float(getattr(a, "size", 0.0))
             if val >= avg_ask_val * 2.0 and val >= 1000.0:
-                dist_pct = round(abs(a.price - mid_price) / mid_price * 100.0, 2)
+                dist_pct = round(abs(float(getattr(a, "price", 0.0)) - mid_price) / mid_price * 100.0, 2)
                 ask_wall = {
-                    "price": round_price_dyn(a.price, price_prec, tick_size),
+                    "price": round_price_dyn(float(getattr(a, "price", 0.0)), price_prec, tick_size),
                     "size_usdt": round(val, 2),
                     "distance_pct": dist_pct,
                 }
@@ -1186,6 +1204,7 @@ class CoinInspectorService:
         if venue not in ("PAPER", "LIVE"):
             venue = "PAPER"
 
+        strategy_id = str(payload.get("strategy_id", "15M_SWEEP_RECLAIM_SMC") or "15M_SWEEP_RECLAIM_SMC").strip()
         notes = str(payload.get("notes", "")).strip()
 
         # Specs and rounding
@@ -1258,6 +1277,39 @@ class CoinInspectorService:
             except Exception as err:
                 logger.warning(f"Aster DEX set_leverage note: {err}")
 
+            # 2b. Clean up any stale open orders on symbol before placing new entry and bracket!
+            try:
+                if hasattr(live_adapter, "cancel_all_open_orders"):
+                    live_adapter.cancel_all_open_orders(raw_symbol)
+            except Exception as clean_err:
+                logger.warning(f"Error cancelling stale open orders on {raw_symbol}: {clean_err}")
+
+            # UNBYPASSABLE PRE-ORDER SUBMISSION GUARDS
+            target_strategy = strategy_id or "15M_SWEEP_RECLAIM_SMC"
+            if target_strategy in ("EMA20_RECLAIM_5M_V1", "SWEEP_1M_V1"):
+                raise PermissionError(f"CRITICAL SECURITY INVARIANT: {target_strategy} is strictly prohibited from live execution.")
+
+            actual_stop_pct = abs(entry_price - stop_loss_price) / (entry_price + 1e-9) * 100.0
+            if actual_stop_pct < 1.15:
+                raise ValueError(f"REJECTED_STOP_TOO_TIGHT_UNDER_1_15_PCT: Actual stop distance {actual_stop_pct:.3f}% is strictly below 1.15% floor")
+
+            # Scar-Tissue Pre-Trade Memory Gates (Revenge Lock & Escalation)
+            try:
+                from src.ai.trade_memory_feedback import TradeMemoryFeedbackEngine
+                engine = TradeMemoryFeedbackEngine(journal=journal)
+                mem_gate = engine.check_pre_trade_memory_gates(
+                    symbol=raw_symbol,
+                    side=direction,
+                    entry_price=entry_price,
+                    planned_stop_pct=actual_stop_pct,
+                )
+                if not mem_gate.passed:
+                    raise ValueError(f"MISTAKE_LEARNING_GATE: {mem_gate.rejection_reason}")
+            except (ValueError, PermissionError):
+                raise
+            except Exception as mem_err:
+                logger.warning(f"Note during scar tissue gate check: {mem_err}")
+
             # 3. Submit Entry Order (LIMIT or MARKET)
             order_side = "BUY" if direction == "LONG" else "SELL"
             close_side = "SELL" if direction == "LONG" else "BUY"
@@ -1269,6 +1321,9 @@ class CoinInspectorService:
                 quantity=final_qty,
                 price=entry_price if order_type == "LIMIT" else None,
                 time_in_force="GTC" if order_type == "LIMIT" else None,
+                strategy_id=target_strategy,
+                planned_entry_price=entry_price,
+                planned_stop_price=stop_loss_price,
             )
             order_id = str(live_order_resp.get("orderId", f"LIV_{raw_symbol}_{now_ms}"))
 

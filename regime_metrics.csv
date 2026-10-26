@@ -1,0 +1,6 @@
+strategy,regime,status,reason
+15M_SWEEP_RECLAIM_SMC,BULL,NOT_RUN,Insufficient validated history
+15M_SWEEP_RECLAIM_SMC,BEAR,NOT_RUN,Insufficient validated history
+15M_SWEEP_RECLAIM_SMC,SIDEWAYS,NOT_RUN,Insufficient validated history
+15M_SWEEP_RECLAIM_SMC,HIGH_VOLATILITY,NOT_RUN,Insufficient validated history
+15M_SWEEP_RECLAIM_SMC,LOW_VOLATILITY,NOT_RUN,Insufficient validated history

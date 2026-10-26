@@ -9,7 +9,7 @@ Strict Invariants:
 3. Server maintains session state. Client booleans are never trusted.
 4. Process restarts start in INACTIVE state (never silently resume LIVE_AUTO).
 5. Explicit operator controls: Start, Pause, Resume, Stop, and Emergency Kill Switch.
-6. Only EMA20_RECLAIM_5M_V1 is authorized for live execution. SWEEP_1M_V1 is strictly shadow-only.
+6. The configured LIVE_MICRO_V1 live strategy is the sole authority for live execution. SWEEP_1M_V1 is strictly shadow-only.
 7. Risk limits are invariant: $0.20 fixed dollar risk, $7.00 margin at 10x isolated leverage,
    max 1 concurrent global position, daily loss limit $0.45, 3 filled entries/day, 25% peak DD.
 """
@@ -218,8 +218,21 @@ class LiveAutoSessionManager:
         self._scanner_thread: Optional[threading.Thread] = None
         self._reconciliation_thread: Optional[threading.Thread] = None
         self._reconciliation_stop_event = threading.Event()
+        self._reconciliation_started_event = threading.Event()
         self._reconciliation_mutex = threading.Lock()
         self._reconciliation_interval_sec: float = 15.0
+        self._reconciliation_worker_enabled: bool = True
+        self._reconciliation_worker_started_utc: Optional[str] = None
+        self._reconciliation_worker_start_requested_utc: Optional[str] = None
+        self._reconciliation_worker_state: str = "STOPPED"
+        self._reconciliation_last_cycle_started_utc: Optional[str] = None
+        self._reconciliation_last_cycle_completed_utc: Optional[str] = None
+        self._reconciliation_cycle_count: int = 0
+        self._reconciliation_exchange_count: int = 0
+        self._reconciliation_skipped_count: int = 0
+        self._reconciliation_failed_count: int = 0
+        self._reconciliation_last_cycle_status: str = "IDLE"
+        self._reconciliation_last_result: Dict[str, Any] = {}
         self._scan_interval_sec: float = 60.0
         self._last_scan_utc: Optional[str] = None
         self._cycle_status: str = "IDLE"
@@ -460,7 +473,7 @@ class LiveAutoSessionManager:
                         )
                     if not self.coordinator.global_lock.is_locked:
                         self.coordinator.global_lock.acquire(
-                            strategy_id="EMA20_RECLAIM_5M_V1",
+                            strategy_id="15M_SWEEP_RECLAIM_SMC",
                             symbol=active_pos_symbol,
                             order_id="EXCHANGE_RECOVERED_POS",
                             state=lock_state,
@@ -482,7 +495,7 @@ class LiveAutoSessionManager:
                     first_oid = str(open_orders[0].get("orderId", "EXCHANGE_RESTING_ORDER"))
                     if not self.coordinator.global_lock.is_locked:
                         self.coordinator.global_lock.acquire(
-                            strategy_id="EMA20_RECLAIM_5M_V1",
+                            strategy_id="15M_SWEEP_RECLAIM_SMC",
                             symbol=first_sym,
                             order_id=first_oid,
                             state="PENDING_ENTRY",
@@ -566,10 +579,33 @@ class LiveAutoSessionManager:
         """Link GroqAutoTrader instance for automated background scanning."""
         self.autotrader = autotrader
 
+    def get_configured_live_strategy_id(self) -> Tuple[Optional[str], str]:
+        """Return the configured live strategy only when its live implementation is available."""
+        coordinator = getattr(self, "coordinator", None)
+        strategy_cfg = getattr(getattr(coordinator, "config", None), "strategy", None)
+        strategy_id = str(getattr(strategy_cfg, "live_strategy_id", "")).strip().upper()
+        if not strategy_id:
+            return None, "LIVE strategy is not configured"
+        if strategy_id == "EMA20_RECLAIM_5M_V1":
+            return None, "CRITICAL SECURITY INVARIANT: EMA20_RECLAIM_5M_V1 is strictly prohibited from live execution. Authorized strategy is 15M_SWEEP_RECLAIM_SMC."
+        if strategy_id != "15M_SWEEP_RECLAIM_SMC":
+            return None, f"Strategy {strategy_id} is not authorized for live execution. Only 15M_SWEEP_RECLAIM_SMC is permitted."
+        implementation = getattr(coordinator, "sweep_reclaim_strategy", None)
+        if implementation is None or getattr(implementation, "strategy_id", "") != strategy_id or not bool(getattr(implementation, "is_live", False)):
+            return None, f"Configured live strategy implementation unavailable or not live: {strategy_id}"
+        return strategy_id, "OK"
+
     def start_scanner(self, interval_seconds: float = 60.0) -> None:
         """Start the automatic background scanner thread if not already running."""
         with self._mutex:
+            if self.mode == ExecutionMode.LIVE_AUTO and not self.is_authorized_and_active():
+                logger.warning("LIVE_AUTO workers not started: session is not authorized and active.")
+                return
             if self._scanner_running:
+                return
+            if self._reconciliation_thread and self._reconciliation_thread.is_alive():
+                self._reconciliation_worker_state = "START_BLOCKED_OLD_WORKER_ALIVE"
+                logger.warning("LIVE protection worker restart blocked: previous worker is still alive.")
                 return
             self._scanner_running = True
             self._scanner_stop_event.clear()
@@ -580,24 +616,67 @@ class LiveAutoSessionManager:
                 daemon=True,
             )
             self._scanner_thread.start()
-            self._reconciliation_stop_event.clear()
-            self._reconciliation_thread = threading.Thread(
-                target=self._reconciliation_loop,
-                name="LiveProtectionReconciliationThread",
-                daemon=True,
-            )
-            self._reconciliation_thread.start()
+            if not self._reconciliation_thread or not self._reconciliation_thread.is_alive():
+                self._reconciliation_stop_event.clear()
+                self._reconciliation_started_event.clear()
+                self._reconciliation_thread = threading.Thread(
+                    target=self._reconciliation_loop,
+                    name="LiveProtectionReconciliationThread",
+                    daemon=True,
+                )
+                self._reconciliation_worker_start_requested_utc = datetime.now(timezone.utc).isoformat()
+                self._reconciliation_worker_started_utc = None
+                self._reconciliation_worker_state = "STARTING"
+                try:
+                    self._reconciliation_thread.start()
+                except Exception:
+                    self._reconciliation_worker_state = "START_FAILED"
+                    self._reconciliation_thread = None
+                    raise
             logger.info("LIVE_AUTO background scanner thread started (interval: %.1fs).", interval_seconds)
 
-    def stop_scanner(self) -> None:
+    def stop_scanner(self) -> Dict[str, Any]:
         """Stop the automatic background scanner thread."""
         with self._mutex:
-            if not self._scanner_running:
-                return
+            scanner_was_running = self._scanner_running
             self._scanner_running = False
             self._scanner_stop_event.set()
-            self._reconciliation_stop_event.set()
+            recon_thread = self._reconciliation_thread
+            worker_was_alive = bool(recon_thread and recon_thread.is_alive())
+            if worker_was_alive:
+                self._reconciliation_stop_event.set()
+            if recon_thread and recon_thread.is_alive() and recon_thread is not threading.current_thread():
+                recon_thread.join(timeout=max(1.0, self._reconciliation_interval_sec + 1.0))
+            worker_alive = bool(recon_thread and recon_thread.is_alive())
+            self._reconciliation_worker_state = "STOP_TIMEOUT" if worker_alive else "STOPPED"
             logger.info("LIVE_AUTO background scanner thread stopping...")
+            return {
+                "scanner_was_running": scanner_was_running,
+                "worker_was_alive": worker_was_alive,
+                "worker_alive": worker_alive,
+                "shutdown_complete": not worker_alive,
+                "lifecycle_state": self._reconciliation_worker_state,
+            }
+
+    def get_reconciliation_worker_status(self) -> Dict[str, Any]:
+        thread = getattr(self, "_reconciliation_thread", None)
+        return {
+            "worker_enabled": bool(getattr(self, "_reconciliation_worker_enabled", True)),
+            "worker_started": bool(getattr(self, "_reconciliation_worker_started_utc", None)),
+            "worker_start_requested": bool(getattr(self, "_reconciliation_worker_start_requested_utc", None)),
+            "worker_start_requested_utc": getattr(self, "_reconciliation_worker_start_requested_utc", None),
+            "worker_started_utc": getattr(self, "_reconciliation_worker_started_utc", None),
+            "worker_alive": bool(thread and thread.is_alive()),
+            "worker_lifecycle_state": getattr(self, "_reconciliation_worker_state", "STOPPED"),
+            "last_cycle_started_utc": getattr(self, "_reconciliation_last_cycle_started_utc", None),
+            "last_cycle_completed_utc": getattr(self, "_reconciliation_last_cycle_completed_utc", None),
+            "cycle_count": int(getattr(self, "_reconciliation_cycle_count", 0)),
+            "exchange_reconciliation_count": int(getattr(self, "_reconciliation_exchange_count", 0)),
+            "skipped_cycle_count": int(getattr(self, "_reconciliation_skipped_count", 0)),
+            "failed_cycle_count": int(getattr(self, "_reconciliation_failed_count", 0)),
+            "last_cycle_status": getattr(self, "_reconciliation_last_cycle_status", "IDLE"),
+            "last_cycle_result": dict(getattr(self, "_reconciliation_last_result", {})),
+        }
 
     def _run_reconciliation_once(self) -> Dict[str, Any]:
         """Reconcile live entries/protection and authorize deferred TP placement once.
@@ -608,7 +687,14 @@ class LiveAutoSessionManager:
         if not self._reconciliation_mutex.acquire(blocking=False):
             return {"status": "SKIPPED_OVERLAP"}
         try:
+            started_event = getattr(self, "_reconciliation_started_event", None)
+            if started_event is not None and not started_event.is_set():
+                self._reconciliation_skipped_count += 1
+                return {"status": "SKIPPED_NOT_STARTED"}
+            self._reconciliation_last_cycle_started_utc = datetime.now(timezone.utc).isoformat()
+            self._reconciliation_last_cycle_status = "RUNNING"
             if not self.is_authorized_and_active() or self.mode not in (ExecutionMode.LIVE_AUTO, ExecutionMode.LIVE_MANUAL):
+                self._reconciliation_skipped_count += 1
                 return {"status": "SKIPPED_SESSION_INACTIVE"}
             adapter = getattr(self, "exchange_adapter", None)
             journal = getattr(self, "automated_journal", None)
@@ -630,6 +716,9 @@ class LiveAutoSessionManager:
                 "lock_state": self.coordinator.global_lock.state if self.coordinator else "IDLE",
                 "lock_symbol": self.coordinator.global_lock.active_symbol if self.coordinator else None,
             }
+            self._reconciliation_last_cycle_status = "SUCCESS"
+            self._reconciliation_last_result = dict(summary)
+            self._reconciliation_exchange_count = getattr(self, "_reconciliation_exchange_count", 0) + 1
             return summary
         except Exception as exc:
             self._last_reconciliation = {
@@ -642,17 +731,29 @@ class LiveAutoSessionManager:
                 "reconciliation_error": str(exc)[:300],
             }
             logger.warning("Deferred TP reconciliation unavailable: %s", exc)
-            return {"status": "UNVERIFIED", "error": str(exc)[:300]}
+            result = {"status": "UNVERIFIED", "error": str(exc)[:300]}
+            self._reconciliation_last_cycle_status = "UNVERIFIED"
+            self._reconciliation_last_result = result
+            self._reconciliation_failed_count = getattr(self, "_reconciliation_failed_count", 0) + 1
+            return result
         finally:
+            self._reconciliation_cycle_count = getattr(self, "_reconciliation_cycle_count", 0) + 1
+            self._reconciliation_last_cycle_completed_utc = datetime.now(timezone.utc).isoformat()
             self._reconciliation_mutex.release()
 
     def _reconciliation_loop(self) -> None:
         """Periodically reconcile filled entries and deferred protection."""
+        self._reconciliation_started_event.set()
+        self._reconciliation_worker_started_utc = datetime.now(timezone.utc).isoformat()
+        self._reconciliation_worker_state = "RUNNING"
         while not self._reconciliation_stop_event.is_set():
             if not self.is_authorized_and_active():
                 break
             self._run_reconciliation_once()
             self._reconciliation_stop_event.wait(timeout=self._reconciliation_interval_sec)
+        self._reconciliation_last_cycle_status = "STOPPED"
+        if self._reconciliation_worker_state != "STOP_TIMEOUT":
+            self._reconciliation_worker_state = "STOPPED"
 
     def _scanner_loop(self) -> None:
         """Background scanning loop: periodically discovers candidates and auto-executes in LIVE_AUTO."""
@@ -670,6 +771,9 @@ class LiveAutoSessionManager:
                     logger.critical("Scan cycle skipped: new LIVE entries are paused pending protection reconciliation.")
                 elif self.autotrader:
                     self._cycle_status = "RUNNING"
+                    configured_strategy_id, strategy_reason = self.get_configured_live_strategy_id()
+                    if not configured_strategy_id:
+                        raise RuntimeError(f"LIVE_AUTO entry blocked: {strategy_reason}")
                     risk_ok, risk_msg = (True, "")
                     if self.coordinator:
                         risk_ok, risk_msg = self.coordinator.check_risk_limits()
@@ -684,7 +788,7 @@ class LiveAutoSessionManager:
                             execution_mode=ExecutionMode.LIVE_AUTO,
                             auto_fire_limit_order=True,
                             operator_confirmed=True,
-                            strategy_id="EMA20_RECLAIM_5M_V1",
+                            strategy_id=configured_strategy_id,
                             coordinator=self.coordinator,
                             automated_journal=self.automated_journal,
                             session_manager=self,
@@ -841,10 +945,10 @@ class LiveAutoSessionManager:
 
         # 4. Strategy Authorization Verification
         if self.coordinator:
-            if hasattr(self.coordinator, "ema_strategy") and self.coordinator.ema_strategy.strategy_id == "EMA20_RECLAIM_5M_V1":
-                strategy_authorized_ok = self.coordinator.ema_strategy.is_live is True
+            if hasattr(self.coordinator, "sweep_reclaim_strategy") and self.coordinator.sweep_reclaim_strategy.strategy_id == "15M_SWEEP_RECLAIM_SMC":
+                strategy_authorized_ok = (self.coordinator.sweep_reclaim_strategy.is_live is True)
             else:
-                strategy_authorized_ok = True
+                strategy_authorized_ok = False
 
             # 5. SWEEP_1M_V1 Shadow-Only Verification
             if hasattr(self.coordinator, "sweep_strategy"):
@@ -921,21 +1025,21 @@ class LiveAutoSessionManager:
 
         active = [p for p in positions if abs(float(p.get("positionAmt", p.get("size", 0.0)) or 0.0)) > 1e-6]
         if not active:
-            orphan_orders = [o for o in orders if str(o.get("status", "NEW")).upper() in ("NEW", "PARTIALLY_FILLED") and bool(o.get("reduceOnly", o.get("reduce_only", False)))]
+            orphan_orders = [o for o in orders if str(o.get("status", "NEW")).upper() in ("NEW", "PARTIALLY_FILLED")]
             if orphan_orders:
-                orphan_symbol = str(orphan_orders[0].get("symbol", "UNKNOWN")).upper()
-                if not self.coordinator.global_lock.is_locked:
-                    self.coordinator.global_lock.acquire("EMA20_RECLAIM_5M_V1", orphan_symbol, "ORPHAN_PROTECTIVE_ORDER", state="RECONCILIATION_REQUIRED")
-                else:
-                    self.coordinator.global_lock.update_state("RECONCILIATION_REQUIRED")
-                self.coordinator.entries_paused = True
-                self._last_reconciliation = {"reconciliation_status": "RECONCILIATION_REQUIRED", "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(), "position_amt": 0.0, "active_protective_order_count": len(orphan_orders), "lock_state": "RECONCILIATION_REQUIRED", "lock_symbol": orphan_symbol}
-                return False, f"Exchange reports no position but orphan protective order remains for {orphan_symbol}"
+                orphan_symbols = {str(o.get("symbol", "")).upper() for o in orphan_orders if o.get("symbol")}
+                for orphan_sym in orphan_symbols:
+                    logger.info("Purging %s orphan open orders on %s via cancel_all_open_orders", len(orphan_orders), orphan_sym)
+                    try:
+                        if hasattr(adapter, "cancel_all_open_orders"):
+                            adapter.cancel_all_open_orders(orphan_sym)
+                    except Exception as clean_err:
+                        logger.warning("Error cancelling orphan orders on %s: %s", orphan_sym, clean_err)
             if self.coordinator.global_lock.is_locked:
                 self.coordinator.global_lock.release(reason="EXCHANGE_POSITION_CLOSED", verified_by_exchange=True)
             self.coordinator.entries_paused = False
             self._last_reconciliation = {"reconciliation_status": "SUCCESS", "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(), "position_amt": 0.0, "active_protective_order_count": 0, "lock_state": self.coordinator.global_lock.state, "lock_symbol": None}
-            return True, "Exchange reports no open position"
+            return True, "Exchange reports no open position (orphan orders purged)"
 
         p0 = active[0]
         symbol = str(p0.get("symbol", "")).upper()
@@ -944,7 +1048,7 @@ class LiveAutoSessionManager:
         has_sl = any(str(o.get("type", o.get("orderType", ""))).upper() in ("STOP_MARKET", "STOP") and bool(o.get("reduceOnly", o.get("reduce_only", False))) for o in symbol_orders)
         state = "PROTECTED" if has_tp and has_sl else ("PARTIALLY_PROTECTED" if has_tp or has_sl else "FILLED")
         if not self.coordinator.global_lock.is_locked:
-            self.coordinator.global_lock.acquire("EMA20_RECLAIM_5M_V1", symbol, "EXCHANGE_RECONCILED", state=state)
+            self.coordinator.global_lock.acquire("15M_SWEEP_RECLAIM_SMC", symbol, "EXCHANGE_RECONCILED", state=state)
         else:
             self.coordinator.global_lock.update_state(state)
         self.coordinator.entries_paused = state != "PROTECTED"
@@ -1152,6 +1256,9 @@ class LiveAutoSessionManager:
             info["is_authorized_and_active"] = self.is_authorized_and_active()
             info["scanner_active"] = self._scanner_running
             info["last_scan_utc"] = self._last_scan_utc
+            configured_strategy_id, configured_strategy_reason = self.get_configured_live_strategy_id() if self.coordinator else (None, "No coordinator configured")
+            info["configured_live_strategy_id"] = configured_strategy_id
+            info["configured_live_strategy_status"] = configured_strategy_reason
             autotrader = getattr(self, "autotrader", None)
             telemetry = autotrader.get_cycle_telemetry() if autotrader and hasattr(autotrader, "get_cycle_telemetry") else {}
             cycle_status = getattr(self, "_cycle_status", "IDLE")
@@ -1186,4 +1293,5 @@ class LiveAutoSessionManager:
                 info["global_lock_state"] = self.coordinator.global_lock.state
                 info["kill_switch_triggered"] = self.coordinator.kill_switch_triggered
             info.update(self._last_reconciliation)
+            info["protection_reconciliation_worker"] = self.get_reconciliation_worker_status()
             return info
