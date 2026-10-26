@@ -76,6 +76,9 @@ class LiveMicroCoordinator:
         self.daily_realized_loss = 0.0  # Positive number representing accumulated loss
         self.kill_switch_triggered = False
         self.kill_switch_reason = ""
+        # Fail closed after a protection/reconciliation incident. This flag only
+        # blocks new entries; it never cancels or changes an existing position.
+        self.entries_paused = False
 
     def _reset_daily_metrics_if_new_day(self) -> None:
         """Reset daily counters at UTC midnight rollover."""

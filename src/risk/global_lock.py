@@ -194,7 +194,7 @@ class GlobalPositionLock:
                     self._acquired_at_ms = int(time.time() * 1000)
             else:
                 # No active position or open order on exchange
-                if self._is_locked and self._state in ("PENDING_EXIT", "FILLED", "UNRECONCILED_EXCHANGE"):
+                if self._is_locked:
                     self.release(reason="EXCHANGE_RECONCILIATION_ZERO_EXPOSURE", verified_by_exchange=True)
 
     def reset(self) -> None:

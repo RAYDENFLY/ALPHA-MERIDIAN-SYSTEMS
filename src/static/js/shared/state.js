@@ -11,13 +11,21 @@ let searchQuery = '';
 let lastRawSetupsData = null;
 let showHistoricalArchive = false;
 
-// Trading Journal filter states
-let journalModelFilter = 'ALL';
-let journalOutcomeFilter = 'ALL';
-let journalCategoryFilter = 'ALL';
-let journalDirectionFilter = 'ALL';
-let journalPeriodFilter = 'all';
+// Trading Journal State (Unified Automated Trade Journal)
+let journalModeFilter = 'LIVE'; // LIVE, PAPER, SHADOW, ALL
+let journalStrategyFilter = 'ALL';
+let journalSideFilter = 'ALL';
+let journalStatusFilter = 'ALL';
+let journalReconFilter = 'ALL';
+let journalStartDate = '';
+let journalEndDate = '';
 let journalSearchQuery = '';
+let journalSortBy = 'NEWEST';
+let lastFetchedTrades = [];
+let cachedFillsByTrade = {};
+let expandedTrades = new Set();
+let isJournalLoading = false;
+let isReconciling = false;
 
 // Universal Price Alerts State
 let alertsFilter = 'ALL';

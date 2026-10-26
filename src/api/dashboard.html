@@ -232,7 +232,7 @@
                         </thead>
                     </table>
                     <div class="block md:hidden space-y-3"></div>
-                    <div>Not configured</div>
+                    <div>TP NOT PLACED</div>
                     <div>Unavailable</div>
                     <div>No open AsterDEX positions detected. Account is currently in cash.</div>
                 </template>
@@ -742,22 +742,6 @@
 
         <!-- TAB 4: TRADING JOURNAL -->
         <div id="tab-journal" class="hidden space-y-5">
-            <!-- Header and Refresh -->
-            <div class="card-bg p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <span>📖 Trading Journal & Performance Analytics</span>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/80 border border-indigo-600 text-indigo-300">PAPER EXECUTION AUDIT</span>
-                    </h2>
-                    <p class="text-xs text-slate-400 mt-1">Complete lifecycle audit of executed paper trades, fee & funding settlements, audited realized PnL, and setup provenance.</p>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button onclick="loadJournal()" id="refreshJournalBtn" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
-                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        <span>Refresh Journal</span>
-                    </button>
-                </div>
-            </div>
 
             <!-- SECTION 15: AUTOMATED TRADE JOURNAL & CSV EXPORT PANEL -->
             <div class="card-bg p-5 rounded-xl border border-indigo-900/60 bg-gradient-to-br from-slate-900 via-indigo-950/20 to-slate-900 shadow-xl space-y-4">
@@ -779,6 +763,10 @@
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                             <span>Reconcile AsterDEX</span>
                         </button>
+                        <a href="/api/v1/journal/export/unified.csv" id="exportUnifiedCsvBtn" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md border border-emerald-400/30">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            <span>📥 Export Unified Trade Journal CSV</span>
+                        </a>
                         <a href="/api/v1/journal/export/bundle.zip" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md border border-indigo-400/30">
                             <span>📦 Download AI Bundle (ZIP)</span>
                         </a>
@@ -801,87 +789,77 @@
                 </div>
             </div>
 
-            <!-- Model Selection Segmented Controls -->
+            <!-- Mode Selection Segmented Controls (Strict LIVE / PAPER / SHADOW / ALL Separation) -->
             <div class="card-bg p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                     <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                         <span>🎯</span>
-                        <span>Model Scope:</span>
+                        <span>Execution Mode Scope:</span>
                     </span>
-                    <div class="flex flex-wrap items-center gap-1.5" id="journalModelGroup">
-                        <button onclick="setJournalModelFilter('ALL')" id="jModel-ALL" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white border border-indigo-500 shadow-sm transition flex items-center gap-1.5">
-                            <span>All Models</span>
+                    <div class="flex flex-wrap items-center gap-1.5" id="journalModeGroup">
+                        <button onclick="setJournalMode('LIVE')" id="jMode-LIVE" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white border border-emerald-500 shadow-sm transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+                            <span>LIVE (AsterDEX Mainnet)</span>
                         </button>
-                        <button onclick="setJournalModelFilter('MODEL_A')" id="jModel-MODEL_A" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
-                            <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
-                            <span>Model A — Defensive SMC/SnR</span>
+                        <button onclick="setJournalMode('PAPER')" id="jMode-PAPER" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                            <span>PAPER (Simulated)</span>
                         </button>
-                        <button onclick="setJournalModelFilter('MODEL_B')" id="jModel-MODEL_B" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
-                            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                            <span>Model B — Aggressive Liquidity</span>
+                        <button onclick="setJournalMode('SHADOW')" id="jMode-SHADOW" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                            <span>SHADOW (SWEEP_1M_V1)</span>
                         </button>
-                        <button disabled class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900/60 text-slate-600 border border-slate-800 cursor-not-allowed opacity-60 flex items-center gap-1.5" title="Model C is deferred until implemented and approved">
-                            <span class="w-2 h-2 rounded-full bg-slate-600"></span>
-                            <span>Model C — Solana Momentum (Deferred)</span>
+                        <button onclick="setJournalMode('ALL')" id="jMode-ALL" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5">
+                            <span>All Modes</span>
                         </button>
                     </div>
                 </div>
-                <div class="text-[11px] font-mono text-slate-400" id="journalModelScopeLabel">
-                    Active Scope: <strong class="text-indigo-300">All Models Combined</strong>
+                <div class="text-[11px] font-mono text-slate-400" id="journalModeScopeLabel">
+                    Active Scope: <strong class="text-emerald-400">LIVE (AsterDEX Mainnet Verified)</strong>
                 </div>
             </div>
 
-            <!-- Performance KPI Metrics Cards (Strict Isolation: Closed Trades Only) -->
-            <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
-                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
-                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Closed Trades</div>
-                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-closed-trades">0</div>
-                    <div class="text-[10px] text-slate-500 font-mono mt-0.5" id="journal-metric-trades-breakdown">0 Wins &bull; 0 Losses &bull; 0 BE</div>
+            <!-- Performance KPI & Risk Limits Metrics Cards (Strict Realized vs Floating Segregation) -->
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Closed Trades</div>
+                    <div class="text-base font-bold text-white mt-1" id="journal-metric-closed-trades">0</div>
+                    <div class="text-[9px] text-slate-400 font-mono mt-0.5 truncate" id="journal-metric-trades-breakdown">0 W &bull; 0 L &bull; 0 BE</div>
                 </div>
-                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
-                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Win Rate</div>
-                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-winrate">0.0%</div>
-                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Closed Trades Win %</div>
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Win Rate</div>
+                    <div class="text-base font-bold text-white mt-1" id="journal-metric-winrate">0.0%</div>
+                    <div class="text-[9px] text-slate-500 font-mono mt-0.5">Realized Fills</div>
                 </div>
-                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
-                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Gross Realized PnL</div>
-                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-gross-pnl">$0.00</div>
-                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Before fees & friction</div>
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Net Realized PnL</div>
+                    <div class="text-base font-bold text-emerald-400 mt-1" id="journal-metric-net-pnl">$0.00</div>
+                    <div class="text-[9px] text-slate-500 font-mono mt-0.5" id="journal-metric-gross-pnl">Gross: $0.00</div>
                 </div>
-                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
-                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Total Fees & Friction</div>
-                    <div class="text-lg font-bold text-amber-400 mt-1" id="journal-metric-fees">$0.00</div>
-                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Taker + Funding + Slip</div>
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Avg Realized R</div>
+                    <div class="text-base font-bold text-white mt-1" id="journal-metric-avg-r">0.00 R</div>
+                    <div class="text-[9px] text-slate-500 font-mono mt-0.5">Base Risk: $0.20</div>
                 </div>
-                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
-                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Net Realized PnL</div>
-                    <div class="text-lg font-bold text-emerald-400 mt-1" id="journal-metric-net-pnl">$0.00</div>
-                    <div class="text-[10px] text-emerald-400/80 font-mono mt-0.5">Audited Net Realized</div>
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Profit Factor</div>
+                    <div class="text-base font-bold text-white mt-1" id="journal-metric-profit-factor">0.00</div>
+                    <div class="text-[9px] text-amber-400 font-mono mt-0.5" id="journal-metric-fees">Fees: $0.00</div>
                 </div>
-                <div class="card-bg p-3.5 rounded-xl border border-slate-800">
-                    <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Average Net PnL</div>
-                    <div class="text-lg font-bold text-white mt-1" id="journal-metric-avg-pnl">$0.00</div>
-                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">Per Closed Trade</div>
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Open Positions</div>
+                    <div class="text-base font-bold text-blue-400 mt-1" id="journal-metric-open-trades">0 Open</div>
+                    <div class="text-[9px] text-slate-500 font-mono mt-0.5">Max 1 Global Lock</div>
                 </div>
-            </div>
-
-            <!-- Per-Model Realized vs Open Segregation Strip -->
-            <div id="journalPerModelBreakdown" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
-                <div class="p-3 rounded-lg bg-slate-900/90 border border-indigo-900/50 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
-                        <span class="font-bold text-white">Model A:</span>
-                        <span class="text-slate-400" id="journal-scope-model-a">0 Closed &bull; 0 Open &bull; $0.00 Net Realized</span>
-                    </div>
-                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950 border border-indigo-700 text-indigo-300">DEFENSIVE SMC/SNR</span>
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Daily Loss Usage</div>
+                    <div class="text-base font-bold text-white mt-1" id="journal-metric-daily-loss">$0.00 / $0.45</div>
+                    <div class="text-[9px] text-slate-500 font-mono mt-0.5" id="journal-metric-daily-loss-sub">Limit: $0.45 USD</div>
                 </div>
-                <div class="p-3 rounded-lg bg-slate-900/90 border border-amber-900/50 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                        <span class="font-bold text-white">Model B:</span>
-                        <span class="text-slate-400" id="journal-scope-model-b">0 Closed &bull; 1 Open &bull; $0.00 Net Realized</span>
-                    </div>
-                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950 border border-amber-700 text-amber-300">AGGRESSIVE LIQUIDITY</span>
+                <div class="card-bg p-3 rounded-xl border border-slate-800">
+                    <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Daily Entries</div>
+                    <div class="text-base font-bold text-white mt-1" id="journal-metric-daily-entries">3 remaining</div>
+                    <div class="text-[9px] text-slate-500 font-mono mt-0.5">Allowance: 3/day</div>
                 </div>
             </div>
 
@@ -889,98 +867,116 @@
             <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
                     <span class="text-indigo-400 select-none">🛡️</span>
-                    <span><strong>Accounting Governance:</strong> Open positions are isolated from realized PnL metrics. Floating PnL is realized only upon bracket execution.</span>
+                    <span><strong>Data Integrity & Reconciliation:</strong> Exchange order & trade fills are source of truth. Realized R is calculated strictly against $0.20 initial planned risk for closed trades only. Open trades display <code class="text-slate-300">--</code>.</span>
                 </div>
-                <span class="text-slate-400 font-mono text-[10px]" id="journal-metric-open-trades">Active Open Positions: 0</span>
+                <div class="text-slate-400 font-mono text-[10px] flex items-center gap-2">
+                    <span>Reconciliation: <strong id="journalReconciliationStatusLabel" class="text-emerald-400">UP TO DATE</strong></span>
+                </div>
             </div>
 
-            <!-- Multi-Filter Controls Bar -->
+            <!-- Multi-Filter & Search Controls Bar -->
             <div class="card-bg p-4 rounded-xl space-y-3">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <!-- Outcome Filter Buttons -->
-                    <div class="flex flex-wrap items-center gap-1.5" id="journalOutcomeGroup">
-                        <button onclick="setJournalOutcomeFilter('ALL')" id="jOutcome-ALL" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition filter-btn-active">
-                            <span>All Outcomes</span>
-                        </button>
-                        <button onclick="setJournalOutcomeFilter('WIN')" id="jOutcome-WIN" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
-                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                            <span>Wins</span>
-                        </button>
-                        <button onclick="setJournalOutcomeFilter('LOSS')" id="jOutcome-LOSS" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
-                            <span class="w-2 h-2 rounded-full bg-red-400"></span>
-                            <span>Losses</span>
-                        </button>
-                        <button onclick="setJournalOutcomeFilter('BREAKEVEN')" id="jOutcome-BREAKEVEN" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
-                            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
-                            <span>Breakeven</span>
-                        </button>
-                        <button onclick="setJournalOutcomeFilter('SHORT_LOSS')" id="jOutcome-SHORT_LOSS" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-800/80 transition flex items-center gap-1 font-semibold" title="Filter trades with Direction=SHORT and Net PnL < 0">
-                            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                            <span>SHORT + Loss</span>
-                        </button>
-                        <button onclick="setJournalOutcomeFilter('OPEN')" id="jOutcome-OPEN" class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1">
-                            <span class="w-2 h-2 rounded-full bg-blue-400"></span>
-                            <span>Open Positions</span>
-                        </button>
-                    </div>
+                <div class="flex flex-wrap items-center justify-between gap-2.5">
+                    <!-- Left: Search & Selectors -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Search Box (Symbol or Trade ID) -->
+                        <div class="relative">
+                            <input type="text" id="journalSearchInput" oninput="handleJournalSearchInput(this.value)" placeholder="Search Symbol or Trade ID..." class="w-48 sm:w-56 px-2.5 py-1.5 bg-slate-900 text-xs text-white rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500 placeholder-slate-500 font-mono" />
+                        </div>
 
-                    <!-- Dropdown Filters & Search -->
-                    <div class="flex flex-wrap items-center gap-2.5">
-                        <!-- Category Filter -->
-                        <select id="journalCategorySelect" onchange="handleJournalCategoryChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
-                            <option value="ALL">All Categories</option>
-                            <option value="Breakout">⚡ Breakout</option>
-                            <option value="Pullback">🔄 Pullback</option>
-                            <option value="Reversal">🔀 Reversal</option>
-                            <option value="Range/Mean Reversion">↔️ Range / Mean Reversion</option>
-                            <option value="Unclassified">❓ Unclassified</option>
+                        <!-- Strategy Selector -->
+                        <select id="journalStrategySelect" onchange="handleJournalStrategyChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="ALL">All Strategies</option>
+                            <option value="EMA20_RECLAIM_5M_V1">EMA20_RECLAIM_5M_V1 (LIVE)</option>
+                            <option value="SWEEP_1M_V1">SWEEP_1M_V1 (SHADOW)</option>
+                            <option value="MODEL_A">MODEL_A</option>
+                            <option value="MODEL_B">MODEL_B</option>
                         </select>
 
-                        <!-- Direction Filter -->
-                        <select id="journalDirectionSelect" onchange="handleJournalDirectionChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
-                            <option value="ALL">All Directions</option>
+                        <!-- Side Selector -->
+                        <select id="journalSideSelect" onchange="handleJournalSideChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="ALL">All Sides</option>
                             <option value="LONG">LONG Only</option>
                             <option value="SHORT">SHORT Only</option>
                         </select>
 
-                        <!-- Period Filter -->
-                        <select id="journalPeriodSelect" onchange="handleJournalPeriodChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
-                            <option value="all">All Time</option>
-                            <option value="24h">Last 24 Hours</option>
-                            <option value="7d">Last 7 Days</option>
-                            <option value="30d">Last 30 Days</option>
+                        <!-- Status Selector -->
+                        <select id="journalStatusSelect" onchange="handleJournalStatusChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="ALL">All Statuses</option>
+                            <option value="OPEN">OPEN Positions</option>
+                            <option value="CLOSED">CLOSED Trades</option>
+                            <option value="CANCELLED">CANCELLED</option>
+                            <option value="EXPIRED">EXPIRED</option>
+                            <option value="REJECTED">REJECTED</option>
+                            <option value="MISS">MISS</option>
                         </select>
 
-                        <!-- Symbol Search -->
-                        <div class="relative">
-                            <input type="text" id="journalSymbolInput" oninput="handleJournalSearchInput(this.value)" placeholder="Search symbol..." class="w-28 md:w-36 px-2.5 py-1.5 bg-slate-900 text-xs text-white rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500 placeholder-slate-500" />
+                        <!-- Reconciliation Selector -->
+                        <select id="journalReconSelect" onchange="handleJournalReconChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="ALL">All Reconciliation</option>
+                            <option value="RECONCILED">RECONCILED Only</option>
+                            <option value="REQUIRES_RECONCILIATION">REQUIRES_RECONCILIATION Only</option>
+                        </select>
+                    </div>
+
+                    <!-- Right: Date Range, Sort & Action Buttons -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Date Range Pickers -->
+                        <div class="flex items-center gap-1 text-[11px] text-slate-400">
+                            <span>From:</span>
+                            <input type="date" id="journalStartDate" onchange="handleJournalDateChange()" class="px-2 py-1 bg-slate-900 text-xs text-white rounded border border-slate-700 focus:outline-none focus:border-indigo-500" />
+                            <span>To:</span>
+                            <input type="date" id="journalEndDate" onchange="handleJournalDateChange()" class="px-2 py-1 bg-slate-900 text-xs text-white rounded border border-slate-700 focus:outline-none focus:border-indigo-500" />
                         </div>
 
-                        <!-- Reset Filter Button -->
+                        <!-- Sort By Selector -->
+                        <select id="journalSortSelect" onchange="handleJournalSortChange(this.value)" class="px-2.5 py-1.5 bg-slate-900 text-xs text-slate-300 rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+                            <option value="NEWEST">Sort: Newest First</option>
+                            <option value="OLDEST">Sort: Oldest First</option>
+                            <option value="PNL_DESC">Sort: Highest Net PnL</option>
+                            <option value="PNL_ASC">Sort: Lowest Net PnL</option>
+                            <option value="R_DESC">Sort: Highest Realized R</option>
+                            <option value="R_ASC">Sort: Lowest Realized R</option>
+                        </select>
+
+                        <!-- Refresh & Reset Buttons -->
+                        <button onclick="loadJournal()" id="refreshJournalBtn" class="px-2.5 py-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 rounded-lg transition flex items-center gap-1 shadow-sm" title="Refresh trade journal records">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            <span>Refresh</span>
+                        </button>
                         <button onclick="resetJournalFilters()" class="px-2.5 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition" title="Clear all journal filters">Reset</button>
                     </div>
                 </div>
             </div>
 
-            <!-- Trades Table Container -->
+            <!-- Unified Trades Table Container -->
             <div class="card-bg p-5 rounded-xl space-y-3">
-                <div class="overflow-x-auto">
+                <div class="flex items-center justify-between text-xs text-slate-400">
+                    <span id="journalTableRecordCount">Showing 0 trades</span>
+                    <span class="text-[11px] font-mono text-slate-500">Click trade row or [+] icon to view order lifecycle & fill ledger</span>
+                </div>
+                <div class="overflow-x-auto max-h-[700px] overflow-y-auto">
                     <table class="w-full text-left text-xs font-mono">
-                        <thead class="text-[11px] text-slate-400 uppercase bg-slate-900 border-b border-slate-800">
+                        <thead class="text-[11px] text-slate-400 uppercase bg-slate-900 border-b border-slate-800 sticky top-0 z-10">
                             <tr>
-                                <th class="px-3 py-3">Trade / Setup ID / Source</th>
-                                <th class="px-3 py-3">Model</th>
+                                <th class="px-2.5 py-3 w-8 text-center">Exp</th>
+                                <th class="px-3 py-3">Time (UTC / WIB)</th>
+                                <th class="px-2.5 py-3">Mode</th>
                                 <th class="px-3 py-3">Symbol & Side</th>
-                                <th class="px-3 py-3">Category & Setup Reason</th>
-                                <th class="px-3 py-3">Opened At (WIB / Price)</th>
-                                <th class="px-3 py-3">Closed At (WIB / Price)</th>
-                                <th class="px-3 py-3">SL / TP Targets</th>
-                                <th class="px-3 py-3">Duration & Excursions (MFE/MAE)</th>
-                                <th class="px-3 py-3">Gross PnL</th>
-                                <th class="px-3 py-3">Total Fees</th>
-                                <th class="px-3 py-3">Net PnL & Outcome</th>
-                                <th class="px-3 py-3">Exit Reason</th>
-                                <th class="px-3 py-3 text-right">Action</th>
+                                <th class="px-3 py-3">Strategy</th>
+                                <th class="px-3 py-3">Entry (Avg / Plan)</th>
+                                <th class="px-3 py-3">Stop Loss</th>
+                                <th class="px-3 py-3">Take Profit</th>
+                                <th class="px-3 py-3">Qty & Notional</th>
+                                <th class="px-2.5 py-3">Lev</th>
+                                <th class="px-3 py-3">Entry Fee</th>
+                                <th class="px-3 py-3">Exit (Avg / Plan)</th>
+                                <th class="px-3 py-3">Exit Fee</th>
+                                <th class="px-3 py-3">Net PnL</th>
+                                <th class="px-2.5 py-3">Risk</th>
+                                <th class="px-3 py-3">Realized R</th>
+                                <th class="px-3 py-3">Status & Protection</th>
+                                <th class="px-3 py-3">Reconciliation</th>
                             </tr>
                         </thead>
                         <tbody id="journalTableBody" class="divide-y divide-slate-800/80">
@@ -997,13 +993,12 @@
                     </div>
                     <h3 class="text-base font-semibold text-white" id="journalEmptyTitle">No Trade Records Found</h3>
                     <p class="text-xs text-slate-400 max-w-md mx-auto" id="journalEmptyMessage">
-                        Paper trades are recorded automatically when qualifying setups decisively fill simulated limit orders and subsequently trigger take-profit or stop-loss brackets.
+                        No automated trade executions found matching the selected filters.
                     </p>
                 </div>
             </div>
         </div>
-
-        <!-- TAB 5: UNIVERSAL PERPETUAL PRICE ALERTS -->
+<!-- TAB 5: UNIVERSAL PERPETUAL PRICE ALERTS -->
         <div id="tab-alerts" class="space-y-6 hidden">
 
             <!-- Metrics & Market Telemetry Row -->

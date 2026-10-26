@@ -339,6 +339,12 @@ def enrich_positions_with_risk_and_orders(
                             "close_position": bool(order.get("closePosition", False)),
                         })
 
+        # Keep all exchange TP targets visible, but only a reduce-only LIMIT is
+        # valid for the protection contract used by LIVE_MICRO_V1.
+        all_tp_orders = list(tp_orders)
+        valid_tp_orders = [o for o in tp_orders if o.get("type") == "LIMIT" and o.get("reduce_only")]
+        tp_orders = all_tp_orders
+
         # Sort TP orders: ascending for LONG (TP1 is nearest), descending for SHORT (TP1 is nearest)
         if is_long:
             tp_orders.sort(key=lambda x: x["price"])
@@ -356,23 +362,38 @@ def enrich_positions_with_risk_and_orders(
         else:
             tp_label = "Not configured"
 
+        sl_orders = [o for o in sl_orders if o.get("type") == "STOP_MARKET" and o.get("reduce_only")]
         sl_price = sl_orders[0]["price"] if sl_orders else None
+        tp_qty_total = sum(o["orig_qty"] for o in valid_tp_orders)
         sl_qty_total = sum(o["orig_qty"] for o in sl_orders)
-        has_close_position = any(o.get("close_position", False) for o in sl_orders)
+        tp_covers_position = any(o.get("close_position", False) for o in valid_tp_orders) or tp_qty_total >= pos_amt - 1e-6
+        sl_covers_position = any(o.get("close_position", False) for o in sl_orders) or sl_qty_total >= pos_amt - 1e-6
 
-        if sl_price is not None:
-            if not has_close_position and (0 < sl_qty_total < pos_amt - 1e-6):
+        if sl_price is not None and not sl_covers_position:
+            if 0 < sl_qty_total < pos_amt - 1e-6:
                 protection_status = "PARTIALLY_PROTECTED"
                 is_protected = False
                 sl_label = f"${sl_price:,.4f} (Partial {sl_qty_total:g}/{pos_amt:g})"
             else:
-                protection_status = "PROTECTED"
-                is_protected = True
-                sl_label = f"${sl_price:,.4f}"
+                protection_status = "UNPROTECTED"
+                is_protected = False
+                sl_label = f"${sl_price:,.4f} (quantity unverified)"
+        elif sl_price is not None:
+            sl_label = f"${sl_price:,.4f}"
         else:
             protection_status = "UNPROTECTED"
             is_protected = False
             sl_label = "Not configured"
+
+        if sl_covers_position and not valid_tp_orders:
+            protection_status = "SL_ONLY"
+            is_protected = False
+        elif sl_covers_position and tp_orders and not tp_covers_position:
+            protection_status = "PARTIALLY_PROTECTED"
+            is_protected = False
+        elif sl_covers_position and tp_covers_position:
+            protection_status = "PROTECTED"
+            is_protected = True
 
         enriched.append({
             "symbol": sym,
@@ -397,6 +418,15 @@ def enrich_positions_with_risk_and_orders(
             "protection_status": protection_status,
             "tp_orders": tp_orders,
             "sl_orders": sl_orders,
+            "tp_order_id": valid_tp_orders[0]["order_id"] if valid_tp_orders else None,
+            "tp_order_type": valid_tp_orders[0]["type"] if valid_tp_orders else None,
+            "tp_quantity": tp_qty_total,
+            "tp_status": "PLACED" if valid_tp_orders else "NOT_PLACED",
+            "sl_order_id": sl_orders[0]["order_id"] if sl_orders else None,
+            "sl_order_type": sl_orders[0]["type"] if sl_orders else None,
+            "sl_quantity": sl_qty_total,
+            "sl_status": "PLACED" if sl_orders else "NOT_PLACED",
+            "protection_verification_status": protection_status,
             "liquidation_price": liquidation_price,
             "liquidation_label": liquidation_label,
             "unrealized_pnl_usdt": round(upnl, 4),

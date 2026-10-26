@@ -4165,6 +4165,7 @@ def get_automated_trades(
     strategy_id: Optional[str] = Query(None, description="Filter by strategy_id"),
     mode: Optional[str] = Query(None, description="Filter mode: LIVE, SHADOW, PAPER, ALL"),
     status: Optional[str] = Query(None, description="Filter status: OPEN, CLOSED, MISS, EXPIRED, etc."),
+    reconciliation_status: Optional[str] = Query(None, description="Filter reconciliation status"),
     closed_only: bool = Query(False, description="Filter closed trades only"),
     start_date: Optional[str] = Query(None, description="Start date (ISO or YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (ISO or YYYY-MM-DD)"),
@@ -4175,6 +4176,7 @@ def get_automated_trades(
         strategy_id=strategy_id,
         mode=mode,
         status=status,
+        reconciliation_status=reconciliation_status,
         closed_only=closed_only,
         start_date=start_date,
         end_date=end_date,
@@ -4222,9 +4224,10 @@ def get_automated_journal_summary(
     return automated_journal.get_summary_metrics(mode=mode)
 
 
-@app.get("/api/v1/journal/export/trades.csv")
-def export_trades_csv_endpoint(
+@app.get("/api/v1/journal/export/unified.csv")
+def export_unified_csv_endpoint(
     symbol: Optional[str] = Query(None),
+    reconciliation_status: Optional[str] = Query(None),
     strategy_id: Optional[str] = Query(None),
     mode: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -4237,6 +4240,38 @@ def export_trades_csv_endpoint(
         strategy_id=strategy_id,
         mode=mode,
         status=status,
+        reconciliation_status=reconciliation_status,
+        closed_only=closed_only,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    csv_data = journal_exporter.export_unified_journal_csv(filter_criteria)
+    now_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"unified_journal_{mode or 'all'}_{now_tag}.csv"
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/api/v1/journal/export/trades.csv")
+def export_trades_csv_endpoint(
+    symbol: Optional[str] = Query(None),
+    reconciliation_status: Optional[str] = Query(None),
+    strategy_id: Optional[str] = Query(None),
+    mode: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    closed_only: bool = Query(False),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+) -> Response:
+    filter_criteria = JournalFilter(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        mode=mode,
+        status=status,
+        reconciliation_status=reconciliation_status,
         closed_only=closed_only,
         start_date=start_date,
         end_date=end_date,
@@ -4332,6 +4367,7 @@ def export_scan_attribution_csv_endpoint(
 @app.get("/api/v1/journal/export/bundle.zip")
 def export_bundle_zip_endpoint(
     symbol: Optional[str] = Query(None),
+    reconciliation_status: Optional[str] = Query(None),
     strategy_id: Optional[str] = Query(None),
     mode: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -4344,6 +4380,7 @@ def export_bundle_zip_endpoint(
         strategy_id=strategy_id,
         mode=mode,
         status=status,
+        reconciliation_status=reconciliation_status,
         closed_only=closed_only,
         start_date=start_date,
         end_date=end_date,
@@ -4365,6 +4402,7 @@ def reconcile_journal_endpoint() -> Dict[str, Any]:
         live_adapter = getattr(account_service, "adapter", None) or exchange
         exchange_positions = []
         exchange_orders = []
+        exchange_trades = None
         account_balance = {}
 
         if live_adapter and hasattr(live_adapter, "get_positions"):
@@ -4379,6 +4417,12 @@ def reconcile_journal_endpoint() -> Dict[str, Any]:
             except Exception as e:
                 logger.warning("Could not fetch exchange open orders for reconciliation: %s", e)
 
+        if live_adapter and hasattr(live_adapter, "get_user_trades"):
+            try:
+                exchange_trades = live_adapter.get_user_trades()
+            except Exception as e:
+                logger.warning("Could not fetch exchange trades for reconciliation: %s", e)
+
         if live_adapter and hasattr(live_adapter, "get_account_balance"):
             try:
                 balances = live_adapter.get_account_balance()
@@ -4388,10 +4432,12 @@ def reconcile_journal_endpoint() -> Dict[str, Any]:
                 logger.warning("Could not fetch exchange balance for reconciliation: %s", e)
 
         summary = automated_journal.reconcile_with_exchange(
+            exchange_trades=exchange_trades,
             exchange_positions=exchange_positions,
             exchange_orders=exchange_orders,
             account_balance=account_balance,
             exchange_adapter=live_adapter,
+            allow_tp_submission=False,
         )
         return summary
     except Exception as e:

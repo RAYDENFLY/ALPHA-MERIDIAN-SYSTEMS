@@ -52,6 +52,119 @@ class JournalExporter:
 
         return output.getvalue()
 
+    def export_unified_journal_csv(self, filter_criteria: Optional[JournalFilter] = None) -> str:
+        """Export unified_journal.csv combining trade identity, planned vs actual prices,
+        execution metrics, protective orders, realized R, fees, and reconciliation status."""
+        trades = self.journal.get_trades(filter_criteria)
+        output = io.StringIO()
+        fieldnames = [
+            "trade_id",
+            "entry_time_utc",
+            "exit_time_utc",
+            "mode",
+            "symbol",
+            "strategy_id",
+            "side",
+            "status",
+            "reconciliation_status",
+            "protection_status",
+            "planned_entry_price",
+            "average_entry_price",
+            "entry_slippage_pct",
+            "planned_stop_price",
+            "actual_stop_price",
+            "planned_take_profit_price",
+            "actual_take_profit_price",
+            "planned_quantity",
+            "filled_quantity",
+            "exit_quantity",
+            "planned_notional_usd",
+            "filled_notional_usd",
+            "leverage",
+            "margin_mode",
+            "entry_fee_usd",
+            "average_exit_price",
+            "exit_fee_usd",
+            "total_fees_usd",
+            "funding_usd",
+            "gross_pnl_usd",
+            "net_pnl_usd",
+            "planned_risk_usd",
+            "realized_r",
+            "exit_reason",
+            "order_id",
+            "sl_order_id",
+            "tp_order_id",
+            "holding_duration_seconds",
+            "created_at_utc",
+            "notes",
+        ]
+
+        writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+
+        for t in trades:
+            # Data integrity guarantee: Realized R is ONLY computed for closed trades
+            if t.status == "CLOSED":
+                risk = t.planned_risk_usd if (t.planned_risk_usd and t.planned_risk_usd > 0) else 0.20
+                realized_r_val = round(t.net_pnl_usd / risk, 4)
+            else:
+                realized_r_val = ""
+
+            filled_notional = (
+                round(t.average_entry_price * t.filled_quantity, 4)
+                if (t.average_entry_price and t.filled_quantity)
+                else (t.planned_notional_usd or "")
+            )
+
+            entry_time = t.first_fill_timestamp_utc or t.signal_timestamp_utc or t.created_at_utc
+
+            row = {
+                "trade_id": t.trade_id or "",
+                "entry_time_utc": entry_time or "",
+                "exit_time_utc": t.exit_timestamp_utc or "",
+                "mode": t.mode or "LIVE",
+                "symbol": t.symbol or "",
+                "strategy_id": t.strategy_id or "",
+                "side": t.side or "",
+                "status": t.status or "",
+                "reconciliation_status": t.reconciliation_status or "RECONCILED",
+                "protection_status": t.protection_status or "UNPROTECTED",
+                "planned_entry_price": t.planned_entry_price if t.planned_entry_price is not None else "",
+                "average_entry_price": t.average_entry_price if t.average_entry_price is not None else "",
+                "entry_slippage_pct": round(t.entry_slippage_pct, 4) if t.entry_slippage_pct is not None else "",
+                "planned_stop_price": t.planned_stop_price if t.planned_stop_price is not None else "",
+                "actual_stop_price": t.sl_price if t.sl_price is not None else "",
+                "planned_take_profit_price": t.planned_take_profit_price if t.planned_take_profit_price is not None else "",
+                "actual_take_profit_price": t.tp_price if t.tp_price is not None else "",
+                "planned_quantity": t.planned_quantity if t.planned_quantity is not None else "",
+                "filled_quantity": t.filled_quantity if t.filled_quantity is not None else "",
+                "exit_quantity": t.exit_quantity if t.exit_quantity is not None else "",
+                "planned_notional_usd": t.planned_notional_usd if t.planned_notional_usd is not None else "",
+                "filled_notional_usd": filled_notional,
+                "leverage": t.leverage or 10,
+                "margin_mode": t.margin_mode or "ISOLATED",
+                "entry_fee_usd": round(t.entry_fee_usd, 6) if t.entry_fee_usd is not None else 0.0,
+                "average_exit_price": t.average_exit_price if t.average_exit_price is not None else "",
+                "exit_fee_usd": round(t.exit_fee_usd, 6) if t.exit_fee_usd is not None else 0.0,
+                "total_fees_usd": round(t.total_fees_usd, 6) if t.total_fees_usd is not None else 0.0,
+                "funding_usd": round(t.funding_usd, 6) if t.funding_usd is not None else 0.0,
+                "gross_pnl_usd": round(t.gross_pnl_usd, 6) if t.gross_pnl_usd is not None else 0.0,
+                "net_pnl_usd": round(t.net_pnl_usd, 6) if t.net_pnl_usd is not None else 0.0,
+                "planned_risk_usd": t.planned_risk_usd if t.planned_risk_usd is not None else 0.20,
+                "realized_r": realized_r_val,
+                "exit_reason": t.exit_reason or "",
+                "order_id": t.order_id or "",
+                "sl_order_id": t.sl_order_id or "",
+                "tp_order_id": t.tp_order_id or "",
+                "holding_duration_seconds": round(t.holding_duration_seconds, 2) if t.holding_duration_seconds else 0.0,
+                "created_at_utc": t.created_at_utc or "",
+                "notes": t.notes or "",
+            }
+            writer.writerow(row)
+
+        return output.getvalue()
+
     def export_fills_csv(self, filter_criteria: Optional[JournalFilter] = None) -> str:
         """Export fills.csv containing granular exchange-level fills."""
         fills = self.journal.get_all_fills(filter_criteria)
@@ -219,7 +332,8 @@ class JournalExporter:
         return output.getvalue()
 
     def export_journal_bundle_zip(self, filter_criteria: Optional[JournalFilter] = None) -> bytes:
-        """Package all 5 CSV exports along with manifest.json into a single in-memory ZIP bundle."""
+        """Package all CSV exports (including unified_journal.csv) along with manifest.json into a single in-memory ZIP bundle."""
+        unified_csv = self.export_unified_journal_csv(filter_criteria)
         trades_csv = self.export_trades_csv(filter_criteria)
         fills_csv = self.export_fills_csv(filter_criteria)
         signals_csv = self.export_signals_csv(filter_criteria)
@@ -227,6 +341,7 @@ class JournalExporter:
         scan_attr_csv = self.export_scan_attribution_csv(filter_criteria)
 
         # Count records
+        unified_count = max(0, len(unified_csv.strip().split("\n")) - 1) if unified_csv.strip() else 0
         trades_count = max(0, len(trades_csv.strip().split("\n")) - 1) if trades_csv.strip() else 0
         fills_count = max(0, len(fills_csv.strip().split("\n")) - 1) if fills_csv.strip() else 0
         signals_count = max(0, len(signals_csv.strip().split("\n")) - 1) if signals_csv.strip() else 0
@@ -247,6 +362,7 @@ class JournalExporter:
                 "closed_only": filter_criteria.closed_only if filter_criteria else False,
             },
             "record_counts": {
+                "unified_journal": unified_count,
                 "trades": trades_count,
                 "fills": fills_count,
                 "signals": signals_count,
@@ -260,7 +376,8 @@ class JournalExporter:
                 "Zero credentials, secrets, or API keys are exported."
             ],
             "ai_review_instructions": (
-                "For independent AI review (ChatGPT, Claude, Qwen): Use trades.csv for trade-level expectancy, "
+                "For independent AI review (ChatGPT, Claude, Qwen): Use unified_journal.csv for a consolidated "
+                "overview of execution vs planned parameters. Use trades.csv for trade-level expectancy, "
                 "drawdown, win rate, and R-multiples. Use fills.csv for granular fee burden, slippage, and maker/taker "
                 "liquidity distribution. Use shadow.csv for counterfactual performance of SWEEP_1M_V1 and LLM veto impact."
             ),
@@ -269,6 +386,7 @@ class JournalExporter:
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+            zf.writestr("unified_journal.csv", unified_csv)
             zf.writestr("trades.csv", trades_csv)
             zf.writestr("fills.csv", fills_csv)
             zf.writestr("signals.csv", signals_csv)

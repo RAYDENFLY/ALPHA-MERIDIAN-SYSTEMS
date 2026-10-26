@@ -331,6 +331,27 @@ class AsterDexV3Adapter(BaseExchangeAdapter):
             params["origClientOrderId"] = str(client_order_id)
         return self._signed_request("GET", "/fapi/v3/openOrder", params=params, include_user=True)
 
+    def get_user_trades(
+        self,
+        symbol: Optional[str] = None,
+        start_time_ms: Optional[int] = None,
+        end_time_ms: Optional[int] = None,
+        from_id: Optional[int] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Fetch account trade history / granular execution fills via V3 (GET /fapi/v3/userTrades)."""
+        params: Dict[str, Any] = {"limit": min(limit, 1000)}
+        if symbol:
+            params["symbol"] = symbol.upper().replace(".P", "")
+        if start_time_ms is not None:
+            params["startTime"] = int(start_time_ms)
+        if end_time_ms is not None:
+            params["endTime"] = int(end_time_ms)
+        if from_id is not None:
+            params["fromId"] = int(from_id)
+        data = self._signed_request("GET", "/fapi/v3/userTrades", params=params, include_user=True)
+        return data if isinstance(data, list) else []
+
     def get_position_mode(self) -> Dict[str, Any]:
         """Query position mode via V3 (GET /fapi/v3/positionSide/dual)."""
         return self._signed_request("GET", "/fapi/v3/positionSide/dual", include_user=True)

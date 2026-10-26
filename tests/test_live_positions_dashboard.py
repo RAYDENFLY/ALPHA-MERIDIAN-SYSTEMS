@@ -110,8 +110,8 @@ def mock_positions_and_orders():
             "orderId": 1001,
             "symbol": "HYPEUSDT",
             "side": "SELL",
-            "type": "TAKE_PROFIT_MARKET",
-            "stopPrice": "97.7030",
+            "type": "LIMIT",
+            "price": "97.7030",
             "origQty": "0.07",
             "reduceOnly": True,
             "status": "NEW",
@@ -131,8 +131,8 @@ def mock_positions_and_orders():
             "orderId": 1003,
             "symbol": "BATUSDT",
             "side": "SELL",
-            "type": "TAKE_PROFIT_MARKET",
-            "stopPrice": "0.20752",
+            "type": "LIMIT",
+            "price": "0.20752",
             "origQty": "28.5",
             "reduceOnly": True,
             "status": "NEW",
@@ -295,10 +295,10 @@ class TestLivePositionsEnrichment:
         ]
         orders = [
             # LONG exit orders (positionSide == "LONG")
-            {"symbol": "BTCUSDT", "positionSide": "LONG", "side": "SELL", "type": "TAKE_PROFIT_MARKET", "stopPrice": "65000.0", "origQty": "0.5", "reduceOnly": True, "status": "NEW"},
+            {"symbol": "BTCUSDT", "positionSide": "LONG", "side": "SELL", "type": "LIMIT", "price": "65000.0", "origQty": "0.5", "reduceOnly": True, "status": "NEW"},
             {"symbol": "BTCUSDT", "positionSide": "LONG", "side": "SELL", "type": "STOP_MARKET", "stopPrice": "58000.0", "origQty": "0.5", "reduceOnly": True, "status": "NEW"},
             # SHORT exit orders (positionSide == "SHORT")
-            {"symbol": "BTCUSDT", "positionSide": "SHORT", "side": "BUY", "type": "TAKE_PROFIT_MARKET", "stopPrice": "55000.0", "origQty": "0.2", "reduceOnly": True, "status": "NEW"},
+            {"symbol": "BTCUSDT", "positionSide": "SHORT", "side": "BUY", "type": "LIMIT", "price": "55000.0", "origQty": "0.2", "reduceOnly": True, "status": "NEW"},
             {"symbol": "BTCUSDT", "positionSide": "SHORT", "side": "BUY", "type": "STOP_MARKET", "stopPrice": "64000.0", "origQty": "0.2", "reduceOnly": True, "status": "NEW"},
         ]
 
@@ -361,8 +361,8 @@ class TestLivePositionsEnrichment:
         raw_pos = [{"symbol": "AVAXUSDT", "positionAmt": "100.0", "entryPrice": "20.0"}]
         risk = [{"symbol": "AVAXUSDT", "positionAmt": "100.0", "markPrice": "21.0"}]
         orders = [
-            {"symbol": "AVAXUSDT", "side": "SELL", "type": "TAKE_PROFIT_MARKET", "stopPrice": "25.0", "origQty": "50.0", "status": "NEW"},
-            {"symbol": "AVAXUSDT", "side": "SELL", "type": "TAKE_PROFIT_MARKET", "stopPrice": "22.5", "origQty": "50.0", "status": "NEW"},
+            {"symbol": "AVAXUSDT", "side": "SELL", "type": "LIMIT", "price": "25.0", "origQty": "50.0", "reduceOnly": True, "status": "NEW"},
+            {"symbol": "AVAXUSDT", "side": "SELL", "type": "LIMIT", "price": "22.5", "origQty": "50.0", "reduceOnly": True, "status": "NEW"},
         ]
 
         enriched = enrich_positions_with_risk_and_orders(raw_pos, risk, orders)
@@ -546,7 +546,7 @@ class TestDashboardHTMLIntegrity:
         assert "block md:hidden space-y-3" in content
 
         # 4. Missing-value semantics & empty state in JS
-        assert "Not configured" in content
+        assert "TP NOT PLACED" in content
         assert "Unavailable" in content
         assert "No open AsterDEX positions detected. Account is currently in cash." in content
 

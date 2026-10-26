@@ -152,7 +152,7 @@ class AutomatedTradeRecord:
     sl_order_type: str = "STOP_MARKET"
     sl_status: str = "NOT_PLACED"  # NOT_PLACED, PLACED, FILLED, CANCELLED, REJECTED
     sl_price: Optional[float] = None
-    protection_status: str = "UNPROTECTED"  # UNPROTECTED, PROTECTED, PARTIALLY_PROTECTED (SL ONLY - TP NOT PLACED), TP_NOT_PLACED
+    protection_status: str = "UNPROTECTED"  # UNPROTECTED, SL_ONLY, TP_ONLY, PARTIALLY_PROTECTED, PROTECTED, PROTECTION_FAILED, RECONCILIATION_REQUIRED
 
     # Actual execution
     first_fill_timestamp_utc: Optional[str] = None
@@ -219,5 +219,6 @@ class JournalFilter:
     mode: Optional[str] = None  # LIVE, SHADOW, PAPER, ALL
     symbol: Optional[str] = None
     status: Optional[str] = None
+    reconciliation_status: Optional[str] = None
     closed_only: bool = False
     limit: int = 5000

@@ -442,6 +442,12 @@ class LiveAutoSessionManager:
             if self.coordinator:
                 if active_pos_symbol:
                     lock_state = "PROTECTED" if len(open_orders) >= 2 else ("PARTIALLY_PROTECTED" if len(open_orders) == 1 else "FILLED")
+                    if lock_state != "PROTECTED" and self.coordinator:
+                        self.coordinator.entries_paused = True
+                        logger.critical(
+                            "New LIVE entries paused: recovered position %s is not fully protected.",
+                            active_pos_symbol,
+                        )
                     if not self.coordinator.global_lock.is_locked:
                         self.coordinator.global_lock.acquire(
                             strategy_id="EMA20_RECLAIM_5M_V1",
@@ -584,6 +590,8 @@ class LiveAutoSessionManager:
                     lock_sym = self.coordinator.global_lock.active_symbol
                     lock_st = self.coordinator.global_lock.state
                     logger.debug("Scan cycle skipped: position lock active on %s (%s).", lock_sym, lock_st)
+                elif self.coordinator and getattr(self.coordinator, "entries_paused", False):
+                    logger.critical("Scan cycle skipped: new LIVE entries are paused pending protection reconciliation.")
                 elif self.autotrader:
                     risk_ok, risk_msg = (True, "")
                     if self.coordinator:

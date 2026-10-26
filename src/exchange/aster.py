@@ -399,6 +399,27 @@ class AsterDexAdapter(BaseExchangeAdapter):
             payload["origClientOrderId"] = client_order_id
         return self._signed_request("GET", "/fapi/v1/order", params=payload)
 
+    def get_user_trades(
+        self,
+        symbol: Optional[str] = None,
+        start_time_ms: Optional[int] = None,
+        end_time_ms: Optional[int] = None,
+        from_id: Optional[int] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Fetch account trade history / granular execution fills via GET /fapi/v1/userTrades."""
+        payload: Dict[str, Any] = {"limit": min(limit, 1000)}
+        if symbol:
+            payload["symbol"] = symbol.upper().replace(".P", "")
+        if start_time_ms is not None:
+            payload["startTime"] = int(start_time_ms)
+        if end_time_ms is not None:
+            payload["endTime"] = int(end_time_ms)
+        if from_id is not None:
+            payload["fromId"] = int(from_id)
+        data = self._signed_request("GET", "/fapi/v1/userTrades", params=payload)
+        return data if isinstance(data, list) else []
+
     def get_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """Query currently active open orders."""
         payload: Dict[str, Any] = {}

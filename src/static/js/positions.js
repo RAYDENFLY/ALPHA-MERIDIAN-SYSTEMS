@@ -125,18 +125,24 @@
                 const upnlSign = isUpnlPositive ? '+' : '';
 
                 // Take Profit formatting
-                let tpDisplay = '<span class="text-slate-500 italic text-xs">Not configured</span>';
+                let tpDisplay = '<span class="text-amber-300 font-bold text-xs">TP NOT PLACED</span>';
                 if (p.take_profit_price) {
-                    tpDisplay = `<span class="text-emerald-400 font-mono font-medium">${escapeHtml(p.take_profit_label || ('$' + formatPrice(p.take_profit_price)))}</span>`;
+                    const tpState = p.tp_status || (p.tp_order_id ? 'PLACED' : 'NOT_PLACED');
+                    const tpId = p.tp_order_id ? ` · ID ${escapeHtml(String(p.tp_order_id))}` : '';
+                    const tpQty = Number(p.tp_quantity || 0) > 0 ? ` · Qty ${escapeHtml(String(p.tp_quantity))}` : '';
+                    tpDisplay = `<span class="${tpState === 'PLACED' ? 'text-emerald-400' : 'text-amber-300'} font-mono font-medium">TP ${escapeHtml(p.take_profit_label || ('$' + formatPrice(p.take_profit_price)))}</span><span class="block text-[10px] text-slate-500">${escapeHtml(tpState)}${tpId}${tpQty}</span>`;
                 }
 
                 // Stop Loss formatting with explicit protection status
                 let slDisplay = '<span class="text-rose-400/80 italic text-xs font-medium">SL: Not configured (UNPROTECTED)</span>';
                 if (p.stop_loss_price) {
-                    const protBadge = p.protection_status === 'PARTIALLY_PROTECTED'
-                        ? '<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">PARTIAL</span>'
-                        : '<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-950 text-emerald-300 border border-emerald-800">PROTECTED</span>';
-                    slDisplay = `<span class="text-rose-400 font-mono font-medium">${escapeHtml(p.stop_loss_label || ('$' + formatPrice(p.stop_loss_price)))}</span>${protBadge}`;
+                    const protectedNow = p.protection_status === 'PROTECTED';
+                    const protBadge = protectedNow
+                        ? '<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-950 text-emerald-300 border border-emerald-800">PROTECTED</span>'
+                        : `<span class="ml-1 px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">${escapeHtml(p.protection_status || 'UNPROTECTED')}</span>`;
+                    const slId = p.sl_order_id ? ` · ID ${escapeHtml(String(p.sl_order_id))}` : '';
+                    const slQty = Number(p.sl_quantity || 0) > 0 ? ` · Qty ${escapeHtml(String(p.sl_quantity))}` : '';
+                    slDisplay = `<span class="text-rose-400 font-mono font-medium">SL ${escapeHtml(p.stop_loss_label || ('$' + formatPrice(p.stop_loss_price)))}</span>${protBadge}<span class="block text-[10px] text-slate-500">${escapeHtml(p.sl_status || (p.sl_order_id ? 'PLACED' : 'NOT_PLACED'))}${slId}${slQty}</span>`;
                 }
 
                 // Liquidation Price formatting

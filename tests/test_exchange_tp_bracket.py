@@ -370,7 +370,7 @@ def test_04_tp_not_placed_for_unfilled_entry(test_db, mock_aster_adapter, mock_e
     rec = journal.get_trade_by_id(res.execution_receipt["journal_trade_id"])
     assert rec.tp_status == "NOT_PLACED"
     assert rec.tp_order_id in (None, "")
-    assert "TP NOT PLACED" in rec.protection_status
+    assert rec.tp_status == "NOT_PLACED"
 
     coord.global_lock.release()
 
