@@ -52,7 +52,7 @@
                         </Grid>
                         
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                            <TextBlock Text="{Binding SessionState}" FontSize="20" FontWeight="Bold" Foreground="#3FB950" />
+                            <TextBlock Text="{Binding SessionState}" FontSize="20" FontWeight="Bold" Foreground="{Binding SessionStateColor}" />
                         </StackPanel>
 
                         <Border Background="#0D1117" CornerRadius="4" Padding="8,6">
@@ -63,7 +63,7 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0" Text="Preflight Verdict" FontSize="11" Foreground="#8B949E" />
-                                    <TextBlock Grid.Column="1" Text="{Binding PreflightVerdict}" FontSize="11" FontWeight="Bold" Foreground="#3FB950" />
+                                    <TextBlock Grid.Column="1" Text="{Binding PreflightVerdict}" FontSize="11" FontWeight="Bold" Foreground="{Binding PreflightVerdictColor}" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -103,24 +103,24 @@
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Text="TOTAL EQUITY" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
                             <Border Grid.Column="1" Background="#21262D" CornerRadius="4" Padding="6,2">
-                                <TextBlock Text="{Binding AccountStatus}" FontSize="10" FontWeight="Bold" Foreground="#3FB950" />
+                                <TextBlock Text="{Binding AccountStatus}" FontSize="10" FontWeight="Bold" Foreground="{Binding AccountStatusColor}" />
                             </Border>
                         </Grid>
 
                         <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="${Binding TotalEquity}" FontSize="24" FontWeight="Bold" Foreground="#58A6FF" />
-                            <TextBlock Text="USDT" FontSize="12" Foreground="#8B949E" VerticalAlignment="Bottom" Margin="0,0,0,4" />
+                            <TextBlock Text="{Binding TotalEquityDisplay}" FontSize="24" FontWeight="Bold" Foreground="#58A6FF" />
+                            <TextBlock Text="USDT" FontSize="12" Foreground="#8B949E" VerticalAlignment="Bottom" Margin="0,0,0,4" IsVisible="{Binding HasTotalEquity}" />
                         </StackPanel>
 
                         <Border Background="#0D1117" CornerRadius="4" Padding="8,6">
                             <StackPanel Spacing="4">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0" Text="Available Balance" FontSize="11" Foreground="#8B949E" />
-                                    <TextBlock Grid.Column="1" Text="${Binding AvailableBalance}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                    <TextBlock Grid.Column="1" Text="{Binding AvailableBalanceDisplay}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0" Text="Used Margin" FontSize="11" Foreground="#8B949E" />
-                                    <TextBlock Grid.Column="1" Text="${Binding UsedMargin}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                    <TextBlock Grid.Column="1" Text="{Binding UsedMarginDisplay}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -168,43 +168,55 @@
 
                         <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
                             
-                            <!-- Row 0 -->
-                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
-                                <TextBlock Text="Daily Loss Used / Limit" FontSize="12" Foreground="#8B949E" />
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
-                                    <TextBlock Text="${Binding DailyLossUsed}" FontSize="16" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                                    <TextBlock Text="/" FontSize="16" Foreground="#8B949E" />
-                                    <TextBlock Text="${Binding DailyLossLimit}" FontSize="16" FontWeight="SemiBold" Foreground="#D29922" />
-                                    <TextBlock Text="USDT" FontSize="11" Foreground="#8B949E" VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                            <!-- Row 0: Daily Loss Metric & Verification -->
+                            <Border Grid.Row="0" Grid.Column="0" Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,6,10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Daily Loss Used / Limit" FontSize="11" Foreground="#8B949E" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+                                        <TextBlock Text="{Binding DailyLossUsedDisplay}" FontSize="15" FontWeight="SemiBold" Foreground="#F0F6FC" />
+                                        <TextBlock Text="/" FontSize="15" Foreground="#8B949E" IsVisible="{Binding HasDailyLossMetrics}" />
+                                        <TextBlock Text="{Binding DailyLossLimitDisplay}" FontSize="15" FontWeight="SemiBold" Foreground="#D29922" IsVisible="{Binding HasDailyLossMetrics}" />
+                                        <TextBlock Text="USDT" FontSize="11" Foreground="#8B949E" VerticalAlignment="Bottom" Margin="0,0,0,2" IsVisible="{Binding HasDailyLossMetrics}" />
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
+                            </Border>
 
-                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="12,0,0,12">
-                                <TextBlock Text="Daily Loss Verification" FontSize="12" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding DailyLossStatus}" FontSize="16" FontWeight="SemiBold" Foreground="#3FB950" Margin="0,4,0,0" />
-                            </StackPanel>
+                            <Border Grid.Row="0" Grid.Column="1" Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="6,0,0,10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Daily Loss Verification" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Text="{Binding DailyLossStatus}" FontSize="15" FontWeight="SemiBold" Foreground="{Binding DailyLossStatusColor}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
 
-                            <!-- Row 1 -->
-                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,12,12">
-                                <TextBlock Text="Effective Trade Risk" FontSize="12" Foreground="#8B949E" />
-                                <TextBlock Text="${Binding EffectiveTradeRisk} USDT" FontSize="16" FontWeight="SemiBold" Foreground="#F0F6FC" Margin="0,4,0,0" />
-                            </StackPanel>
+                            <!-- Row 1: Effective Trade Risk & Reconciliation Status -->
+                            <Border Grid.Row="1" Grid.Column="0" Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,6,10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Effective Trade Risk" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Text="{Binding EffectiveTradeRiskDisplayWithUnit}" FontSize="15" FontWeight="SemiBold" Foreground="#F0F6FC" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Border>
 
-                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0,0,12">
-                                <TextBlock Text="Reconciliation Status" FontSize="12" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding ReconciliationStatus}" FontSize="16" FontWeight="SemiBold" Foreground="#3FB950" Margin="0,4,0,0" />
-                            </StackPanel>
+                            <Border Grid.Row="1" Grid.Column="1" Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="6,0,0,10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Reconciliation Status" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Text="{Binding ReconciliationStatus}" FontSize="15" FontWeight="SemiBold" Foreground="{Binding ReconciliationStatusColor}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
 
-                            <!-- Row 2 -->
-                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,12,0">
-                                <TextBlock Text="Can Open Position" FontSize="12" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding CanOpenPosition}" FontSize="16" FontWeight="SemiBold" Foreground="#3FB950" Margin="0,4,0,0" />
-                            </StackPanel>
+                            <!-- Row 2: Can Open Position & Block Reason -->
+                            <Border Grid.Row="2" Grid.Column="0" Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,6,0">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Can Open Position" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Text="{Binding CanOpenPositionDisplay}" FontSize="15" FontWeight="SemiBold" Foreground="{Binding CanOpenPositionColor}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Border>
 
-                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="12,0,0,0">
-                                <TextBlock Text="Block Reason" FontSize="12" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding BlockReason}" FontSize="14" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,4,0,0" />
-                            </StackPanel>
+                            <Border Grid.Row="2" Grid.Column="1" Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="6,0,0,0">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Block Reason" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Text="{Binding BlockReason}" FontSize="13" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
 
                         </Grid>
                     </StackPanel>
