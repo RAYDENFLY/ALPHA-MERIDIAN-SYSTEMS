@@ -74,7 +74,15 @@ public class LiquidityIntelViewModelTests
                     AgeSeconds = 0.4,
                     Walls = new List<OrderBookWallDto>
                     {
-                        new() { Side = "BID", Price = 94000m, DepthUsdt = 500000m, DistanceBps = 100m, IsPersistent = true }
+                        new() { Side = "BID", Price = 94000m, DepthUsdt = 500000m, DistanceBps = 100m, IsPersistent = true, ConfirmationTier = "TRIPLE_CONFIRMED" }
+                    },
+                    BidsBuckets = new List<OrderBookBucketDto>
+                    {
+                        new() { BucketPrice = 94000m, TotalNotionalUsdt = 500000m, Side = "BID" }
+                    },
+                    AsksBuckets = new List<OrderBookBucketDto>
+                    {
+                        new() { BucketPrice = 96000m, TotalNotionalUsdt = 400000m, Side = "ASK" }
                     }
                 }
             };
@@ -101,6 +109,73 @@ public class LiquidityIntelViewModelTests
         Assert.Single(vm.StructuralLevels);
         Assert.Single(vm.SweepEvents);
         Assert.Single(vm.OrderBookWalls);
+        Assert.Single(vm.BidsBuckets);
+        Assert.Single(vm.AsksBuckets);
         Assert.Contains("LIVE", vm.FeedProvenance);
+    }
+
+    [Fact]
+    public void IndicatorAndWallToggles_FunctionCorrectly()
+    {
+        var client = new MockLiquidityApiClient();
+        var vm = new LiquidityIntelViewModel(client);
+
+        // Default state: all enabled
+        Assert.True(vm.ShowEma20);
+        Assert.True(vm.ShowEma50);
+        Assert.True(vm.ShowEma100);
+        Assert.True(vm.ShowEma200);
+        Assert.True(vm.ShowStochastic);
+        Assert.True(vm.ShowBidWalls);
+        Assert.True(vm.ShowAskWalls);
+
+        // Toggle each
+        vm.ToggleEma20();
+        Assert.False(vm.ShowEma20);
+
+        vm.ToggleEma50();
+        Assert.False(vm.ShowEma50);
+
+        vm.ToggleEma100();
+        Assert.False(vm.ShowEma100);
+
+        vm.ToggleEma200();
+        Assert.False(vm.ShowEma200);
+
+        vm.ToggleStochastic();
+        Assert.False(vm.ShowStochastic);
+
+        vm.ToggleBidWalls();
+        Assert.False(vm.ShowBidWalls);
+
+        vm.ToggleAskWalls();
+        Assert.False(vm.ShowAskWalls);
+    }
+
+    [Fact]
+    public void SelectWall_UpdatesInspectionDetails()
+    {
+        var client = new MockLiquidityApiClient();
+        var vm = new LiquidityIntelViewModel(client);
+
+        var wall = new OrderBookWallDto
+        {
+            Side = "BID",
+            Price = 80680.50m,
+            DepthUsdt = 1500000m,
+            DistanceBps = 12.5m,
+            ConfirmationTier = "TRIPLE_CONFIRMED"
+        };
+
+        vm.SelectWall(wall);
+        Assert.NotNull(vm.SelectedWall);
+        Assert.Contains("[BID WALL SELECTED]", vm.SelectedWallDetails);
+        Assert.Contains("80680.5000", vm.SelectedWallDetails);
+        Assert.Contains("12.5 bps", vm.SelectedWallDetails);
+        Assert.Contains("TRIPLE_CONFIRMED", vm.SelectedWallDetails);
+
+        vm.SelectWall(null);
+        Assert.Null(vm.SelectedWall);
+        Assert.Equal("Select a liquidity wall from the table or chart to inspect order flow depth.", vm.SelectedWallDetails);
     }
 }

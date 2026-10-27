@@ -8,8 +8,22 @@ public class ScreenerResponseDto
     [JsonPropertyName("items")]
     public List<MarketAssetTickerDto> Items { get; set; } = new();
 
+    [JsonPropertyName("data")]
+    public List<MarketAssetTickerDto>? Data
+    {
+        get => Items;
+        set { if (value != null) Items = value; }
+    }
+
     [JsonPropertyName("total_count")]
     public int TotalCount { get; set; }
+
+    [JsonPropertyName("total_matched")]
+    public int? TotalMatched
+    {
+        get => TotalCount;
+        set { if (value.HasValue) TotalCount = value.Value; }
+    }
 
     [JsonPropertyName("page")]
     public int Page { get; set; }

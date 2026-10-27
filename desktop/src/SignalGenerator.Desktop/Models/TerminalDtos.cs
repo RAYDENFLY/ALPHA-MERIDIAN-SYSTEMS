@@ -685,6 +685,15 @@ public class OrderBookOverlayDto
     [JsonPropertyName("walls")]
     public List<OrderBookWallDto> Walls { get; set; } = new();
 
+    [JsonPropertyName("bids_buckets")]
+    public List<OrderBookBucketDto> BidsBuckets { get; set; } = new();
+
+    [JsonPropertyName("asks_buckets")]
+    public List<OrderBookBucketDto> AsksBuckets { get; set; } = new();
+
+    [JsonPropertyName("persistent_walls")]
+    public List<OrderBookWallDto> PersistentWalls { get; set; } = new();
+
     [JsonPropertyName("contributing_venues")]
     public List<string> ContributingVenues { get; set; } = new();
 
@@ -696,6 +705,33 @@ public class OrderBookOverlayDto
 
     [JsonPropertyName("error_message")]
     public string? ErrorMessage { get; set; }
+}
+
+public class OrderBookBucketDto
+{
+    [JsonPropertyName("bucket_price")]
+    public decimal BucketPrice { get; set; }
+
+    [JsonPropertyName("side")]
+    public string Side { get; set; } = string.Empty;
+
+    [JsonPropertyName("distance_bps")]
+    public decimal? DistanceBps { get; set; }
+
+    [JsonPropertyName("total_notional_usdt")]
+    public decimal TotalNotionalUsdt { get; set; }
+
+    [JsonPropertyName("total_quantity")]
+    public decimal TotalQuantity { get; set; }
+
+    [JsonPropertyName("venue_count")]
+    public int VenueCount { get; set; }
+
+    [JsonPropertyName("is_cross_confirmed")]
+    public bool IsCrossConfirmed { get; set; }
+
+    [JsonPropertyName("confirmation_tier")]
+    public string? ConfirmationTier { get; set; }
 }
 
 public class OrderBookWallDto

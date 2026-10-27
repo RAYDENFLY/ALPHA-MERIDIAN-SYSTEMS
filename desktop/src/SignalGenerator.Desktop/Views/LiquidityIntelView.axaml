@@ -5,7 +5,7 @@
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
              xmlns:models="using:SignalGenerator.Desktop.Models"
              xmlns:controls="using:SignalGenerator.Desktop.Controls"
-             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="800"
+             mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="1100"
              x:Class="SignalGenerator.Desktop.Views.LiquidityIntelView"
              x:DataType="vm:LiquidityIntelViewModel"
              Background="#000000">
@@ -28,7 +28,7 @@
                             </Border>
                             <TextBlock Text="{Binding FeedProvenance}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
                         </StackPanel>
-                        <TextBlock Text="Unified workspace: Candlestick price action, cross-exchange L2 depth, protecting wall telemetry, and SMC sweep events" 
+                        <TextBlock Text="Professional TradingView-style interactive chart, multi-period EMAs, synchronized Stochastic 5,3,3, and cumulative market depth" 
                                    FontSize="10" 
                                    FontFamily="Consolas, monospace" 
                                    Foreground="#8B949E" 
@@ -69,28 +69,69 @@
                 </Grid>
             </Border>
 
-            <!-- INTERACTIVE CANDLESTICK & SMC LIQUIDITY CHART -->
-            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,6">
-                <StackPanel Spacing="4">
-                    <Grid ColumnDefinitions="*,Auto" Margin="4,2">
-                        <TextBlock Text="▶ INTERACTIVE CANDLESTICK PRICE ACTION &amp; SMC LIQUIDITY SWEEPS" 
-                                   FontSize="11" 
-                                   FontWeight="Bold" 
-                                   FontFamily="Consolas, monospace" 
-                                   Foreground="#FF9D00" />
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                            <TextBlock Text="[ZOOM: WHEEL]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                            <TextBlock Text="[PAN: DRAG]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                            <TextBlock Text="[CROSSHAIR: HOVER]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#448AFF" />
-                        </StackPanel>
-                    </Grid>
-                    <controls:CandlestickChartControl Height="340"
-                                                      Candles="{Binding Candles}"
-                                                      SweepEvents="{Binding SweepEvents}"
-                                                      StructuralLevels="{Binding StructuralLevels}"
-                                                      Symbol="{Binding Symbol}"
-                                                      Timeframe="{Binding Timeframe}" />
-                </StackPanel>
+            <!-- Technical Indicators & Chart Controls Toolbar Strip -->
+            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    
+                    <!-- Left: Navigation Hotkeys Notice -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="NAVIGATION:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        <TextBlock Text="[ZOOM: CURSOR WHEEL]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF9D00" VerticalAlignment="Center" />
+                        <TextBlock Text="[PAN: DRAG]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" VerticalAlignment="Center" />
+                        <TextBlock Text="[CROSSHAIR: HOVER]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#448AFF" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Center: Indicator & Overlay Toggles -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="OVERLAYS:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        
+                        <CheckBox IsChecked="{Binding ShowEma20}" Content="EMA 20" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FFD700" />
+                        <CheckBox IsChecked="{Binding ShowEma50}" Content="EMA 50" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF9100" />
+                        <CheckBox IsChecked="{Binding ShowEma100}" Content="EMA 100" FontSize="9" FontFamily="Consolas, monospace" Foreground="#00E5FF" />
+                        <CheckBox IsChecked="{Binding ShowEma200}" Content="EMA 200" FontSize="9" FontFamily="Consolas, monospace" Foreground="#E040FB" />
+                        <CheckBox IsChecked="{Binding ShowStochastic}" Content="STOCH (5,3,3)" FontSize="9" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        <CheckBox IsChecked="{Binding ShowBidWalls}" Content="BID WALLS" FontSize="9" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        <CheckBox IsChecked="{Binding ShowAskWalls}" Content="ASK WALLS" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                    </StackPanel>
+
+                    <!-- Right: Quick Navigation Commands -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <Button Name="ResetChartBtn" Classes="terminal-btn" Padding="6,2" ToolTip.Tip="Reset chart view">
+                            <TextBlock Text="RESET VIEW" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        </Button>
+                    </StackPanel>
+
+                </Grid>
+            </Border>
+
+            <!-- MAIN TRADINGVIEW-STYLE CANDLESTICK & INDICATOR CHART -->
+            <Border Background="#080A0D" BorderBrush="#242A34" BorderThickness="1" Padding="4">
+                <controls:CandlestickChartControl x:Name="MainCandlestickChart"
+                                                  Height="430"
+                                                  Candles="{Binding Candles}"
+                                                  SweepEvents="{Binding SweepEvents}"
+                                                  StructuralLevels="{Binding StructuralLevels}"
+                                                  Walls="{Binding OrderBookWalls}"
+                                                  Symbol="{Binding Symbol}"
+                                                  Timeframe="{Binding Timeframe}"
+                                                  ShowEma20="{Binding ShowEma20}"
+                                                  ShowEma50="{Binding ShowEma50}"
+                                                  ShowEma100="{Binding ShowEma100}"
+                                                  ShowEma200="{Binding ShowEma200}"
+                                                  ShowStochastic="{Binding ShowStochastic}"
+                                                  ShowBidWalls="{Binding ShowBidWalls}"
+                                                  ShowAskWalls="{Binding ShowAskWalls}" />
+            </Border>
+
+            <!-- CUMULATIVE MARKET DEPTH CHART (SEPARATE PANE) -->
+            <Border Background="#080A0D" BorderBrush="#242A34" BorderThickness="1" Padding="4">
+                <controls:MarketDepthChartControl Height="200"
+                                                  Bids="{Binding BidsBuckets}"
+                                                  Asks="{Binding AsksBuckets}"
+                                                  MidPrice="{Binding MidPrice}"
+                                                  SpreadBps="{Binding SpreadBps}"
+                                                  AgeSeconds="{Binding OrderBookAgeSeconds}"
+                                                  Status="{Binding OrderBookStatus}" />
             </Border>
 
             <!-- Order Book Depth & Wall Telemetry (4 Tiles) -->
@@ -128,10 +169,21 @@
                 </Border>
             </Grid>
 
+            <!-- Wall Inspector Strip -->
+            <Border Background="#0C1015" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="WALL INSPECTOR:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding SelectedWallDetails}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
             <!-- ORDER BOOK DEPTH & LIQUIDITY MAP (WALLS TABLE) -->
             <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,10">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="▶ ORDER BOOK DEPTH &amp; LIQUIDITY MAP (SIGNIFICANT WALL CANDIDATES)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="▶ ORDER BOOK DEPTH &amp; LIQUIDITY MAP (PROTECTING WALL CANDIDATES)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        <TextBlock Grid.Column="1" Text="Click any wall to inspect price and notional on chart" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    </Grid>
                     
                     <!-- Table Header -->
                     <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
@@ -145,7 +197,11 @@
                         </Grid>
                     </Border>
 
-                    <ListBox ItemsSource="{Binding OrderBookWalls}" Background="Transparent" BorderThickness="0" MaxHeight="180">
+                    <ListBox ItemsSource="{Binding OrderBookWalls}" 
+                             SelectedItem="{Binding SelectedWall}"
+                             Background="Transparent" 
+                             BorderThickness="0" 
+                             MaxHeight="180">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="models:OrderBookWallDto">
                                 <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="4,4">

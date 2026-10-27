@@ -28,6 +28,18 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var mainVm = Services.GetRequiredService<MainViewModel>();
+
+            if (desktop.Args != null && desktop.Args.Length > 0)
+            {
+                for (int i = 0; i < desktop.Args.Length; i++)
+                {
+                    if (desktop.Args[i].Equals("--view", StringComparison.OrdinalIgnoreCase) && i + 1 < desktop.Args.Length)
+                    {
+                        mainVm.Navigate(desktop.Args[i + 1]);
+                    }
+                }
+            }
+
             desktop.MainWindow = new MainWindow
             {
                 DataContext = mainVm

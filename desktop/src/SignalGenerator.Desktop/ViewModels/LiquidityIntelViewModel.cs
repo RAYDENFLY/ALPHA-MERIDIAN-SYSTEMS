@@ -40,6 +40,15 @@ public partial class LiquidityIntelViewModel : ViewModelBase
     private string _spreadBpsText = "0.01 bps";
 
     [ObservableProperty]
+    private decimal? _spreadBps;
+
+    [ObservableProperty]
+    private decimal? _midPrice;
+
+    [ObservableProperty]
+    private double? _orderBookAgeSeconds;
+
+    [ObservableProperty]
     private string _bidDepthText = "$0 USDT";
 
     [ObservableProperty]
@@ -67,7 +76,41 @@ public partial class LiquidityIntelViewModel : ViewModelBase
     private ObservableCollection<OrderBookWallDto> _orderBookWalls = new();
 
     [ObservableProperty]
+    private ObservableCollection<OrderBookBucketDto> _bidsBuckets = new();
+
+    [ObservableProperty]
+    private ObservableCollection<OrderBookBucketDto> _asksBuckets = new();
+
+    [ObservableProperty]
     private ObservableCollection<SweepEventDto> _sweepEvents = new();
+
+    [ObservableProperty]
+    private OrderBookWallDto? _selectedWall;
+
+    [ObservableProperty]
+    private string _selectedWallDetails = "Select a liquidity wall from the table or chart to inspect order flow depth.";
+
+    // Indicator & Overlay Toggles
+    [ObservableProperty]
+    private bool _showEma20 = true;
+
+    [ObservableProperty]
+    private bool _showEma50 = true;
+
+    [ObservableProperty]
+    private bool _showEma100 = true;
+
+    [ObservableProperty]
+    private bool _showEma200 = true;
+
+    [ObservableProperty]
+    private bool _showStochastic = true;
+
+    [ObservableProperty]
+    private bool _showBidWalls = true;
+
+    [ObservableProperty]
+    private bool _showAskWalls = true;
 
     [ObservableProperty]
     private string _statusColor = "#00E676";
@@ -131,6 +174,44 @@ public partial class LiquidityIntelViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void SelectWall(OrderBookWallDto? wall)
+    {
+        SelectedWall = wall;
+        if (wall != null)
+        {
+            string sideText = wall.Side.ToUpperInvariant();
+            string distStr = wall.DistanceBps.HasValue ? $"{wall.DistanceBps.Value.ToString("F1", CultureInfo.InvariantCulture)} bps" : "--";
+            string venuesStr = wall.Venues != null && wall.Venues.Count > 0 ? string.Join(", ", wall.Venues) : (wall.Venue ?? "Combined");
+            SelectedWallDetails = $"[{sideText} WALL SELECTED] Price: ${wall.Price.ToString("F4", CultureInfo.InvariantCulture)} | Depth: {wall.FormattedNotional} | Distance: {distStr} | Tier: {wall.ConfirmationTier ?? "STANDARD"} | Venues: {venuesStr}";
+        }
+        else
+        {
+            SelectedWallDetails = "Select a liquidity wall from the table or chart to inspect order flow depth.";
+        }
+    }
+
+    [RelayCommand]
+    public void ToggleEma20() => ShowEma20 = !ShowEma20;
+
+    [RelayCommand]
+    public void ToggleEma50() => ShowEma50 = !ShowEma50;
+
+    [RelayCommand]
+    public void ToggleEma100() => ShowEma100 = !ShowEma100;
+
+    [RelayCommand]
+    public void ToggleEma200() => ShowEma200 = !ShowEma200;
+
+    [RelayCommand]
+    public void ToggleStochastic() => ShowStochastic = !ShowStochastic;
+
+    [RelayCommand]
+    public void ToggleBidWalls() => ShowBidWalls = !ShowBidWalls;
+
+    [RelayCommand]
+    public void ToggleAskWalls() => ShowAskWalls = !ShowAskWalls;
+
+    [RelayCommand]
     public async Task RefreshIntelAsync()
     {
         if (IsLoading) return;
@@ -179,6 +260,10 @@ public partial class LiquidityIntelViewModel : ViewModelBase
                 if (ob != null)
                 {
                     OrderBookStatus = ob.Status;
+                    SpreadBps = ob.SpreadBps;
+                    MidPrice = ob.MidPrice;
+                    OrderBookAgeSeconds = ob.AgeSeconds;
+
                     SpreadBpsText = (ob.SpreadBps ?? 0).ToString("F2", CultureInfo.InvariantCulture) + " bps";
                     BidDepthText = ob.TotalBidDepthUsdt.HasValue 
                         ? "$" + ob.TotalBidDepthUsdt.Value.ToString("N0", CultureInfo.InvariantCulture) 
@@ -213,6 +298,19 @@ public partial class LiquidityIntelViewModel : ViewModelBase
                     AskWallLevel = topAsk != null 
                         ? $"${topAsk.Price:F4} (${topAsk.NotionalUsdt:N0})" 
                         : "--";
+
+                    // Populate Cumulative Depth Buckets
+                    BidsBuckets.Clear();
+                    foreach (var b in ob.BidsBuckets)
+                    {
+                        BidsBuckets.Add(b);
+                    }
+
+                    AsksBuckets.Clear();
+                    foreach (var a in ob.AsksBuckets)
+                    {
+                        AsksBuckets.Add(a);
+                    }
                 }
             }
             else
