@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SignalGenerator.Desktop/SignalGenerator.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SignalGenerator.Desktop.Tests/SignalGenerator.Desktop.Tests.csproj" />
+  </Folder>
+</Solution>

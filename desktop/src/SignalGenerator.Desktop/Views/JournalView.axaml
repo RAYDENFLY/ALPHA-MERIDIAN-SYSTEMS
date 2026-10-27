@@ -1,0 +1,127 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:Class="SignalGenerator.Desktop.Views.JournalView"
+             x:DataType="vm:JournalViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="16" Margin="24">
+            
+            <!-- Page Header -->
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Performance Journal &amp; Trade Attribution" 
+                               FontSize="22" 
+                               FontWeight="Bold" 
+                               Foreground="#F0F6FC" />
+                    <TextBlock Text="Historical execution analytics, R:R distribution, and daily capacity utilization" 
+                               FontSize="13" 
+                               Foreground="#8B949E" 
+                               Margin="0,4,0,0" />
+                </StackPanel>
+
+                <Button Grid.Column="1" 
+                        Command="{Binding RefreshSummaryCommand}" 
+                        Background="#21262D" 
+                        BorderBrush="#30363D" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="14,8"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="↻" FontSize="14" Foreground="#58A6FF" FontWeight="Bold" />
+                        <TextBlock Text="Refresh Journal" Foreground="#F0F6FC" FontSize="13" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Metrics Summary Cards -->
+            <Grid ColumnDefinitions="*,*,*,*" Margin="0,8,0,0">
+                
+                <!-- Card 1: Win Rate -->
+                <Border Grid.Column="0" Margin="0,0,8,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="WIN RATE" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding WinRatePct, StringFormat='{}{0:F1}%'}" FontSize="24" FontWeight="Bold" Foreground="#3FB950" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding WinsCount}" Foreground="#3FB950" FontWeight="Bold" />
+                            <TextBlock Text="wins  /" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding LossesCount}" Foreground="#F85149" FontWeight="Bold" />
+                            <TextBlock Text="losses" Foreground="#8B949E" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 2: Net PnL -->
+                <Border Grid.Column="1" Margin="4,0,4,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="TOTAL NET PNL" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding TotalNetPnlUsd, StringFormat='${0:F4}'}" FontSize="24" FontWeight="Bold" Foreground="#F0F6FC" />
+                        <TextBlock Text="{Binding TotalGrossPnlUsd, StringFormat='Gross: ${0:F4}'}" FontSize="12" Foreground="#8B949E" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 3: Profit Factor & Average R -->
+                <Border Grid.Column="2" Margin="4,0,4,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="PROFIT FACTOR" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding ProfitFactor, StringFormat='{}{0:F2}'}" FontSize="24" FontWeight="Bold" Foreground="#58A6FF" />
+                        <TextBlock Text="{Binding AverageRealizedR, StringFormat='Avg R: {0:F3}'}" FontSize="12" Foreground="#8B949E" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 4: Daily Allowance -->
+                <Border Grid.Column="3" Margin="8,0,0,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="DAILY ENTRIES REMAINING" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding RemainingEntries}" FontSize="24" FontWeight="Bold" Foreground="#D29922" />
+                        <TextBlock Text="{Binding DailyFilledEntries, StringFormat='Filled: {0} / 3'}" FontSize="12" Foreground="#8B949E" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Detailed Table Container -->
+            <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Reconciliation &amp; Risk Invariants" FontSize="15" FontWeight="Bold" Foreground="#F0F6FC" />
+
+                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,16">
+                            <TextBlock Text="Total Closed Trades" FontSize="12" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding TotalClosedTrades}" FontSize="16" FontWeight="SemiBold" Foreground="#F0F6FC" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,16,16">
+                            <TextBlock Text="Total Fees Paid" FontSize="12" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding TotalFeesPaidUsd, StringFormat='${0:F4}'}" FontSize="16" FontWeight="SemiBold" Foreground="#8B949E" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,16">
+                            <TextBlock Text="Reconciliation Verified" FontSize="12" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding ReconciliationOk}" FontSize="16" FontWeight="SemiBold" Foreground="#3FB950" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Text="Daily Loss Used" FontSize="12" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding DailyLossUsageUsd, StringFormat='${0:F2}'}" FontSize="16" FontWeight="SemiBold" Foreground="#F0F6FC" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,16,0">
+                            <TextBlock Text="Daily Loss Limit" FontSize="12" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding DailyLossLimitUsd, StringFormat='${0:F2}'}" FontSize="16" FontWeight="SemiBold" Foreground="#D29922" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,0">
+                            <TextBlock Text="Trading Mode" FontSize="12" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding Mode}" FontSize="16" FontWeight="SemiBold" Foreground="#1F6FEB" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

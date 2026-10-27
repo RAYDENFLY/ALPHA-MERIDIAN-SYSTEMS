@@ -1,0 +1,15 @@
+# .NET build output
+bin/
+obj/
+
+# Visual Studio / Rider / VSCode
+.vs/
+.idea/
+.vscode/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+
+# Avalonia previewer cache
+.avalonia/

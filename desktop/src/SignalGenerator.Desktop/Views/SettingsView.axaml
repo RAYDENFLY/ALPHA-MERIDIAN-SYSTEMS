@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:Class="SignalGenerator.Desktop.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="16" Margin="24">
+            
+            <TextBlock Text="Terminal Configuration &amp; Connectivity" 
+                       FontSize="22" 
+                       FontWeight="Bold" 
+                       Foreground="#F0F6FC" />
+            <TextBlock Text="Local daemon endpoints, polling rates, and application parameters" 
+                       FontSize="13" 
+                       Foreground="#8B949E" 
+                       Margin="0,0,0,8" />
+
+            <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="16" MaxWidth="600" HorizontalAlignment="Left">
+                    
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="SignalGenerator Backend URL" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
+                        <TextBox Text="{Binding BaseUrl}" 
+                                 Background="#0D1117" 
+                                 BorderBrush="#30363D" 
+                                 Foreground="#F0F6FC" 
+                                 CornerRadius="6" 
+                                 Padding="10,8" />
+                        <TextBlock Text="Must point to the running FastAPI server (default: http://127.0.0.1:8000)" FontSize="11" Foreground="#8B949E" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Telemetry Polling Interval (Seconds)" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
+                        <NumericUpDown Value="{Binding PollingIntervalSeconds}" 
+                                       Minimum="1" 
+                                       Maximum="60" 
+                                       Background="#0D1117" 
+                                       BorderBrush="#30363D" 
+                                       Foreground="#F0F6FC" 
+                                       CornerRadius="6" />
+                        <TextBlock Text="Frequency of real-time GET polls for status, live session, and journal" FontSize="11" Foreground="#8B949E" />
+                    </StackPanel>
+
+                    <CheckBox IsChecked="{Binding EnableAutoPolling}" 
+                              Foreground="#F0F6FC" 
+                              Content="Enable Background Auto-Polling" 
+                              Margin="0,4,0,0" />
+
+                    <Border Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,8,0,0">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Client Invariant Guarantee" FontSize="12" FontWeight="Bold" Foreground="#3FB950" />
+                            <TextBlock Text="This desktop terminal issues purely non-mutating HTTP GET requests. Mutating commands (starting/stopping live auto trading, changing modes, creating orders) are disabled from the UI to protect trading invariants." 
+                                       FontSize="11" 
+                                       Foreground="#8B949E" 
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Button Command="{Binding SaveSettingsCommand}" 
+                            Background="#238636" 
+                            Foreground="#FFFFFF" 
+                            FontWeight="Bold" 
+                            CornerRadius="6" 
+                            Padding="20,10" 
+                            HorizontalAlignment="Left"
+                            Margin="0,8,0,0">
+                        <TextBlock Text="Save Settings" />
+                    </Button>
+
+                    <TextBlock Text="{Binding SaveMessage}" 
+                               IsVisible="{Binding SaveMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" 
+                               Foreground="#3FB950" 
+                               FontWeight="SemiBold" 
+                               FontSize="12" />
+
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

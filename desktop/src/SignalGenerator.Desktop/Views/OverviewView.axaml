@@ -1,0 +1,259 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:Class="SignalGenerator.Desktop.Views.OverviewView"
+             x:DataType="vm:OverviewViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="16" Margin="24">
+            
+            <!-- Page Header -->
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="System Overview &amp; Live Telemetry" 
+                               FontSize="22" 
+                               FontWeight="Bold" 
+                               Foreground="#F0F6FC" />
+                    <TextBlock Text="Real-time execution diagnostics, risk gates, and exchange synchronization" 
+                               FontSize="13" 
+                               Foreground="#8B949E" 
+                               Margin="0,4,0,0" />
+                </StackPanel>
+
+                <Button Grid.Column="1" 
+                        Command="{Binding RefreshNowCommand}" 
+                        Background="#21262D" 
+                        BorderBrush="#30363D" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="14,8"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="↻" FontSize="14" Foreground="#58A6FF" FontWeight="Bold" />
+                        <TextBlock Text="Refresh Telemetry" Foreground="#F0F6FC" FontSize="13" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Top Metric Cards Grid -->
+            <Grid ColumnDefinitions="*,*,*,*" Margin="0,8,0,0">
+                
+                <!-- Card 1: Session Status -->
+                <Border Grid.Column="0" Margin="0,0,8,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="LIVE SESSION" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                            <Border Grid.Column="1" Background="#1F6FEB" CornerRadius="4" Padding="6,2">
+                                <TextBlock Text="{Binding Mode}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" />
+                            </Border>
+                        </Grid>
+                        
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                            <TextBlock Text="{Binding SessionState}" FontSize="20" FontWeight="Bold" Foreground="#3FB950" />
+                        </StackPanel>
+
+                        <Border Background="#0D1117" CornerRadius="4" Padding="8,6">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Session ID" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="{Binding SessionId}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Preflight Verdict" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="{Binding PreflightVerdict}" FontSize="11" FontWeight="Bold" Foreground="#3FB950" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 2: Entries & Capacity -->
+                <Border Grid.Column="1" Margin="4,0,4,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="ENTRIES PLACED" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                            <Border Grid.Column="1" Background="#238636" CornerRadius="4" Padding="6,2">
+                                <TextBlock Text="ACTIVE LIMIT" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" />
+                            </Border>
+                        </Grid>
+
+                        <TextBlock Text="{Binding EntriesPlacedDisplay}" FontSize="24" FontWeight="Bold" Foreground="#F0F6FC" Margin="0,2,0,0" />
+
+                        <Border Background="#0D1117" CornerRadius="4" Padding="8,6">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Position Lock" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="{Binding GlobalLockState}" FontSize="11" FontWeight="Bold" Foreground="#D29922" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Locked Symbol" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="{Binding GlobalLockSymbol}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#58A6FF" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 3: Account Equity -->
+                <Border Grid.Column="2" Margin="4,0,4,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="TOTAL EQUITY" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                            <Border Grid.Column="1" Background="#21262D" CornerRadius="4" Padding="6,2">
+                                <TextBlock Text="{Binding AccountStatus}" FontSize="10" FontWeight="Bold" Foreground="#3FB950" />
+                            </Border>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="${Binding TotalEquity}" FontSize="24" FontWeight="Bold" Foreground="#58A6FF" />
+                            <TextBlock Text="USDT" FontSize="12" Foreground="#8B949E" VerticalAlignment="Bottom" Margin="0,0,0,4" />
+                        </StackPanel>
+
+                        <Border Background="#0D1117" CornerRadius="4" Padding="8,6">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Available Balance" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="${Binding AvailableBalance}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Used Margin" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="${Binding UsedMargin}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 4: Scanner Health -->
+                <Border Grid.Column="3" Margin="8,0,0,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="SCANNER ENGINE" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                            <Border Grid.Column="1" Background="#238636" CornerRadius="4" Padding="6,2">
+                                <TextBlock Text="{Binding ScannerProcessStatus}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" />
+                            </Border>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding ScannerState}" FontSize="20" FontWeight="Bold" Foreground="#F0F6FC" />
+                            <TextBlock Text="state" FontSize="12" Foreground="#8B949E" VerticalAlignment="Bottom" Margin="0,0,0,3" />
+                        </StackPanel>
+
+                        <Border Background="#0D1117" CornerRadius="4" Padding="8,6">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Scan Cycles" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="{Binding ScanCount}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Active Strategy" FontSize="11" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="{Binding ActiveStrategy}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#58A6FF" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Detailed Telemetry Section -->
+            <Grid ColumnDefinitions="2*,*">
+                
+                <!-- Left: Risk Budgets & Position Gateways -->
+                <Border Grid.Column="0" Margin="0,0,8,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="20">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Risk Gates &amp; Protection Invariants" FontSize="15" FontWeight="Bold" Foreground="#F0F6FC" />
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                            
+                            <!-- Row 0 -->
+                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+                                <TextBlock Text="Daily Loss Used / Limit" FontSize="12" Foreground="#8B949E" />
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                                    <TextBlock Text="${Binding DailyLossUsed}" FontSize="16" FontWeight="SemiBold" Foreground="#F0F6FC" />
+                                    <TextBlock Text="/" FontSize="16" Foreground="#8B949E" />
+                                    <TextBlock Text="${Binding DailyLossLimit}" FontSize="16" FontWeight="SemiBold" Foreground="#D29922" />
+                                    <TextBlock Text="USDT" FontSize="11" Foreground="#8B949E" VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="12,0,0,12">
+                                <TextBlock Text="Daily Loss Verification" FontSize="12" Foreground="#8B949E" />
+                                <TextBlock Text="{Binding DailyLossStatus}" FontSize="16" FontWeight="SemiBold" Foreground="#3FB950" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <!-- Row 1 -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,12,12">
+                                <TextBlock Text="Effective Trade Risk" FontSize="12" Foreground="#8B949E" />
+                                <TextBlock Text="${Binding EffectiveTradeRisk} USDT" FontSize="16" FontWeight="SemiBold" Foreground="#F0F6FC" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0,0,12">
+                                <TextBlock Text="Reconciliation Status" FontSize="12" Foreground="#8B949E" />
+                                <TextBlock Text="{Binding ReconciliationStatus}" FontSize="16" FontWeight="SemiBold" Foreground="#3FB950" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <!-- Row 2 -->
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="Can Open Position" FontSize="12" Foreground="#8B949E" />
+                                <TextBlock Text="{Binding CanOpenPosition}" FontSize="16" FontWeight="SemiBold" Foreground="#3FB950" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="Block Reason" FontSize="12" Foreground="#8B949E" />
+                                <TextBlock Text="{Binding BlockReason}" FontSize="14" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Right: Execution Engine Invariants -->
+                <Border Grid.Column="1" Margin="8,0,0,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="20">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Safety Invariants" FontSize="15" FontWeight="Bold" Foreground="#F0F6FC" />
+
+                        <StackPanel Spacing="10">
+                            <Border Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,8">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Zero Direct SQLite Access" FontSize="11" FontWeight="Bold" Foreground="#3FB950" />
+                                    <TextBlock Text="Desktop client interacts strictly via FastAPI REST" FontSize="11" Foreground="#8B949E" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,8">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Read-Only API Guarantee" FontSize="11" FontWeight="Bold" Foreground="#58A6FF" />
+                                    <TextBlock Text="Only HTTP GET queries are dispatched" FontSize="11" Foreground="#8B949E" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,8">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Git Branch Isolation" FontSize="11" FontWeight="Bold" Foreground="#D29922" />
+                                    <TextBlock Text="feature/avalonia-desktop isolated from main" FontSize="11" Foreground="#8B949E" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+            <!-- Bottom Live Session Status Message Card -->
+            <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="LIVE OPERATIONAL AUDIT LOG" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding LastStatusMessage}" 
+                               FontSize="13" 
+                               FontFamily="Consolas, monospace" 
+                               Foreground="#58A6FF" 
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

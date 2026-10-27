@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             xmlns:models="using:SignalGenerator.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             x:Class="SignalGenerator.Desktop.Views.ScreenerView"
+             x:DataType="vm:ScreenerViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,*" Margin="24">
+        
+        <!-- Header -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Multi-Exchange Market Screener" 
+                           FontSize="22" 
+                           FontWeight="Bold" 
+                           Foreground="#F0F6FC" />
+                <TextBlock Text="Cross-venue perpetuals, funding arbitrage, and liquidity depth" 
+                           FontSize="13" 
+                           Foreground="#8B949E" 
+                           Margin="0,4,0,0" />
+            </StackPanel>
+
+            <Button Grid.Column="1" 
+                    Command="{Binding LoadMarketsCommand}" 
+                    Background="#21262D" 
+                    BorderBrush="#30363D" 
+                    BorderThickness="1" 
+                    CornerRadius="6" 
+                    Padding="14,8"
+                    VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="↻" FontSize="14" Foreground="#58A6FF" FontWeight="Bold" />
+                    <TextBlock Text="Scan Venues" Foreground="#F0F6FC" FontSize="13" FontWeight="SemiBold" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <!-- Search & Filter Bar -->
+        <Border Grid.Row="1" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,16">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                <TextBox Grid.Column="0" 
+                         Text="{Binding SearchQuery}" 
+                         PlaceholderText="Search ticker symbol (e.g. BTC, ETH, SOL, BZ)..." 
+                         Background="#0D1117" 
+                         BorderBrush="#30363D" 
+                         Foreground="#F0F6FC" 
+                         CornerRadius="6" 
+                         Margin="0,0,12,0" />
+
+                <Button Grid.Column="1" 
+                        Command="{Binding LoadMarketsCommand}" 
+                        Background="#1F6FEB" 
+                        Foreground="#FFFFFF" 
+                        FontWeight="SemiBold" 
+                        CornerRadius="6" 
+                        Padding="16,6" 
+                        Margin="0,0,8,0">
+                    <TextBlock Text="Filter" />
+                </Button>
+
+                <Button Grid.Column="2" 
+                        Command="{Binding PrevPageCommand}" 
+                        Background="#21262D" 
+                        BorderBrush="#30363D" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="12,6" 
+                        Margin="0,0,4,0">
+                    <TextBlock Text="&lt; Prev" Foreground="#C9D1D9" />
+                </Button>
+
+                <Button Grid.Column="3" 
+                        Command="{Binding NextPageCommand}" 
+                        Background="#21262D" 
+                        BorderBrush="#30363D" 
+                        BorderThickness="1" 
+                        CornerRadius="6" 
+                        Padding="12,6">
+                    <TextBlock Text="Next &gt;" Foreground="#C9D1D9" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Data Grid Container -->
+        <Border Grid.Row="2" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="1">
+            <Grid RowDefinitions="Auto,*">
+                <!-- Header Row -->
+                <Border Grid.Row="0" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="16,10">
+                    <Grid ColumnDefinitions="140,110,130,130,110,90,90,110">
+                        <TextBlock Grid.Column="0" Text="SYMBOL" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Grid.Column="1" Text="PRICE (USD)" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Grid.Column="2" Text="24H VOL (USDT)" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Grid.Column="3" Text="OPEN INTEREST" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Grid.Column="4" Text="24H CHANGE" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Grid.Column="5" Text="VENUES" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Grid.Column="6" Text="SPREAD" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                        <TextBlock Grid.Column="7" Text="FRESHNESS" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
+                    </Grid>
+                </Border>
+
+                <!-- List Items -->
+                <ListBox Grid.Row="1" 
+                         ItemsSource="{Binding Markets}" 
+                         Background="Transparent" 
+                         BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:MarketAssetTickerDto">
+                            <Border BorderBrush="#21262D" BorderThickness="0,0,0,1" Padding="12,8">
+                                <Grid ColumnDefinitions="140,110,130,130,110,90,90,110">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding NormalizedSymbol}" FontWeight="Bold" Foreground="#F0F6FC" FontFamily="Consolas, monospace" />
+                                        <Border IsVisible="{Binding CrossListed}" Background="#238636" CornerRadius="3" Padding="4,1" VerticalAlignment="Center">
+                                            <TextBlock Text="MULTI" FontSize="9" FontWeight="Bold" Foreground="#FFFFFF" />
+                                        </Border>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1" Text="{Binding BenchmarkPrice, StringFormat='${0:F4}'}" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                    <TextBlock Grid.Column="2" Text="{Binding TotalVolume24hUsdt, StringFormat='${0:N0}'}" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="3" Text="{Binding TotalOpenInterestUsdt, StringFormat='${0:N0}'}" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="4" Text="{Binding PriceChange24hPct, StringFormat='{}{0:F2}%'}" FontFamily="Consolas, monospace" Foreground="#3FB950" />
+                                    <TextBlock Grid.Column="5" Text="{Binding VenueCount}" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Center" />
+                                    <TextBlock Grid.Column="6" Text="{Binding BestSpreadBps, StringFormat='{}{0:F1} bps'}" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="7" Text="{Binding DataFreshnessSeconds, StringFormat='{}{0:F1}s'}" FontFamily="Consolas, monospace" Foreground="#6E7681" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+
+    </Grid>
+</UserControl>
