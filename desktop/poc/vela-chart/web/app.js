@@ -14,6 +14,7 @@
     let pollInterval = null;
     let currentBars = [];
     let productionBridge = new URLSearchParams(window.location.search).get('host') === 'production';
+    const harnessMode = new URLSearchParams(window.location.search).get('host') === 'harness';
     let latestBridgeSequence = -1;
 
     // Production host contract: C# owns GET polling and injects versioned snapshots.
@@ -81,6 +82,16 @@
     async function init() {
         console.log('[AMS] Initializing Vela Chart PoC...');
         dataAdapter = new AmsDataAdapter('');
+        if (harnessMode) {
+            document.getElementById('test-fixture-banner').style.display = 'block';
+            dataAdapter.fetchSymbols = async () => ({ symbols: ['TESTBTC'], defaultSymbol: 'TESTBTC', defaultTimeframe: '1h', supportedTimeframes: ['15m', '1h', '4h', '1d'] });
+            dataAdapter.fetchKlines = async () => Array.from({ length: 150 }, (_, i) => {
+                const time = 1700000000000 + i * 3600000;
+                const open = 100 + i * 0.1;
+                return { time, open, high: open + 2, low: open - 1, close: open + 1, volume: 1000 + i };
+            });
+            dataAdapter.fetchOrderBook = async () => ({ symbol: 'TESTBTC', midPrice: 115.95, spreadBps: 1, bids: [], asks: [], disclosure: 'TEST DATA — NOT LIVE' });
+        }
 
         setupEventListeners();
         await loadSymbols();

@@ -130,8 +130,10 @@ public partial class LiquidityIntelViewModel : ViewModelBase
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _settingsService = settingsService;
-        UseVelaChart = _settingsService?.CurrentSettings.UseVelaChart ?? false;
-        _ = InitializeWorkstationAsync();
+        UseVelaChart = (_settingsService?.CurrentSettings.UseVelaChart ?? false) ||
+                       string.Equals(Environment.GetEnvironmentVariable("AMS_VELA_HARNESS"), "1", StringComparison.Ordinal);
+        if (!string.Equals(Environment.GetEnvironmentVariable("AMS_VELA_HARNESS"), "1", StringComparison.Ordinal))
+            _ = InitializeWorkstationAsync();
     }
 
     // Parameterless fallback for legacy designer

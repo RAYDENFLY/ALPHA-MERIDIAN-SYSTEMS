@@ -33,7 +33,9 @@ public partial class VelaChartHostView : UserControl
 
         try
         {
-            Browser.Navigate(new Uri(page + "?host=production"));
+            var mode = string.Equals(Environment.GetEnvironmentVariable("AMS_VELA_HARNESS"), "1", StringComparison.Ordinal)
+                ? "harness" : "production";
+            Browser.Navigate(new Uri(page + "?host=" + mode));
         }
         catch (Exception ex)
         {
