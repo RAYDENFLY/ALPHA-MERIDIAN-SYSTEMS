@@ -192,7 +192,7 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public void MainViewModel_NavigatesAcrossBloombergTerminalViews()
+    public void MainViewModel_NavigatesAcrossTerminalViews()
     {
         var (vm, _, _) = CreateMainVm();
 

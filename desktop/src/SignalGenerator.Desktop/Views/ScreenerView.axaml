@@ -80,7 +80,7 @@
             </Grid>
         </Border>
 
-        <!-- Bloomberg Data Grid Container -->
+        <!-- Terminal Data Grid Container -->
         <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
             <Grid RowDefinitions="Auto,*">
                 

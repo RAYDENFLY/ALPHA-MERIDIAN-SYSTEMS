@@ -67,7 +67,7 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _lastErrorMessage;
 
-    // Semantic Terminal Colors (Bloomberg Style)
+    // Semantic Terminal Colors (Alpha Meridian Systems Style)
     public string ConnectionStatusColor => IsConnected ? "#00E676" : "#FF5252";
 
     public string ModeColor => Mode?.ToUpperInvariant() switch

@@ -33,7 +33,7 @@
                     
                     <!-- Backend URL -->
                     <StackPanel Spacing="4">
-                        <TextBlock Text="SIGNALGENERATOR BACKEND URL" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        <TextBlock Text="ALPHA MERIDIAN SYSTEMS BACKEND DAEMON URL" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                         <TextBox Text="{Binding BaseUrl}" 
                                  Background="#000000" 
                                  BorderBrush="#242A34" 
@@ -71,7 +71,7 @@
                     <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="12,10">
                         <StackPanel Spacing="4">
                             <TextBlock Text="CLIENT ARCHITECTURAL INVARIANT" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                            <TextBlock Text="This Bloomberg Terminal desktop client interacts strictly through HTTP GET requests against the FastAPI backend. All order submissions, kill switches, and strategy mutations are isolated on the server daemon to maintain live trading safety invariants." 
+                            <TextBlock Text="This Alpha Meridian Systems desktop client interacts strictly through HTTP GET requests against the FastAPI backend. All order submissions, kill switches, and strategy mutations are isolated on the server daemon to maintain live trading safety invariants." 
                                        FontSize="10" 
                                        FontFamily="Consolas, monospace" 
                                        Foreground="#8B949E" 
@@ -94,6 +94,32 @@
                                FontFamily="Consolas, monospace"
                                FontSize="11" />
 
+                </StackPanel>
+            </Border>
+
+            <!-- About & Identity Panel -->
+            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="16" MaxWidth="700" HorizontalAlignment="Left">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="■ ABOUT // ALPHA MERIDIAN SYSTEMS" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    <TextBlock Text="ALPHA MERIDIAN SYSTEMS" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                    <TextBlock Text="by AMS Capital" FontSize="10" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                    <TextBlock Text="Quantitative Intelligence · Market Intelligence · AI Research · Execution Monitoring" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    
+                    <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8" Margin="0,4,0,0">
+                        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="WORKSTATION VERSION:" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="v3.1.0-lts (Alpha Meridian)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="TARGET FRAMEWORK:" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,3,0,0" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text=".NET 8.0 LTS (C# 12)" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" Margin="0,3,0,0" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="UI FRAMEWORK:" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,3,0,0" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="Avalonia UI 11.2 (Skia-rendered)" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" Margin="0,3,0,0" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="LEGAL &amp; COPYRIGHT:" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,3,0,0" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="© 2026 AMS Capital. Proprietary &amp; Confidential." FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" Margin="0,3,0,0" />
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Border>
 

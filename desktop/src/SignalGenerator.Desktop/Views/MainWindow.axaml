@@ -6,28 +6,33 @@
         mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
         x:Class="SignalGenerator.Desktop.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="SignalGenerator Desktop Terminal — [Bloomberg Classic Edition]"
+        Icon="/Assets/ams-logo.ico"
+        Title="Alpha Meridian Systems — Quantitative Intelligence"
         Background="#000000"
         MinWidth="1150" MinHeight="720"
         WindowStartupLocation="CenterScreen">
 
     <Grid RowDefinitions="Auto,*,Auto">
         
-        <!-- Bloomberg Command & Telemetry Ribbon -->
+        <!-- Command & Telemetry Ribbon -->
         <Border Grid.Row="0" Background="#080B0E" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="12,6">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 
                 <!-- Brand & Terminal ID -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="[SG // BLOOMBERG TERMINAL]" 
+                    <TextBlock Text="[AMS // ALPHA MERIDIAN SYSTEMS]" 
                                FontSize="12" 
                                FontWeight="Bold" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#FF9D00" 
                                VerticalAlignment="Center" />
+                    <TextBlock Text="by AMS Capital" 
+                               FontSize="9" 
+                               FontFamily="Consolas, monospace" 
+                               Foreground="#8B949E" 
+                               VerticalAlignment="Center" />
                     <Border Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="5,2" VerticalAlignment="Center">
-                        <TextBlock Text="LIVE_MICRO_V1" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        <TextBlock Text="QUANTITATIVE INTELLIGENCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
                     </Border>
                     <Border Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="5,2" VerticalAlignment="Center">
                         <TextBlock Text="ASTERDEX" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
@@ -106,10 +111,10 @@
             </Grid>
         </Border>
 
-        <!-- Main Workspace Grid: Bloomberg Rail + Content -->
+        <!-- Main Workspace Grid: Terminal Rail + Content -->
         <Grid Grid.Row="1" ColumnDefinitions="210,*">
             
-            <!-- Left Bloomberg Navigation Rail -->
+            <!-- Left Terminal Navigation Rail -->
             <Border Grid.Column="0" Background="#06080A" BorderBrush="#242A34" BorderThickness="0,0,1,0" Padding="0,10">
                 <Grid RowDefinitions="Auto,*,Auto">
                     
@@ -234,10 +239,10 @@
 
         </Grid>
 
-        <!-- Bottom Bloomberg Ticker Strip -->
+        <!-- Bottom Terminal Status Strip -->
         <Border Grid.Row="2" Background="#080B0E" BorderBrush="#242A34" BorderThickness="0,1,0,0" Padding="12,4">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Column="0" Text="■ BLOOMBERG INTELLIGENCE // REAL-TIME RESEARCH &amp; EXECUTION ENGINE" 
+                <TextBlock Grid.Column="0" Text="■ ALPHA MERIDIAN SYSTEMS // QUANTITATIVE INTELLIGENCE — BY AMS CAPITAL" 
                            FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="2" Text="READ-ONLY FINANCIAL CLIENT — ZERO MUTATION INVARIANT ENFORCED" 
                            FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" VerticalAlignment="Center" />

@@ -1,9 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>AlphaMeridianSystems</AssemblyName>
+    <Title>Alpha Meridian Systems</Title>
+    <Product>Alpha Meridian Systems</Product>
+    <Description>Alpha Meridian Systems — Quantitative Intelligence Workstation by AMS Capital</Description>
+    <Company>AMS Capital</Company>
+    <Authors>AMS Capital</Authors>
+    <Copyright>© 2026 AMS Capital. All rights reserved.</Copyright>
+    <PackageId>AlphaMeridianSystems</PackageId>
+    <ApplicationIcon>Assets\ams-logo.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

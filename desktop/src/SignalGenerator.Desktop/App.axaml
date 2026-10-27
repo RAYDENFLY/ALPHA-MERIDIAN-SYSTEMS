@@ -9,7 +9,7 @@
     </Application.DataTemplates>
 
     <Application.Resources>
-        <!-- Bloomberg Terminal Color Palette -->
+        <!-- Alpha Meridian Systems Financial Color Palette -->
         <Color x:Key="TerminalBlackColor">#000000</Color>
         <Color x:Key="TerminalDarkPanelColor">#080B0E</Color>
         <Color x:Key="TerminalPanelColor">#0E1217</Color>

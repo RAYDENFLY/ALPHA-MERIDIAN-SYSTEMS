@@ -1,6 +1,7 @@
-# SignalGenerator Desktop Terminal (.NET 8 + Avalonia UI)
+# ALPHA MERIDIAN SYSTEMS — Quantitative Intelligence Workstation
+*by AMS Capital*
 
-Lightweight, high-performance Windows desktop trading terminal for **SignalGenerator**, engineered with **C# + .NET 8 LTS + Avalonia UI + MVVM + CommunityToolkit + Skia-based rendering**.
+Lightweight, high-performance institutional desktop financial workstation for **ALPHA MERIDIAN SYSTEMS** (*by AMS Capital*), engineered with **C# + .NET 8 LTS + Avalonia UI + MVVM + CommunityToolkit + Skia-based rendering**.
 
 ---
 

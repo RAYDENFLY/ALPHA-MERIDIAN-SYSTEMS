@@ -103,7 +103,7 @@
             </Grid>
         </Border>
 
-        <!-- Bloomberg Dense Data Grid Table -->
+        <!-- Terminal Dense Data Grid Table -->
         <Border Grid.Row="3" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
             <Grid RowDefinitions="Auto,*">
                 
