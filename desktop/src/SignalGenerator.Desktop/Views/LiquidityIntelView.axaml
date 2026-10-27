@@ -3,46 +3,103 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
              x:Class="SignalGenerator.Desktop.Views.LiquidityIntelView"
-             x:DataType="vm:LiquidityIntelViewModel">
+             x:DataType="vm:LiquidityIntelViewModel"
+             Background="#000000">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="16" Margin="24">
+        <StackPanel Spacing="10" Margin="14">
             
-            <TextBlock Text="Liquidity Intelligence &amp; Orderbook Depth" 
-                       FontSize="22" 
-                       FontWeight="Bold" 
-                       Foreground="#F0F6FC" />
-            <TextBlock Text="Level-2 cross-book aggregation, whale wall clusters, and spoofing detection" 
-                       FontSize="13" 
-                       Foreground="#8B949E" 
-                       Margin="0,0,0,8" />
+            <!-- Header Banner -->
+            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="■ LIQUIDITY INTELLIGENCE // L2 BOOK DEPTH &amp; WHALE WALLS" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#FF9D00" />
+                        <TextBlock Text="Cross-book order flow depth, protecting bid/ask walls, and institutional whale cluster detection" 
+                                   FontSize="10" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#8B949E" 
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
 
-            <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
-                <!-- Bid Wall Card -->
-                <Border Grid.Column="0" Margin="0,0,8,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                    <Button Grid.Column="1" 
+                            Command="{Binding RefreshIntelCommand}" 
+                            Classes="terminal-btn"
+                            Padding="10,4"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                            <TextBlock Text="SYNC DEPTH" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Major Defense Walls (2-Column Grid) -->
+            <Grid ColumnDefinitions="*,*" Margin="0,2,0,0">
+                
+                <!-- Bid Wall (Support Shield) -->
+                <Border Grid.Column="0" Margin="0,0,5,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="MAJOR BID WALL (SUPPORT)" FontSize="11" FontWeight="Bold" Foreground="#3FB950" />
-                        <TextBlock Text="{Binding BidWallLevel}" FontSize="18" FontWeight="Bold" Foreground="#F0F6FC" />
-                        <TextBlock Text="Active demand cluster identified across AsterDEX L2 book" FontSize="11" Foreground="#8B949E" />
+                        <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
+                            <TextBlock Text="■ MAJOR BID WALL // DEMAND CLUSTER (SUPPORT)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        </Border>
+                        
+                        <TextBlock Text="{Binding BidWallLevel}" FontSize="18" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        <TextBlock Text="Active demand cluster identified across Aster DEX Level-2 orderbook. Serves as Anchor 3 protective shield for LONG invalidation." 
+                                   FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+
+                        <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="8,4">
+                            <Grid ColumnDefinitions="*,*">
+                                <TextBlock Grid.Column="0" Text="WALL FILTER: [0.40%, 1.60%]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="1" Text="STATUS: VERIFIED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </Border>
 
-                <!-- Ask Wall Card -->
-                <Border Grid.Column="1" Margin="8,0,0,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+                <!-- Ask Wall (Resistance Shield) -->
+                <Border Grid.Column="1" Margin="5,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="MAJOR ASK WALL (RESISTANCE)" FontSize="11" FontWeight="Bold" Foreground="#F85149" />
-                        <TextBlock Text="{Binding AskWallLevel}" FontSize="18" FontWeight="Bold" Foreground="#F0F6FC" />
-                        <TextBlock Text="Supply threshold protecting structural sweep invalidation" FontSize="11" Foreground="#8B949E" />
+                        <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
+                            <TextBlock Text="■ MAJOR ASK WALL // SUPPLY OVERHANG (RESISTANCE)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                        </Border>
+
+                        <TextBlock Text="{Binding AskWallLevel}" FontSize="18" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                        <TextBlock Text="Active supply ceiling identified across Aster DEX Level-2 orderbook. Serves as Anchor 3 protective shield for SHORT invalidation." 
+                                   FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+
+                        <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="8,4">
+                            <Grid ColumnDefinitions="*,*">
+                                <TextBlock Grid.Column="0" Text="WALL FILTER: [0.40%, 1.60%]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="1" Text="STATUS: VERIFIED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </Border>
+
             </Grid>
 
-            <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
+            <!-- Whale Order Flow & Institutional Accumulation Stream -->
+            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="WHALE ACTIVITY &amp; ACCUMULATION FLOW" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
-                    <TextBlock Text="{Binding WhaleEventSummary}" FontSize="13" FontFamily="Consolas, monospace" Foreground="#58A6FF" />
+                    <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
+                        <TextBlock Text="■ INSTITUTIONAL WHALE ACTIVITY &amp; ACCUMULATION FLOW" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    </Border>
+
+                    <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
+                        <TextBlock Text="{Binding WhaleEventSummary}" FontSize="12" FontFamily="Consolas, monospace" Foreground="#448AFF" TextWrapping="Wrap" />
+                    </Border>
+
+                    <Grid ColumnDefinitions="*,*">
+                        <TextBlock Grid.Column="0" Text="SOURCE: Aster DEX L2 Feed &amp; Binance Reference Aggregator" FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        <TextBlock Grid.Column="1" Text="INVARIANT: READ-ONLY INTELLIGENCE" FontSize="9" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

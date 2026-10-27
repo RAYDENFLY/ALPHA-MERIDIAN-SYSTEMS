@@ -71,6 +71,21 @@ public class PollingCoordinatorTests
         {
             return Task.FromResult(ApiResult<List<string>>.Success(new List<string> { "BZUSDT", "PLAYUSDT" }));
         }
+
+        public Task<ApiResult<AutotraderScreeningLogResponseDto>> GetScreeningLogAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(ApiResult<AutotraderScreeningLogResponseDto>.Success(new AutotraderScreeningLogResponseDto()));
+        }
+
+        public Task<ApiResult<List<AlertItemDto>>> GetAlertsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(ApiResult<List<AlertItemDto>>.Success(new List<AlertItemDto>()));
+        }
+
+        public Task<ApiResult<RetailPositioningResponseDto>> GetRetailPositioningAsync(string symbol, CancellationToken ct = default)
+        {
+            return Task.FromResult(ApiResult<RetailPositioningResponseDto>.Success(new RetailPositioningResponseDto { Symbol = symbol }));
+        }
     }
 
     private class FakeSettingsService : ISettingsService

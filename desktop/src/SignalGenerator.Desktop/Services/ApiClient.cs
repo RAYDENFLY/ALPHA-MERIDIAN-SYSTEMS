@@ -79,6 +79,21 @@ public class ApiClient : IApiClient
         return await ExecuteGetAsync<List<string>>("/api/chart/symbols", ct);
     }
 
+    public async Task<ApiResult<AutotraderScreeningLogResponseDto>> GetScreeningLogAsync(CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<AutotraderScreeningLogResponseDto>("/api/autotrader/screening-log", ct);
+    }
+
+    public async Task<ApiResult<List<AlertItemDto>>> GetAlertsAsync(CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<List<AlertItemDto>>("/api/alerts", ct);
+    }
+
+    public async Task<ApiResult<RetailPositioningResponseDto>> GetRetailPositioningAsync(string symbol = "BTCUSDT", CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<RetailPositioningResponseDto>($"/api/research/retail_positioning?symbol={Uri.EscapeDataString(symbol)}", ct);
+    }
+
     private async Task<ApiResult<T>> ExecuteGetAsync<T>(string relativeUri, CancellationToken ct)
     {
         try

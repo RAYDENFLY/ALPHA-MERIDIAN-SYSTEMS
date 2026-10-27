@@ -7,188 +7,242 @@
         x:Class="SignalGenerator.Desktop.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="SignalGenerator Desktop Terminal — [.NET 8 / Avalonia]"
-        Background="#0D1117"
-        MinWidth="1024" MinHeight="650"
+        Title="SignalGenerator Desktop Terminal — [Bloomberg Classic Edition]"
+        Background="#000000"
+        MinWidth="1150" MinHeight="720"
         WindowStartupLocation="CenterScreen">
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,*,Auto">
         
-        <!-- Top Telemetry & Invariants Header -->
-        <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="16,10">
+        <!-- Bloomberg Command & Telemetry Ribbon -->
+        <Border Grid.Row="0" Background="#080B0E" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="12,6">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 
-                <!-- Brand & Platform Badge -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <TextBlock Text="SignalGenerator" FontSize="16" FontWeight="Bold" Foreground="#F0F6FC" />
-                    <Border Background="#1F6FEB" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
-                        <TextBlock Text=".NET 8 LTS" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" />
+                <!-- Brand & Terminal ID -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="[SG // BLOOMBERG TERMINAL]" 
+                               FontSize="12" 
+                               FontWeight="Bold" 
+                               FontFamily="Consolas, monospace" 
+                               Foreground="#FF9D00" 
+                               VerticalAlignment="Center" />
+                    <Border Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="5,2" VerticalAlignment="Center">
+                        <TextBlock Text="LIVE_MICRO_V1" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
                     </Border>
-                    <Border Background="#238636" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
-                        <TextBlock Text="Avalonia UI" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF" />
+                    <Border Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="5,2" VerticalAlignment="Center">
+                        <TextBlock Text="ASTERDEX" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
                     </Border>
                 </StackPanel>
 
-                <!-- Center Telemetry Badges -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <!-- Center Telemetry Strip -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
                     
-                    <!-- Connection Status Badge -->
-                    <Border Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8,4">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Ellipse Width="8" Height="8" Fill="#3FB950" VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding ConnectionStatusText}" FontSize="11" FontWeight="Bold" 
-                                       Foreground="#3FB950" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Border>
+                    <!-- Connection Status -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <Ellipse Width="6" Height="6" Fill="{Binding ConnectionStatusColor}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ConnectionStatusText}" FontSize="10" FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" Foreground="{Binding ConnectionStatusColor}" VerticalAlignment="Center" />
+                    </StackPanel>
 
-                    <!-- Trading Mode Badge -->
-                    <Border Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8,4">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="MODE:" FontSize="10" Foreground="#8B949E" VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding Mode}" FontSize="11" FontWeight="Bold" Foreground="#58A6FF" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Border>
+                    <TextBlock Text="|" Foreground="#363E4D" VerticalAlignment="Center" />
 
-                    <!-- Session State Badge -->
-                    <Border Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8,4">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="SESSION:" FontSize="10" Foreground="#8B949E" VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding SessionState}" FontSize="11" FontWeight="Bold" Foreground="#3FB950" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Border>
+                    <!-- Mode -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="MODE:" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Mode}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding ModeColor}" VerticalAlignment="Center" />
+                    </StackPanel>
 
-                    <!-- Global Position Lock Badge -->
-                    <Border Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8,4">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="LOCK:" FontSize="10" Foreground="#8B949E" VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding LockBadge}" FontSize="11" FontWeight="Bold" Foreground="#D29922" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Border>
+                    <TextBlock Text="|" Foreground="#363E4D" VerticalAlignment="Center" />
 
-                    <!-- Account Equity -->
-                    <Border Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="8,4">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="EQUITY:" FontSize="10" Foreground="#8B949E" VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding TotalEquityText}" FontSize="11" FontWeight="Bold" Foreground="#F0F6FC" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Border>
+                    <!-- Session -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="SESSION:" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding SessionState}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding SessionStateColor}" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="|" Foreground="#363E4D" VerticalAlignment="Center" />
+
+                    <!-- Lock -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="LOCK:" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding LockBadge}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding LockBadgeColor}" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="|" Foreground="#363E4D" VerticalAlignment="Center" />
+
+                    <!-- Equity -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="EQUITY:" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding TotalEquityText}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="|" Foreground="#363E4D" VerticalAlignment="Center" />
+
+                    <!-- Available -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="AVAIL:" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding AvailableBalanceText}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
+                    </StackPanel>
 
                 </StackPanel>
 
-                <!-- Right Polling Controls & Timestamp -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <!-- Right Refresh & Timestamp -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="LAST REFRESH" FontSize="9" FontWeight="Bold" Foreground="#8B949E" HorizontalAlignment="Right" />
-                        <TextBlock Text="{Binding LastPollTimestamp}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Right" />
+                        <TextBlock Text="SYNC" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" />
+                        <TextBlock Text="{Binding LastPollTimestamp}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Right" />
                     </StackPanel>
 
                     <Button Command="{Binding RefreshAllCommand}" 
-                            Background="#21262D" 
-                            BorderBrush="#30363D" 
-                            BorderThickness="1" 
-                            CornerRadius="6" 
-                            Padding="10,6"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="↻ Poll" FontSize="12" FontWeight="SemiBold" Foreground="#58A6FF" />
+                            Classes="terminal-btn"
+                            Padding="8,4">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                            <TextBlock Text="&lt;F5&gt; POLL" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                        </StackPanel>
                     </Button>
                 </StackPanel>
 
             </Grid>
         </Border>
 
-        <!-- Main Body Grid: Sidebar + Content -->
-        <Grid Grid.Row="1" ColumnDefinitions="220,*">
+        <!-- Main Workspace Grid: Bloomberg Rail + Content -->
+        <Grid Grid.Row="1" ColumnDefinitions="210,*">
             
-            <!-- Left Sidebar Navigation -->
-            <Border Grid.Column="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,1,0" Padding="12,16">
-                <Grid RowDefinitions="*,Auto">
+            <!-- Left Bloomberg Navigation Rail -->
+            <Border Grid.Column="0" Background="#06080A" BorderBrush="#242A34" BorderThickness="0,0,1,0" Padding="0,10">
+                <Grid RowDefinitions="Auto,*,Auto">
                     
-                    <!-- Navigation Buttons List -->
-                    <StackPanel Grid.Row="0" Spacing="6">
-                        
-                        <Button Command="{Binding NavigateCommand}" CommandParameter="Overview" 
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                Background="Transparent" CornerRadius="6" Padding="12,10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="⊞" FontSize="14" Foreground="#58A6FF" />
-                                <TextBlock Text="Overview" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                            </StackPanel>
-                        </Button>
+                    <!-- Directory Header -->
+                    <Border Grid.Row="0" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="12,0,12,8" Margin="0,0,0,6">
+                        <TextBlock Text="■ TERMINAL DIRECTORY" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    </Border>
 
-                        <Button Command="{Binding NavigateCommand}" CommandParameter="Screener" 
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                Background="Transparent" CornerRadius="6" Padding="12,10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="☷" FontSize="14" Foreground="#58A6FF" />
-                                <TextBlock Text="Market Screener" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                            </StackPanel>
-                        </Button>
+                    <!-- Navigation Keys List -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="2">
+                            
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="Overview" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F1&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="OVERVIEW" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                        <Button Command="{Binding NavigateCommand}" CommandParameter="Journal" 
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                Background="Transparent" CornerRadius="6" Padding="12,10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="📄" FontSize="14" Foreground="#58A6FF" />
-                                <TextBlock Text="Trade Journal" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                            </StackPanel>
-                        </Button>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="MarketMonitor" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F2&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="MARKET MONITOR" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                        <Button Command="{Binding NavigateCommand}" CommandParameter="LiquidityIntel" 
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                Background="Transparent" CornerRadius="6" Padding="12,10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="🌊" FontSize="14" Foreground="#58A6FF" />
-                                <TextBlock Text="Liquidity Intel" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                            </StackPanel>
-                        </Button>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="Screener" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F3&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="MARKET SCREENER" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                        <Button Command="{Binding NavigateCommand}" CommandParameter="Alerts" 
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                Background="Transparent" CornerRadius="6" Padding="12,10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="🔔" FontSize="14" Foreground="#58A6FF" />
-                                <TextBlock Text="Signal Alerts" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                            </StackPanel>
-                        </Button>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="LiquidityIntel" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F4&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="LIQUIDITY INTEL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                        <Button Command="{Binding NavigateCommand}" CommandParameter="GroqHunter" 
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                Background="Transparent" CornerRadius="6" Padding="12,10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="⚡" FontSize="14" Foreground="#D29922" />
-                                <TextBlock Text="AI Auto-Hunter" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                            </StackPanel>
-                        </Button>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="GroqHunter" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F5&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="GROQ AUTO-HUNTER" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                        <Separator Background="#30363D" Margin="0,8" />
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="Journal" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F6&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="TRADING JOURNAL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                        <Button Command="{Binding NavigateCommand}" CommandParameter="Settings" 
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                Background="Transparent" CornerRadius="6" Padding="12,10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="⚙" FontSize="14" Foreground="#8B949E" />
-                                <TextBlock Text="Settings" FontSize="13" FontWeight="SemiBold" Foreground="#F0F6FC" />
-                            </StackPanel>
-                        </Button>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="Alerts" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F7&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="SIGNAL ALERTS" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                    </StackPanel>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="MarketParticipants" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F8&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="PARTICIPANTS (COT)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
 
-                    <!-- Sidebar Footer -->
-                    <Border Grid.Row="1" Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="6" Padding="10">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="ISOLATED GIT BRANCH" FontSize="9" FontWeight="Bold" Foreground="#8B949E" />
-                            <TextBlock Text="feature/avalonia-desktop" FontSize="10" FontFamily="Consolas, monospace" Foreground="#58A6FF" TextWrapping="Wrap" />
-                            <TextBlock Text="Read-Only FastAPI Client" FontSize="9" Foreground="#3FB950" Margin="0,2,0,0" />
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="CryptoNews" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F9&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="NEWS WIRE" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
+
+                            <Separator Background="#242A34" Margin="10,6" />
+
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="Settings" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F10&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBlock Grid.Column="1" Text="TERMINAL CONFIG" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                </Grid>
+                            </Button>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Sidebar Terminal Footer -->
+                    <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="0,1,0,0" Padding="12,10">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="VENUE: ASTERDEX PERP" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Text="BRANCH: feature/avalonia-desktop" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+                            <TextBlock Text="PROTOCOL: REST GET ONLY" FontSize="8" FontFamily="Consolas, monospace" Foreground="#00E676" />
                         </StackPanel>
                     </Border>
 
                 </Grid>
             </Border>
 
-            <!-- Right Content Area -->
-            <ContentControl Grid.Column="1" Content="{Binding CurrentViewModel}" />
+            <!-- Main Workspace Canvas -->
+            <ContentControl Grid.Column="1" Content="{Binding CurrentViewModel}" Background="#000000" />
 
         </Grid>
+
+        <!-- Bottom Bloomberg Ticker Strip -->
+        <Border Grid.Row="2" Background="#080B0E" BorderBrush="#242A34" BorderThickness="0,1,0,0" Padding="12,4">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="■ BLOOMBERG INTELLIGENCE // REAL-TIME RESEARCH &amp; EXECUTION ENGINE" 
+                           FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="READ-ONLY FINANCIAL CLIENT — ZERO MUTATION INVARIANT ENFORCED" 
+                           FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
 
     </Grid>
 

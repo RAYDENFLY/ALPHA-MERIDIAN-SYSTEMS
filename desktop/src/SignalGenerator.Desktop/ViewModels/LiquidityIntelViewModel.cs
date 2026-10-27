@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace SignalGenerator.Desktop.ViewModels;
 
@@ -18,4 +19,10 @@ public partial class LiquidityIntelViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _whaleEventSummary = "No recent spoofing detected. Cumulative delta neutral.";
+
+    [RelayCommand]
+    public void RefreshIntel()
+    {
+        // Standalone depth monitor refresh trigger
+    }
 }

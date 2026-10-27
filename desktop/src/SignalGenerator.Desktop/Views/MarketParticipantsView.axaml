@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             xmlns:models="using:SignalGenerator.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
+             x:Class="SignalGenerator.Desktop.Views.MarketParticipantsView"
+             x:DataType="vm:MarketParticipantsViewModel"
+             Background="#000000">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="10" Margin="14">
+            
+            <!-- Header Banner -->
+            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="■ MARKET PARTICIPANTS // INSTITUTIONAL COT &amp; RETAIL POSITIONING" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#FF9D00" />
+                        <TextBlock Text="Institutional Commitment of Traders (COT) and retail derivative positioning flows" 
+                                   FontSize="10" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#8B949E" 
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1" 
+                            Command="{Binding LoadPositioningCommand}" 
+                            Classes="terminal-btn"
+                            Padding="10,4"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                            <TextBlock Text="SYNC POSITIONING" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Status & Summary Tiles -->
+            <Grid ColumnDefinitions="*,*,*,*" Margin="0,2,0,0">
+                
+                <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="DATA PROVIDER" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding Provider}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        <TextBlock Text="{Binding DatasetStatus, StringFormat='STATUS: {0}'}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="RETAIL LONG RATIO" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding CurrentBuyRatio}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        <TextBlock Text="Account Holder %" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="RETAIL SHORT RATIO" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding CurrentSellRatio}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                        <TextBlock Text="Account Holder %" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="3" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="SENTIMENT BIAS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding RetailSentimentBias}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding RetailSentimentColor}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding LastRefreshUtc, StringFormat='SYNC: {0}'}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+            <!-- Dual Panel Section: Retail Observations + Institutional COT Status -->
+            <Grid ColumnDefinitions="*,*" Margin="0,4,0,0">
+                
+                <!-- Left: Retail Positioning History Table -->
+                <Border Grid.Column="0" Margin="0,0,5,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10">
+                    <StackPanel Spacing="8">
+                        <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
+                            <TextBlock Text="■ RETAIL ACCOUNT RATIO OBSERVATIONS" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        </Border>
+
+                        <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="8,4">
+                            <Grid ColumnDefinitions="80,*,*">
+                                <TextBlock Grid.Column="0" Text="TIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                <TextBlock Grid.Column="1" Text="LONG %" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="2" Text="SHORT %" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" HorizontalAlignment="Right" />
+                            </Grid>
+                        </Border>
+
+                        <ListBox ItemsSource="{Binding Observations}" 
+                                 Background="Transparent" 
+                                 BorderThickness="0" 
+                                 MaxHeight="300">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:RetailObservationDto">
+                                    <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="4,4">
+                                        <Grid ColumnDefinitions="80,*,*">
+                                            <TextBlock Grid.Column="0" Text="{Binding TimestampUtcFormatted}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                            <TextBlock Grid.Column="1" Text="{Binding BuyRatioPct}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
+                                            <TextBlock Grid.Column="2" Text="{Binding SellRatioPct}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" HorizontalAlignment="Right" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- Right: CFTC Commitment of Traders (COT) Intelligence -->
+                <Border Grid.Column="1" Margin="5,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10">
+                    <StackPanel Spacing="10">
+                        <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
+                            <TextBlock Text="■ INSTITUTIONAL COT (COMMITMENT OF TRADERS)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        </Border>
+
+                        <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="DATASET INGESTION STATUS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                <TextBlock Text="{Binding CotDataSourceStatus}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
+                                <TextBlock Text="{Binding CotReportSummary}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" TextWrapping="Wrap" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="CFTC REGULATORY PROVENANCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                <TextBlock Text="• CME Bitcoin Futures (BTC) &amp; Micro BTC Futures" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                <TextBlock Text="• CME Ether Futures (ETH)" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                <TextBlock Text="• Commercial Hedgers vs Non-Commercial Speculators" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                <TextBlock Text="STATUS: INGESTION SCHEDULED (NO LIVE FEED ACTIVE)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#545D68" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,108 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
+             x:Class="SignalGenerator.Desktop.Views.CryptoNewsView"
+             x:DataType="vm:CryptoNewsViewModel"
+             Background="#000000">
+
+    <Grid RowDefinitions="Auto,Auto,*" Margin="14">
+        
+        <!-- Header Banner -->
+        <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8" Margin="0,0,0,10">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="■ CRYPTO NEWS &amp; OPERATIONAL INTELLIGENCE WIRE" 
+                               FontSize="12" 
+                               FontWeight="Bold" 
+                               FontFamily="Consolas, monospace" 
+                               Foreground="#FF9D00" />
+                    <TextBlock Text="Real-time macro headlines, exchange operational alerts, and strategy execution dispatches" 
+                               FontSize="10" 
+                               FontFamily="Consolas, monospace" 
+                               Foreground="#8B949E" 
+                               Margin="0,2,0,0" />
+                </StackPanel>
+
+                <Button Grid.Column="1" 
+                        Command="{Binding ClearWireCommand}" 
+                        Classes="terminal-btn"
+                        Padding="10,4"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="CLEAR WIRE" FontSize="10" Foreground="#8B949E" FontWeight="Bold" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Summary Strip -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" Margin="0,0,0,10">
+            
+            <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="TOTAL WIRE DISPATCHES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding ItemCount}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="LAST WIRE TRANSMISSION" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding LastWireTimeUtc}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="WIRE SOURCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="SYSTEM &amp; STRATEGY FEEDS" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                </StackPanel>
+            </Border>
+
+        </Grid>
+
+        <!-- Wire Newsfeed Container -->
+        <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
+            <Grid RowDefinitions="Auto,*">
+                
+                <!-- Table Header -->
+                <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="10,6">
+                    <Grid ColumnDefinitions="90,110,160,*">
+                        <TextBlock Grid.Column="0" Text="TIMESTAMP" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        <TextBlock Grid.Column="1" Text="CATEGORY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        <TextBlock Grid.Column="2" Text="SOURCE FEED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        <TextBlock Grid.Column="3" Text="HEADLINE // TELEMETRY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    </Grid>
+                </Border>
+
+                <!-- News Items List -->
+                <ListBox Grid.Row="1" 
+                         ItemsSource="{Binding NewsItems}" 
+                         Background="Transparent" 
+                         BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NewsWireItem">
+                            <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,6">
+                                <Grid ColumnDefinitions="90,110,160,*">
+                                    <TextBlock Grid.Column="0" Text="{Binding TimestampUtc}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                                    
+                                    <Border Grid.Column="1" Background="#141920" BorderBrush="{Binding CategoryColor}" BorderThickness="1" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Category}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding CategoryColor}" />
+                                    </Border>
+
+                                    <TextBlock Grid.Column="2" Text="{Binding Source}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
+
+                                    <TextBlock Grid.Column="3" Text="{Binding Headline}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+            </Grid>
+        </Border>
+
+    </Grid>
+
+</UserControl>

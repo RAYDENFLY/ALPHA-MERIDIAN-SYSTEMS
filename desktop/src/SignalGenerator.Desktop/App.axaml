@@ -8,7 +8,72 @@
         <local:ViewLocator />
     </Application.DataTemplates>
 
+    <Application.Resources>
+        <!-- Bloomberg Terminal Color Palette -->
+        <Color x:Key="TerminalBlackColor">#000000</Color>
+        <Color x:Key="TerminalDarkPanelColor">#080B0E</Color>
+        <Color x:Key="TerminalPanelColor">#0E1217</Color>
+        <Color x:Key="TerminalSubPanelColor">#141920</Color>
+        <Color x:Key="TerminalBorderColor">#242A34</Color>
+        <Color x:Key="TerminalBorderBrightColor">#363E4D</Color>
+        <Color x:Key="TerminalOrangeColor">#FF9D00</Color>
+        <Color x:Key="TerminalOrangeDimColor">#241700</Color>
+        <Color x:Key="TerminalGreenColor">#00E676</Color>
+        <Color x:Key="TerminalRedColor">#FF5252</Color>
+        <Color x:Key="TerminalAmberColor">#FFB300</Color>
+        <Color x:Key="TerminalBlueColor">#448AFF</Color>
+        <Color x:Key="TerminalTextPrimaryColor">#F0F4F8</Color>
+        <Color x:Key="TerminalTextSecondaryColor">#8B949E</Color>
+        <Color x:Key="TerminalTextMutedColor">#545D68</Color>
+
+        <SolidColorBrush x:Key="TerminalBlackBrush" Color="{StaticResource TerminalBlackColor}" />
+        <SolidColorBrush x:Key="TerminalDarkPanelBrush" Color="{StaticResource TerminalDarkPanelColor}" />
+        <SolidColorBrush x:Key="TerminalPanelBrush" Color="{StaticResource TerminalPanelColor}" />
+        <SolidColorBrush x:Key="TerminalSubPanelBrush" Color="{StaticResource TerminalSubPanelColor}" />
+        <SolidColorBrush x:Key="TerminalBorderBrush" Color="{StaticResource TerminalBorderColor}" />
+        <SolidColorBrush x:Key="TerminalBorderBrightBrush" Color="{StaticResource TerminalBorderBrightColor}" />
+        <SolidColorBrush x:Key="TerminalOrangeBrush" Color="{StaticResource TerminalOrangeColor}" />
+        <SolidColorBrush x:Key="TerminalOrangeDimBrush" Color="{StaticResource TerminalOrangeDimColor}" />
+        <SolidColorBrush x:Key="TerminalGreenBrush" Color="{StaticResource TerminalGreenColor}" />
+        <SolidColorBrush x:Key="TerminalRedBrush" Color="{StaticResource TerminalRedColor}" />
+        <SolidColorBrush x:Key="TerminalAmberBrush" Color="{StaticResource TerminalAmberColor}" />
+        <SolidColorBrush x:Key="TerminalBlueBrush" Color="{StaticResource TerminalBlueColor}" />
+        <SolidColorBrush x:Key="TerminalTextPrimaryBrush" Color="{StaticResource TerminalTextPrimaryColor}" />
+        <SolidColorBrush x:Key="TerminalTextSecondaryBrush" Color="{StaticResource TerminalTextSecondaryColor}" />
+        <SolidColorBrush x:Key="TerminalTextMutedBrush" Color="{StaticResource TerminalTextMutedColor}" />
+
+        <FontFamily x:Key="TerminalFont">Consolas, Cascadia Code, Courier New, monospace</FontFamily>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
+
+        <!-- Terminal Button Style -->
+        <Style Selector="Button.terminal-btn">
+            <Setter Property="Background" Value="#141920" />
+            <Setter Property="BorderBrush" Value="#242A34" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontFamily" Value="Consolas, monospace" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#F0F4F8" />
+        </Style>
+
+        <Style Selector="Button.terminal-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#241700" />
+            <Setter Property="BorderBrush" Value="#FF9D00" />
+            <Setter Property="TextBlock.Foreground" Value="#FF9D00" />
+        </Style>
+
+        <!-- Terminal Panel Border Style -->
+        <Style Selector="Border.terminal-panel">
+            <Setter Property="Background" Value="#0E1217" />
+            <Setter Property="BorderBrush" Value="#242A34" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+
     </Application.Styles>
 </Application>

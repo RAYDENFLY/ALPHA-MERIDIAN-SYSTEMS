@@ -3,72 +3,166 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+             xmlns:models="using:SignalGenerator.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
              x:Class="SignalGenerator.Desktop.Views.GroqHunterView"
-             x:DataType="vm:GroqHunterViewModel">
+             x:DataType="vm:GroqHunterViewModel"
+             Background="#000000">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="16" Margin="24">
+        <StackPanel Spacing="10" Margin="14">
             
-            <TextBlock Text="Groq AI Auto-Hunter Diagnostics" 
-                       FontSize="22" 
-                       FontWeight="Bold" 
-                       Foreground="#F0F6FC" />
-            <TextBlock Text="Llama-3.3-70b-versatile pipeline telemetry, 4-stage filters, and API key vault" 
-                       FontSize="13" 
-                       Foreground="#8B949E" 
-                       Margin="0,0,0,8" />
+            <!-- Header Banner -->
+            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="■ GROQ AI AUTO-HUNTER // 4-STAGE PIPELINE &amp; REASONING TELEMETRY" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#FF9D00" />
+                        <TextBlock Text="Llama-3.3-70b-versatile reasoning pipeline, zero-token prefilter, and SMC structural gates" 
+                                   FontSize="10" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#8B949E" 
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
 
-            <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
-                <Border Grid.Column="0" Margin="0,0,8,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="INFERENCE MODEL" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding ModelName}" FontSize="16" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#58A6FF" />
-                        <TextBlock Text="Ultra low-latency Groq hardware provider" FontSize="11" Foreground="#8B949E" />
+                    <Button Grid.Column="1" 
+                            Command="{Binding RefreshScreeningLogCommand}" 
+                            Classes="terminal-btn"
+                            Padding="10,4"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                            <TextBlock Text="REFRESH PIPELINE" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Top Telemetry Ribbon (4 Tiles) -->
+            <Grid ColumnDefinitions="*,*,*,*" Margin="0,2,0,0">
+                
+                <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="INFERENCE MODEL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding ModelName}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="Ultra Low-Latency Hardware" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="1" Margin="8,0,0,0" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="16">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="API KEY VAULT STATUS" FontSize="11" FontWeight="Bold" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding KeyRotationStatus}" FontSize="16" FontWeight="Bold" Foreground="#3FB950" />
-                        <TextBlock Text="Round-robin failover with rate-limit recovery" FontSize="11" Foreground="#8B949E" />
+                <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="API KEY VAULT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding KeyRotationStatus}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        <TextBlock Text="Zero Rate-Limit Lockout" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
                     </StackPanel>
                 </Border>
+
+                <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="SELECTED SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding LatestSelectedSymbol}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        <TextBlock Text="{Binding LatestTimestampUtc, StringFormat='TIME: {0}'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="3" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="ACTIVE CYCLE ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding ActiveCycleId}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="Continuous Scanner Loop" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                    </StackPanel>
+                </Border>
+
             </Grid>
 
-            <!-- 4-Stage Pipeline Card -->
-            <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="20">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="4-Stage Production Execution Pipeline" FontSize="15" FontWeight="Bold" Foreground="#F0F6FC" />
+            <!-- 4-Stage Production Execution Pipeline -->
+            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
+                <StackPanel Spacing="8">
+                    <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
+                        <TextBlock Text="■ 4-STAGE EXECUTION ARCHITECTURE // INVARIANTS &amp; GATES" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    </Border>
 
-                    <Border Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10">
-                        <Grid ColumnDefinitions="140,*">
-                            <TextBlock Grid.Column="0" Text="STAGE 1" FontWeight="Bold" Foreground="#58A6FF" />
-                            <TextBlock Grid.Column="1" Text="{Binding Stage1PrefilterStatus}" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                    <Grid ColumnDefinitions="*,*,*,*" Margin="0,4,0,0">
+                        
+                        <!-- Stage 1 -->
+                        <Border Grid.Column="0" Margin="0,0,4,0" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="STAGE 1: 0-TOKEN FILTER" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                                <TextBlock Text="Volume &gt; $500k, Spread &lt; 8 bps. Local heuristic prefilter rejects non-tradable universe without consuming LLM tokens." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Stage 2 -->
+                        <Border Grid.Column="1" Margin="2,0,2,0" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="STAGE 2: SMC STRUCTURAL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                                <TextBlock Text="Dealing Range 50% Equilibrium Lock, 15m Liquidity Sweeps, and Bullish/Bearish FVG reclaim validation." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Stage 3 -->
+                        <Border Grid.Column="2" Margin="2,0,2,0" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="STAGE 3: LLM REASONING" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
+                                <TextBlock Text="Llama-3.3-70b evaluates Top 3 candidates. Synthesizes 3-Tier Dynamic SL ([1.20%, 2.20%]) and $0.20 Risk Cap." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Stage 4 -->
+                        <Border Grid.Column="3" Margin="4,0,0,0" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="STAGE 4: LIVE RATCHET" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                <TextBlock Text="LiveMicroCoordinator 3-stage ratchet: Stage A Initial SL, Stage B Break-Even (+1.0R), Stage C Structural Swing Trail." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Screening History Audit Trail -->
+            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
+                <StackPanel Spacing="8">
+                    <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
+                        <TextBlock Text="■ RECENT SCANNING CYCLES &amp; CANDIDATE DECISIONS" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    </Border>
+
+                    <!-- Table Header -->
+                    <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="8,4">
+                        <Grid ColumnDefinitions="120,80,60,60,110,*">
+                            <TextBlock Grid.Column="0" Text="CYCLE ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Grid.Column="1" Text="TIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Grid.Column="2" Text="STG 1" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="3" Text="STG 2" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="4" Text="SELECTED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Grid.Column="5" Text="DECISION // REASON" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
                         </Grid>
                     </Border>
 
-                    <Border Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10">
-                        <Grid ColumnDefinitions="140,*">
-                            <TextBlock Grid.Column="0" Text="STAGE 2" FontWeight="Bold" Foreground="#58A6FF" />
-                            <TextBlock Grid.Column="1" Text="{Binding Stage2SMCVerification}" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
-                        </Grid>
-                    </Border>
+                    <!-- History List -->
+                    <ListBox ItemsSource="{Binding CycleHistory}" 
+                             Background="Transparent" 
+                             BorderThickness="0" 
+                             MaxHeight="260">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ScreeningCycleDto">
+                                <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="4,4">
+                                    <Grid ColumnDefinitions="120,80,60,60,110,*">
+                                        <TextBlock Grid.Column="0" Text="{Binding CycleId}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding TimestampUtc}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Stage1PassedCount}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#448AFF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Stage2PassedCount}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#FFB300" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="4" Text="{Binding Stage3SelectedSymbol}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="5" Text="{Binding DecisionReason}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
 
-                    <Border Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10">
-                        <Grid ColumnDefinitions="140,*">
-                            <TextBlock Grid.Column="0" Text="STAGE 3" FontWeight="Bold" Foreground="#D29922" />
-                            <TextBlock Grid.Column="1" Text="{Binding Stage3LLMExecution}" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
-                        </Grid>
-                    </Border>
-
-                    <Border Background="#0D1117" BorderBrush="#21262D" BorderThickness="1" CornerRadius="6" Padding="12,10">
-                        <Grid ColumnDefinitions="140,*">
-                            <TextBlock Grid.Column="0" Text="STAGE 4" FontWeight="Bold" Foreground="#3FB950" />
-                            <TextBlock Grid.Column="1" Text="{Binding Stage4OrderProtection}" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
-                        </Grid>
-                    </Border>
                 </StackPanel>
             </Border>
 

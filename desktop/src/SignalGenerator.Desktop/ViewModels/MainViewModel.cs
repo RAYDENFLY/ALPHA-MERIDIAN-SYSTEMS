@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,11 +14,14 @@ public partial class MainViewModel : ViewModelBase
     private readonly ISettingsService _settingsService;
 
     public OverviewViewModel OverviewVm { get; }
+    public MarketMonitorViewModel MarketMonitorVm { get; }
     public ScreenerViewModel ScreenerVm { get; }
-    public JournalViewModel JournalVm { get; }
     public LiquidityIntelViewModel LiquidityIntelVm { get; }
-    public AlertsViewModel AlertsVm { get; }
     public GroqHunterViewModel GroqHunterVm { get; }
+    public JournalViewModel JournalVm { get; }
+    public AlertsViewModel AlertsVm { get; }
+    public MarketParticipantsViewModel MarketParticipantsVm { get; }
+    public CryptoNewsViewModel CryptoNewsVm { get; }
     public SettingsViewModel SettingsVm { get; }
 
     [ObservableProperty]
@@ -27,22 +31,29 @@ public partial class MainViewModel : ViewModelBase
     private string _selectedNav = "Overview";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConnectionStatusColor))]
     private bool _isConnected;
 
     [ObservableProperty]
     private string _connectionStatusText = "CONNECTING...";
 
     [ObservableProperty]
-    private string _mode = "PAPER";
+    [NotifyPropertyChangedFor(nameof(ModeColor))]
+    private string _mode = "UNVERIFIED";
 
     [ObservableProperty]
-    private string _sessionState = "INACTIVE";
+    [NotifyPropertyChangedFor(nameof(SessionStateColor))]
+    private string _sessionState = "UNVERIFIED";
 
     [ObservableProperty]
-    private string _lockBadge = "UNLOCKED";
+    [NotifyPropertyChangedFor(nameof(LockBadgeColor))]
+    private string _lockBadge = "IDLE";
 
     [ObservableProperty]
-    private string _totalEquityText = "$0.00 USDT";
+    private string _totalEquityText = "Unavailable";
+
+    [ObservableProperty]
+    private string _availableBalanceText = "Unavailable";
 
     [ObservableProperty]
     private string _lastPollTimestamp = "--:--:--";
@@ -56,26 +67,55 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private string? _lastErrorMessage;
 
+    // Semantic Terminal Colors (Bloomberg Style)
+    public string ConnectionStatusColor => IsConnected ? "#00E676" : "#FF5252";
+
+    public string ModeColor => Mode?.ToUpperInvariant() switch
+    {
+        "LIVE_AUTO" or "LIVE" => "#FF9D00",
+        "PAPER" => "#448AFF",
+        _ => "#8B949E"
+    };
+
+    public string SessionStateColor => SessionState?.ToUpperInvariant() switch
+    {
+        "ACTIVE" => "#00E676",
+        "STARTING" or "DRAINING" => "#FFB300",
+        "REAUTHORIZATION_REQUIRED" => "#FF9D00",
+        "KILL_SWITCH_HALTED" or "ERROR" => "#FF5252",
+        _ => "#8B949E"
+    };
+
+    public string LockBadgeColor => LockBadge?.StartsWith("LOCKED", StringComparison.OrdinalIgnoreCase) == true
+        ? "#FF9D00"
+        : "#8B949E";
+
     public MainViewModel(
         IPollingCoordinator pollingCoordinator,
         ISettingsService settingsService,
         OverviewViewModel overviewVm,
+        MarketMonitorViewModel marketMonitorVm,
         ScreenerViewModel screenerVm,
-        JournalViewModel journalVm,
         LiquidityIntelViewModel liquidityIntelVm,
-        AlertsViewModel alertsVm,
         GroqHunterViewModel groqHunterVm,
+        JournalViewModel journalVm,
+        AlertsViewModel alertsVm,
+        MarketParticipantsViewModel marketParticipantsVm,
+        CryptoNewsViewModel cryptoNewsVm,
         SettingsViewModel settingsVm)
     {
         _pollingCoordinator = pollingCoordinator ?? throw new ArgumentNullException(nameof(pollingCoordinator));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
 
         OverviewVm = overviewVm;
+        MarketMonitorVm = marketMonitorVm;
         ScreenerVm = screenerVm;
-        JournalVm = journalVm;
         LiquidityIntelVm = liquidityIntelVm;
-        AlertsVm = alertsVm;
         GroqHunterVm = groqHunterVm;
+        JournalVm = journalVm;
+        AlertsVm = alertsVm;
+        MarketParticipantsVm = marketParticipantsVm;
+        CryptoNewsVm = cryptoNewsVm;
         SettingsVm = settingsVm;
 
         _currentViewModel = OverviewVm;
@@ -100,18 +140,29 @@ public partial class MainViewModel : ViewModelBase
         CurrentViewModel = destination switch
         {
             "Overview" => OverviewVm,
+            "MarketMonitor" => MarketMonitorVm,
             "Screener" => ScreenerVm,
-            "Journal" => JournalVm,
             "LiquidityIntel" => LiquidityIntelVm,
-            "Alerts" => AlertsVm,
             "GroqHunter" => GroqHunterVm,
+            "Journal" => JournalVm,
+            "Alerts" => AlertsVm,
+            "MarketParticipants" => MarketParticipantsVm,
+            "CryptoNews" => CryptoNewsVm,
             "Settings" => SettingsVm,
             _ => OverviewVm
         };
 
-        if (destination == "Screener" && ScreenerVm.Markets.Count == 0)
+        if (destination == "MarketMonitor" && MarketMonitorVm.Markets.Count == 0)
+        {
+            _ = MarketMonitorVm.LoadMarketMatrixAsync();
+        }
+        else if (destination == "Screener" && ScreenerVm.Markets.Count == 0)
         {
             _ = ScreenerVm.LoadMarketsAsync();
+        }
+        else if (destination == "MarketParticipants" && MarketParticipantsVm.Observations.Count == 0)
+        {
+            _ = MarketParticipantsVm.LoadPositioningAsync();
         }
     }
 
@@ -119,6 +170,18 @@ public partial class MainViewModel : ViewModelBase
     public async Task RefreshAllAsync()
     {
         await _pollingCoordinator.TriggerPollNowAsync();
+        if (CurrentViewModel == MarketMonitorVm)
+        {
+            await MarketMonitorVm.LoadMarketMatrixAsync();
+        }
+        else if (CurrentViewModel == ScreenerVm)
+        {
+            await ScreenerVm.LoadMarketsAsync();
+        }
+        else if (CurrentViewModel == MarketParticipantsVm)
+        {
+            await MarketParticipantsVm.LoadPositioningAsync();
+        }
     }
 
     [RelayCommand]
@@ -139,18 +202,43 @@ public partial class MainViewModel : ViewModelBase
     private void HandleConnectionStatusChanged(bool connected)
     {
         IsConnected = connected;
-        ConnectionStatusText = connected ? "CONNECTED" : "OFFLINE";
+        ConnectionStatusText = connected ? "ONLINE" : "OFFLINE";
     }
 
     private void HandleStatusUpdated(SystemStatusDto status)
     {
         if (status == null) return;
-        Mode = status.Mode;
-        SessionState = status.SessionState;
-        if (status.Account?.TotalEquityUsdt != null)
+        Mode = !string.IsNullOrWhiteSpace(status.Mode) ? status.Mode : "UNVERIFIED";
+        SessionState = !string.IsNullOrWhiteSpace(status.SessionState) ? status.SessionState : "UNVERIFIED";
+
+        if (status.Account != null)
         {
-            TotalEquityText = $"${status.Account.TotalEquityUsdt.Value:F4} USDT";
+            TotalEquityText = status.Account.TotalEquityUsdt.HasValue
+                ? $"${status.Account.TotalEquityUsdt.Value.ToString("N2", CultureInfo.InvariantCulture)} USDT"
+                : "Unavailable";
+
+            AvailableBalanceText = status.Account.AvailableBalanceUsdt.HasValue
+                ? $"${status.Account.AvailableBalanceUsdt.Value.ToString("N2", CultureInfo.InvariantCulture)} USDT"
+                : "Unavailable";
         }
+        else
+        {
+            TotalEquityText = "Unavailable";
+            AvailableBalanceText = "Unavailable";
+        }
+
+        if (status.RiskLimits != null && !string.IsNullOrWhiteSpace(status.RiskLimits.LockState))
+        {
+            if (status.RiskLimits.LockState.Equals("HELD", StringComparison.OrdinalIgnoreCase))
+            {
+                LockBadge = $"LOCKED: {status.RiskLimits.LockSymbol ?? "ACTIVE"}";
+            }
+            else
+            {
+                LockBadge = status.RiskLimits.LockState;
+            }
+        }
+
         LastPollTimestamp = DateTime.UtcNow.ToString("HH:mm:ss") + " UTC";
         LastErrorMessage = null;
     }
@@ -164,9 +252,9 @@ public partial class MainViewModel : ViewModelBase
         {
             LockBadge = $"LOCKED: {envelope.Data.GlobalLockSymbol ?? "ACTIVE"}";
         }
-        else
+        else if (!string.IsNullOrWhiteSpace(envelope.Data.GlobalLockState))
         {
-            LockBadge = "UNLOCKED";
+            LockBadge = envelope.Data.GlobalLockState;
         }
     }
 

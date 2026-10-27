@@ -59,11 +59,14 @@ public partial class App : Application
 
         // ViewModels
         services.AddSingleton<OverviewViewModel>();
+        services.AddSingleton<MarketMonitorViewModel>();
         services.AddSingleton<ScreenerViewModel>();
-        services.AddSingleton<JournalViewModel>();
         services.AddSingleton<LiquidityIntelViewModel>();
-        services.AddSingleton<AlertsViewModel>();
         services.AddSingleton<GroqHunterViewModel>();
+        services.AddSingleton<JournalViewModel>();
+        services.AddSingleton<AlertsViewModel>();
+        services.AddSingleton<MarketParticipantsViewModel>();
+        services.AddSingleton<CryptoNewsViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<MainViewModel>();
     }
