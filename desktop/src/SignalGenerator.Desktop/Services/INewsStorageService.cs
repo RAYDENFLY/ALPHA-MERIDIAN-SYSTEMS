@@ -14,6 +14,7 @@ public interface INewsStorageService
         string? searchQuery = null,
         DateTime? startDateUtc = null,
         DateTime? endDateUtc = null,
+        string? publisher = null,
         int limit = 100);
     Task<bool> UpdateArticleSummaryAsync(string articleId, string summary, DateTime generatedUtc);
     Task<NewsArticleDto?> GetArticleByIdAsync(string articleId);

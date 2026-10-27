@@ -87,10 +87,10 @@ public class ApiClientSecurityTests
         {
             "/api/order",
             "/api/orders",
-            "/api/kill-switch",
-            "/api/session/mode",
-            "/api/session/start",
-            "/api/groq/scan",
+            "/api/inspector/execute-setup",
+            "/api/inspector/live-session/start",
+            "/api/inspector/live-session/kill-switch",
+            "/api/inspector/live-session/mode",
             "/api/risk/override"
         };
 
@@ -107,6 +107,32 @@ public class ApiClientSecurityTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => task);
             Assert.Contains("Security Boundary Violation", ex.Message);
         }
+    }
+
+    [Fact]
+    public async Task ScannerLifecycleEndpoints_PermittedBySecurityBoundary()
+    {
+        var handler = new SecurityMockHttpMessageHandler
+        {
+            ResponseJson = JsonSerializer.Serialize(new ScannerControlResponseDto
+            {
+                Status = "SUCCESS",
+                Message = "Background scanner resumed.",
+                ScannerState = "IDLE"
+            })
+        };
+
+        var httpClient = new HttpClient(handler);
+        var client = new ApiClient(httpClient, "http://127.0.0.1:8000");
+
+        var startResult = await client.StartScannerAsync();
+        Assert.True(startResult.IsSuccess);
+        Assert.NotNull(handler.LastRequest);
+        Assert.Equal("http://127.0.0.1:8000/api/scanner/start", handler.LastRequest.RequestUri?.ToString());
+
+        var stopResult = await client.StopScannerAsync();
+        Assert.True(stopResult.IsSuccess);
+        Assert.Equal("http://127.0.0.1:8000/api/scanner/stop", handler.LastRequest.RequestUri?.ToString());
     }
 
     [Fact]

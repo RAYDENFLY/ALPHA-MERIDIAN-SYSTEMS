@@ -40,25 +40,68 @@
             </Grid>
         </Border>
 
-        <!-- Category Filter & Security Notice Ribbon -->
-        <Border Grid.Row="1" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,4" Margin="0,0,0,10">
-            <Grid ColumnDefinitions="Auto,*">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="ALL" Classes="terminal-btn" Padding="8,2">
-                        <TextBlock Text="ALL FEEDS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                    </Button>
-                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="CRYPTO" Classes="terminal-btn" Padding="8,2">
-                        <TextBlock Text="CRYPTO / ALTS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                    </Button>
-                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="CENTRAL_BANK" Classes="terminal-btn" Padding="8,2">
-                        <TextBlock Text="CENTRAL BANK / RATES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
-                    </Button>
-                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="DERIVATIVES" Classes="terminal-btn" Padding="8,2">
-                        <TextBlock Text="DERIVATIVES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
-                    </Button>
-                </StackPanel>
+        <!-- Source & Category Filter Ribbons -->
+        <Border Grid.Row="1" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,6" Margin="0,0,0,10">
+            <Grid RowDefinitions="Auto,Auto">
+                <!-- Source Filter & Status Strip -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="SOURCES:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <Button Command="{Binding FilterByPublisherCommand}" CommandParameter="ALL" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="ALL SOURCES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        </Button>
+                        <Button Command="{Binding FilterByPublisherCommand}" CommandParameter="CoinDesk" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="COINDESK" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        </Button>
+                        <Button Command="{Binding FilterByPublisherCommand}" CommandParameter="CoinTelegraph" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="COINTELEGRAPH" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        </Button>
+                        <Button Command="{Binding FilterByPublisherCommand}" CommandParameter="Federal Reserve" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="FEDERAL RESERVE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
+                        </Button>
+                    </StackPanel>
 
-                <TextBlock Grid.Column="1" Text="{Binding GroqSummaryNotice}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    <!-- Feed Sources Live Telemetry -->
+                    <ItemsControl Grid.Column="1" ItemsSource="{Binding FeedSources}" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:FeedSourceStatusDto">
+                                <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="6,2">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="●" FontSize="8" Foreground="{Binding StatusColor}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Name}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                        <TextBlock Text="{Binding Status}" FontSize="8" FontFamily="Consolas, monospace" Foreground="{Binding StatusColor}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+
+                <!-- Category Filters & Isolation Banner -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="CATEGORIES:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="ALL" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="ALL CATEGORIES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        </Button>
+                        <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="CRYPTO" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="CRYPTO / ALTS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        </Button>
+                        <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="CENTRAL_BANK" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="CENTRAL BANK / RATES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        </Button>
+                        <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="DERIVATIVES" Classes="terminal-btn" Padding="8,2">
+                            <TextBlock Text="DERIVATIVES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
+                        </Button>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="1" Text="{Binding GroqSummaryNotice}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
             </Grid>
         </Border>
 
@@ -193,7 +236,10 @@
 
                         <Grid ColumnDefinitions="Auto,*">
                             <TextBlock Grid.Column="0" Text="PUBLISHED: " FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                            <TextBlock Grid.Column="1" Text="{Binding SelectedArticle.PublishDateUtc, TargetNullValue='--'}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding SelectedArticle.DisplayDateTimeUtc, TargetNullValue='--'}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                <TextBlock Text="{Binding SelectedArticle.DisplayDateTimeLocal, StringFormat='{}(Local: {0})', TargetNullValue=''}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            </StackPanel>
                         </Grid>
 
                         <Grid ColumnDefinitions="Auto,*">
@@ -203,19 +249,36 @@
 
                         <Separator Background="#242A34" Margin="0,4" />
 
+                        <!-- Source Excerpt Box -->
                         <TextBlock Text="SOURCE EXCERPT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding SelectedArticle.Excerpt, TargetNullValue='Select an article to view content.'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" TextWrapping="Wrap" />
+                        <Border Background="#06080A" BorderBrush="#1C212A" BorderThickness="1" Padding="8">
+                            <TextBlock Text="{Binding SelectedArticle.Excerpt, TargetNullValue='Select an article to view content.'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" TextWrapping="Wrap" LineHeight="15" />
+                        </Border>
+
+                        <!-- Dedicated Institutional AI Summary Box -->
+                        <Border Background="#0D1117" BorderBrush="#FF9D00" BorderThickness="1" Padding="10" Margin="0,4,0,0" IsVisible="{Binding HasAiSummary}">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="■ INSTITUTIONAL AI SUMMARY (GROQ)" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <Border Grid.Column="1" Background="#1C2128" BorderBrush="#30363D" BorderThickness="1" Padding="4,1">
+                                        <TextBlock Text="{Binding AiSummaryGeneratedTime, StringFormat='{}SYNTHESIZED: {0}'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock Text="{Binding AiSummaryContent}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextWrapping="Wrap" LineHeight="16" />
+                            </StackPanel>
+                        </Border>
 
                         <!-- Action Buttons: Generate Summary & Open Source (Phase D) -->
-                        <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
+                        <Grid ColumnDefinitions="*,*" Margin="0,6,0,0">
                             <Button Grid.Column="0"
                                     Command="{Binding GenerateSummaryCommand}" 
+                                    IsEnabled="{Binding !IsSummarizing}"
                                     Classes="terminal-btn"
                                     Padding="8,6"
                                     Margin="0,0,4,0">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
                                     <TextBlock Text="⚡" FontSize="11" Foreground="#FF9D00" />
-                                    <TextBlock Text="AI SUMMARY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    <TextBlock Text="GENERATE AI SUMMARY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </StackPanel>
                             </Button>
 

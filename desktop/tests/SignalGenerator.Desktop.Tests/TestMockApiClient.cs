@@ -103,4 +103,40 @@ public class TestMockApiClient : IApiClient
 
     public virtual Task<ApiResult<List<KlineDto>>> GetKlinesAsync(string symbol, string timeframe = "1h", int limit = 100, CancellationToken ct = default) =>
         Task.FromResult(ApiResult<List<KlineDto>>.Success(new List<KlineDto>()));
+
+    public virtual Task<ApiResult<ScannerControlResponseDto>> StartScannerAsync(CancellationToken ct = default) =>
+        Task.FromResult(ApiResult<ScannerControlResponseDto>.Success(new ScannerControlResponseDto
+        {
+            Status = "SUCCESS",
+            Message = "Background scanner resumed.",
+            ScannerState = "IDLE"
+        }));
+
+    public virtual Task<ApiResult<ScannerControlResponseDto>> StopScannerAsync(CancellationToken ct = default) =>
+        Task.FromResult(ApiResult<ScannerControlResponseDto>.Success(new ScannerControlResponseDto
+        {
+            Status = "SUCCESS",
+            Message = "Background scanner paused.",
+            ScannerState = "STOPPED"
+        }));
+
+    public virtual Task<ApiResult<LiveSessionEnvelopeDto>> ReauthorizeSessionAsync(string operatorId = "OPERATOR", CancellationToken ct = default) =>
+        Task.FromResult(ApiResult<LiveSessionEnvelopeDto>.Success(new LiveSessionEnvelopeDto
+        {
+            Status = "SUCCESS",
+            Data = new LiveSessionDataDto
+            {
+                State = "ACTIVE",
+                IsActive = true,
+                AuthorizedBy = operatorId,
+                LastStatusMessage = "Session reauthorized."
+            }
+        }));
+
+    public virtual Task<ApiResult<GroqAutoSetupResponseDto>> TriggerSingleScanAsync(CancellationToken ct = default) =>
+        Task.FromResult(ApiResult<GroqAutoSetupResponseDto>.Success(new GroqAutoSetupResponseDto
+        {
+            Status = "SUCCESS",
+            TimestampUtc = DateTime.UtcNow.ToString("o")
+        }));
 }

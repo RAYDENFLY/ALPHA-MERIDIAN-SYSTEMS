@@ -1089,7 +1089,32 @@ public class NewsArticleDto
     public bool IsAiSummarized => !string.IsNullOrWhiteSpace(AiSummary);
     public bool IsStale { get; set; }
     public string DisplayTime => PublishDateUtc.ToString("HH:mm") + " UTC";
+    public string DisplayDateTimeUtc => PublishDateUtc.ToString("yyyy-MM-dd HH:mm:ss") + " UTC";
+    public string DisplayDateTimeLocal => PublishDateUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
 }
+
+public class FeedSourceStatusDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string FeedUrl { get; set; } = string.Empty;
+    public string Status { get; set; } = "ONLINE";
+    public int ArticleCount { get; set; }
+    public DateTime? LastFetchUtc { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    public string StatusColor => Status switch
+    {
+        "ONLINE" => "#00E676",
+        "REFRESHING" => "#FFD600",
+        "ERROR" => "#FF5252",
+        _ => "#8B949E"
+    };
+
+    public string DisplayTime => LastFetchUtc.HasValue 
+        ? LastFetchUtc.Value.ToString("HH:mm:ss") + " UTC" 
+        : "--:--:--";
+}
+
 
 #endregion
 

@@ -59,6 +59,27 @@ public class LiveSessionDataDto
     [JsonPropertyName("last_status_message")]
     public string? LastStatusMessage { get; set; }
 
+    [JsonPropertyName("recovery_reason")]
+    public string? RecoveryReason { get; set; }
+
+    [JsonPropertyName("scanner_active")]
+    public bool ScannerActive { get; set; }
+
+    [JsonPropertyName("last_scan_utc")]
+    public string? LastScanUtc { get; set; }
+
+    [JsonPropertyName("is_authorized_and_active")]
+    public bool IsAuthorizedAndActive { get; set; }
+
+    [JsonPropertyName("configured_live_strategy_id")]
+    public string? ConfiguredLiveStrategyId { get; set; }
+
+    [JsonPropertyName("configured_live_strategy_status")]
+    public string? ConfiguredLiveStrategyStatus { get; set; }
+
+    [JsonPropertyName("cycle_telemetry")]
+    public CycleTelemetryDto? CycleTelemetry { get; set; }
+
     [JsonPropertyName("daily_filled_entries")]
     public int DailyFilledEntries { get; set; }
 
@@ -77,6 +98,64 @@ public class LiveSessionDataDto
     [JsonPropertyName("protection_reconciliation_worker")]
     public ProtectionWorkerDto? ProtectionReconciliationWorker { get; set; }
 }
+
+public class CycleTelemetryDto
+{
+    [JsonPropertyName("cycle_id")]
+    public string? CycleId { get; set; }
+
+    [JsonPropertyName("start_utc")]
+    public string? StartUtc { get; set; }
+
+    [JsonPropertyName("end_utc")]
+    public string? EndUtc { get; set; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("current_stage")]
+    public string? CurrentStage { get; set; }
+
+    [JsonPropertyName("duration_ms")]
+    public double? DurationMs { get; set; }
+
+    [JsonPropertyName("next_cycle_due_utc")]
+    public string? NextCycleDueUtc { get; set; }
+
+    [JsonPropertyName("last_completed_cycle_id")]
+    public string? LastCompletedCycleId { get; set; }
+
+    [JsonPropertyName("last_completed_cycle_utc")]
+    public string? LastCompletedCycleUtc { get; set; }
+
+    [JsonPropertyName("last_cycle_status")]
+    public string? LastCycleStatus { get; set; }
+
+    [JsonPropertyName("last_cycle_duration_ms")]
+    public double? LastCycleDurationMs { get; set; }
+}
+
+public class ScannerControlResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("scanner_state")]
+    public string ScannerState { get; set; } = string.Empty;
+}
+
+public class GroqAutoSetupResponseDto
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("timestamp_utc")]
+    public string? TimestampUtc { get; set; }
+}
+
 
 public class ProtectionWorkerDto
 {

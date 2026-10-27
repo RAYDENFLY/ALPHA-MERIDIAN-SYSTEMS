@@ -1,86 +1,221 @@
 <UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
-             xmlns:models="using:SignalGenerator.Desktop.Models"
-             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
-             x:Class="SignalGenerator.Desktop.Views.GroqHunterView"
-             x:DataType="vm:GroqHunterViewModel"
-             Background="#000000">
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+              xmlns:models="using:SignalGenerator.Desktop.Models"
+              mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
+              x:Class="SignalGenerator.Desktop.Views.GroqHunterView"
+              x:DataType="vm:GroqHunterViewModel"
+              Background="#000000">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="10" Margin="14">
-            
-            <!-- Header Banner -->
-            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Grid.Column="0">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="■ AI SIGNAL &amp; EXECUTION MONITOR" 
-                                       FontSize="12" 
+    <Grid>
+        <!-- Main Scrollable Content -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10" Margin="14">
+                
+                <!-- Header Banner -->
+                <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="■ AI SIGNAL &amp; EXECUTION MONITOR" 
+                                           FontSize="12" 
+                                           FontWeight="Bold" 
+                                           FontFamily="Consolas, monospace" 
+                                           Foreground="#FF9D00" />
+                                <Border Background="#1C2128" BorderBrush="#242A34" BorderThickness="1" Padding="6,1" CornerRadius="2">
+                                    <TextBlock Text="{Binding FreshnessStatus}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                </Border>
+                                <TextBlock Text="{Binding DataProvenance}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="Deterministic quantitative prefilters + SMC structural validation + Groq reasoning pipeline" 
+                                       FontSize="10" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#8B949E" 
+                                       Margin="0,2,0,0" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" 
+                                Command="{Binding RefreshScreeningLogCommand}" 
+                                IsEnabled="{Binding !IsActionPending}"
+                                Classes="terminal-btn"
+                                Padding="10,4"
+                                VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                                <TextBlock Text="REFRESH TELEMETRY" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- AI Lifecycle Controls & Runtime Telemetry Strip -->
+                <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,8">
+                    <StackPanel Spacing="8">
+                        <!-- Top State Badges (4 Metrics) -->
+                        <Grid ColumnDefinitions="*,*,*,*">
+                            <!-- Scanner Runtime State -->
+                            <Border Grid.Column="0" Margin="0,0,4,0" Background="#12161D" BorderBrush="#242A34" BorderThickness="1" Padding="8,6">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="SCANNER RUNTIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="●" FontSize="10" Foreground="{Binding ScannerStateColor}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding ScannerState}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding ScannerStateColor}" />
+                                    </StackPanel>
+                                    <TextBlock Text="Background Evaluation Worker" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Session & Auth State -->
+                            <Border Grid.Column="1" Margin="2,0,2,0" Background="#12161D" BorderBrush="#242A34" BorderThickness="1" Padding="8,6">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="SESSION &amp; AUTH" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding SessionState}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding SessionStateColor}" />
+                                        <TextBlock Text="{Binding AuthorizedBy, StringFormat='({0})'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#448AFF" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Text="Loopback Security Gate" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Current Stage & Cycle -->
+                            <Border Grid.Column="2" Margin="2,0,2,0" Background="#12161D" BorderBrush="#242A34" BorderThickness="1" Padding="8,6">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="CURRENT STAGE &amp; CYCLE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBlock Text="{Binding CurrentCycleStage}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Text="{Binding ActiveCycleId}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Schedule & Timing -->
+                            <Border Grid.Column="3" Margin="4,0,0,0" Background="#12161D" BorderBrush="#242A34" BorderThickness="1" Padding="8,6">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="CYCLE SCHEDULE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="LAST:" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                        <TextBlock Text="{Binding LastScanTimeUtc}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="NEXT:" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                        <TextBlock Text="{Binding NextCycleDueUtc}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Operational Controls Row -->
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                <Button Command="{Binding RequestStartScannerCommand}" 
+                                        IsEnabled="{Binding !IsActionPending}" 
+                                        Classes="terminal-btn" 
+                                        Padding="10,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="▶" FontSize="9" Foreground="#00E676" FontWeight="Bold" />
+                                        <TextBlock Text="START AUTO-HUNTER" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Command="{Binding RequestStopScannerCommand}" 
+                                        IsEnabled="{Binding !IsActionPending}" 
+                                        Classes="terminal-btn" 
+                                        Padding="10,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="■" FontSize="9" Foreground="#FF5252" FontWeight="Bold" />
+                                        <TextBlock Text="STOP AUTO-HUNTER" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Command="{Binding RequestSingleScanCommand}" 
+                                        IsEnabled="{Binding !IsActionPending}" 
+                                        Classes="terminal-btn" 
+                                        Padding="10,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="⚡" FontSize="9" Foreground="#FF9D00" FontWeight="Bold" />
+                                        <TextBlock Text="TRIGGER SINGLE SCAN" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Command="{Binding RequestReauthorizeCommand}" 
+                                        IsEnabled="{Binding !IsActionPending}" 
+                                        Classes="terminal-btn" 
+                                        Padding="10,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="🔐" FontSize="9" Foreground="#448AFF" FontWeight="Bold" />
+                                        <TextBlock Text="RE-AUTHENTICATE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="2" 
+                                       Text="EXECUTION SAFETY: READ-ONLY DESKTOP // ORDER DISPATCH STRICTLY ISOLATED" 
+                                       FontSize="8" 
                                        FontWeight="Bold" 
                                        FontFamily="Consolas, monospace" 
-                                       Foreground="#FF9D00" />
-                            <Border Background="#1C2128" BorderBrush="#242A34" BorderThickness="1" Padding="6,1" CornerRadius="2">
-                                <TextBlock Text="{Binding FreshnessStatus}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                            </Border>
-                            <TextBlock Text="{Binding DataProvenance}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock Text="Deterministic quantitative prefilters + SMC structural validation + Groq reasoning pipeline" 
-                                   FontSize="10" 
-                                   FontFamily="Consolas, monospace" 
-                                   Foreground="#8B949E" 
-                                   Margin="0,2,0,0" />
-                    </StackPanel>
+                                       Foreground="#FF9D00" 
+                                       VerticalAlignment="Center" />
+                        </Grid>
 
-                    <Button Grid.Column="1" 
-                            Command="{Binding RefreshScreeningLogCommand}" 
-                            Classes="terminal-btn"
-                            Padding="10,4"
-                            VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
-                            <TextBlock Text="REFRESH TELEMETRY" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                        <!-- Operational Status Ribbon -->
+                        <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8,4">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="STATUS:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBlock Text="{Binding LastStatusMessage}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                    <TextBlock Text="{Binding RecoveryReason, StringFormat='[RECOVERY: {0}]'}" 
+                                               FontSize="9" 
+                                               FontWeight="Bold" 
+                                               FontFamily="Consolas, monospace" 
+                                               Foreground="#FF5252" 
+                                               IsVisible="{Binding HasRecoveryReason}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" 
+                                           Text="{Binding ActionFeedback}" 
+                                           FontSize="9" 
+                                           FontWeight="Bold" 
+                                           FontFamily="Consolas, monospace" 
+                                           Foreground="#FFB300" 
+                                           IsVisible="{Binding HasActionFeedback}" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Top Telemetry Ribbon (4 Tiles) -->
+                <Grid ColumnDefinitions="*,*,*,*" Margin="0,2,0,0">
+                    <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="INFERENCE MODEL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding ModelName}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="Deterministic Prefilter Active" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
                         </StackPanel>
-                    </Button>
+                    </Border>
+
+                    <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="ACTIVE CYCLE ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding ActiveCycleId}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding LatestTimestampUtc}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="SELECTED SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding LatestSelectedSymbol}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Text="Stage 3 LLM Candidate" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="3" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="MARKET REGIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding MarketRegimeLabel}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                            <TextBlock Text="Multi-Asset Confluence" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
-            </Border>
-
-            <!-- Top Telemetry Ribbon (4 Tiles) -->
-            <Grid ColumnDefinitions="*,*,*,*" Margin="0,2,0,0">
-                <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="INFERENCE MODEL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding ModelName}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="Deterministic Prefilter Active" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="ACTIVE CYCLE ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding ActiveCycleId}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding LatestTimestampUtc}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="SELECTED SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding LatestSelectedSymbol}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Text="Stage 3 LLM Candidate" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Column="3" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="MARKET REGIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding MarketRegimeLabel}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                        <TextBlock Text="Multi-Asset Confluence" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                    </StackPanel>
-                </Border>
-            </Grid>
 
             <!-- STAGE 1: TOP 10 CANDIDATES TABLE -->
             <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,10">
@@ -249,4 +384,68 @@
 
         </StackPanel>
     </ScrollViewer>
+
+    <!-- Modal Confirmation Dialog Overlay -->
+    <Border Background="#CC000000" 
+            IsVisible="{Binding IsConfirmDialogVisible}" 
+            HorizontalAlignment="Stretch" 
+            VerticalAlignment="Stretch">
+        <Border Background="#0A0D10" 
+                BorderBrush="#FF9D00" 
+                BorderThickness="2" 
+                CornerRadius="2" 
+                Padding="24" 
+                MaxWidth="560" 
+                HorizontalAlignment="Center" 
+                VerticalAlignment="Center">
+            <StackPanel Spacing="14">
+                <!-- Header -->
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="⚠ " FontSize="16" Foreground="#FF9D00" FontWeight="Bold" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding ConfirmDialogTitle}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" VerticalAlignment="Center" />
+                </Grid>
+
+                <Separator Background="#242A34" Margin="0,2" />
+
+                <!-- Action Description -->
+                <TextBlock Text="{Binding ConfirmDialogDescription}" 
+                           FontSize="10" 
+                           FontFamily="Consolas, monospace" 
+                           Foreground="#F0F4F8" 
+                           TextWrapping="Wrap" 
+                           LineHeight="16" />
+
+                <!-- Invariant & Safety Warning Box -->
+                <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" Padding="10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="OPERATIONAL SAFETY INVARIANT:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
+                        <TextBlock Text="{Binding ConfirmDialogWarning}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" LineHeight="14" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Actions -->
+                <Grid ColumnDefinitions="*,*" Margin="0,6,0,0">
+                    <Button Grid.Column="0" 
+                            Command="{Binding ExecuteConfirmedActionCommand}" 
+                            IsEnabled="{Binding !IsActionPending}" 
+                            Classes="terminal-btn" 
+                            Padding="12,8" 
+                            Margin="0,0,6,0"
+                            HorizontalAlignment="Stretch">
+                        <TextBlock Text="[CONFIRM EXECUTION]" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Center" />
+                    </Button>
+
+                    <Button Grid.Column="1" 
+                            Command="{Binding CancelConfirmDialogCommand}" 
+                            Classes="terminal-btn" 
+                            Padding="12,8" 
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Stretch">
+                        <TextBlock Text="[CANCEL]" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Center" />
+                    </Button>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Border>
+</Grid>
 </UserControl>

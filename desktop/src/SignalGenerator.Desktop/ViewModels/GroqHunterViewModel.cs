@@ -79,6 +79,63 @@ public partial class GroqHunterViewModel : ViewModelBase
     private ObservableCollection<ScreeningCycleDto> _cycleHistory = new();
 
     [ObservableProperty]
+    private string _scannerState = "RUNNING";
+
+    [ObservableProperty]
+    private string _scannerStateColor = "#00E676";
+
+    [ObservableProperty]
+    private string _sessionState = "ACTIVE";
+
+    [ObservableProperty]
+    private string _sessionStateColor = "#00E676";
+
+    [ObservableProperty]
+    private string _authorizedBy = "OPERATOR";
+
+    [ObservableProperty]
+    private string _lastScanTimeUtc = "--:--:--";
+
+    [ObservableProperty]
+    private string _nextCycleDueUtc = "--:--:--";
+
+    [ObservableProperty]
+    private string _currentCycleStage = "IDLE";
+
+    [ObservableProperty]
+    private string _lastStatusMessage = "Session active. Monitoring market conditions.";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRecoveryReason))]
+    private string _recoveryReason = string.Empty;
+
+    public bool HasRecoveryReason => !string.IsNullOrWhiteSpace(RecoveryReason);
+
+    [ObservableProperty]
+    private bool _isActionPending;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActionFeedback))]
+    private string _actionFeedback = string.Empty;
+
+    public bool HasActionFeedback => !string.IsNullOrWhiteSpace(ActionFeedback);
+
+    [ObservableProperty]
+    private bool _isConfirmDialogVisible;
+
+    [ObservableProperty]
+    private string _confirmDialogTitle = string.Empty;
+
+    [ObservableProperty]
+    private string _confirmDialogDescription = string.Empty;
+
+    [ObservableProperty]
+    private string _confirmDialogWarning = string.Empty;
+
+    [ObservableProperty]
+    private string _confirmActionType = string.Empty;
+
+    [ObservableProperty]
     private bool _isLoading;
 
     public GroqHunterViewModel(IApiClient apiClient)
@@ -102,6 +159,144 @@ public partial class GroqHunterViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void RequestStartScanner()
+    {
+        if (IsActionPending) return;
+
+        ConfirmActionType = "START";
+        ConfirmDialogTitle = "START AI AUTO-HUNTER CONTINUOUS SCANNER";
+        ConfirmDialogDescription = "This operation will start/resume the continuous background market scanning loop. The scanner runs automatically across candle boundaries to detect SMC setups.";
+        ConfirmDialogWarning = "READ-ONLY SCREENING SAFETY: Desktop controls operate strictly under isolated advisory mode. Live exchange trade execution will NOT be triggered by starting the scanner.";
+        IsConfirmDialogVisible = true;
+    }
+
+    [RelayCommand]
+    public void RequestStopScanner()
+    {
+        if (IsActionPending) return;
+
+        ConfirmActionType = "STOP";
+        ConfirmDialogTitle = "STOP AI AUTO-HUNTER CONTINUOUS SCANNER";
+        ConfirmDialogDescription = "This operation will safely pause the continuous background market scanner loop. Automatic candidate generation will be suspended until resumed.";
+        ConfirmDialogWarning = "INVARIANT PRESERVED: Pausing the scanner does NOT cancel existing exchange resting limit orders or close active positions.";
+        IsConfirmDialogVisible = true;
+    }
+
+    [RelayCommand]
+    public void RequestSingleScan()
+    {
+        if (IsActionPending) return;
+
+        ConfirmActionType = "SINGLE_SCAN";
+        ConfirmDialogTitle = "TRIGGER SINGLE 10 -> 3 -> 1 GROQ AI SCAN CYCLE";
+        ConfirmDialogDescription = "This operation will execute exactly ONE immediate advisory screening cycle through the 10 -> 3 -> 1 Groq AI Trade Funnel in PAPER mode.";
+        ConfirmDialogWarning = "ONE-CYCLE ONLY: This is NOT continuous scanning. Zero orders will be dispatched to the exchange.";
+        IsConfirmDialogVisible = true;
+    }
+
+    [RelayCommand]
+    public void RequestReauthorize()
+    {
+        if (IsActionPending) return;
+
+        if (SessionState.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase))
+        {
+            ActionFeedback = "RE-AUTHENTICATION UNAVAILABLE: Live session is currently ACTIVE and authorized by OPERATOR. Pre-flight verification gates are already satisfied.";
+            return;
+        }
+
+        ConfirmActionType = "REAUTH";
+        ConfirmDialogTitle = "RE-AUTHENTICATE LIVE AUTO-EXECUTION SESSION";
+        ConfirmDialogDescription = "This operation will execute pre-flight safety audits and restore authorized session status after a server pause or restart.";
+        ConfirmDialogWarning = "OPERATOR CREDENTIALS: Authorization is verified via local loopback security boundary. No private API secrets are exposed.";
+        IsConfirmDialogVisible = true;
+    }
+
+    [RelayCommand]
+    public void CancelConfirmDialog()
+    {
+        IsConfirmDialogVisible = false;
+        ConfirmActionType = string.Empty;
+    }
+
+    [RelayCommand]
+    public async Task ExecuteConfirmedActionAsync()
+    {
+        if (IsActionPending) return;
+        var action = ConfirmActionType;
+        IsConfirmDialogVisible = false;
+        IsActionPending = true;
+
+        try
+        {
+            switch (action)
+            {
+                case "START":
+                    ScannerState = "STARTING";
+                    ScannerStateColor = "#FFD600";
+                    var startRes = await _apiClient.StartScannerAsync(_cts?.Token ?? default);
+                    if (startRes.IsSuccess)
+                    {
+                        ActionFeedback = $"SUCCESS: {startRes.Value?.Message ?? "Background scanner resumed."}";
+                    }
+                    else
+                    {
+                        ActionFeedback = $"ERROR STARTING SCANNER: {startRes.ErrorMessage}";
+                    }
+                    break;
+
+                case "STOP":
+                    ScannerState = "STOPPING";
+                    ScannerStateColor = "#FFD600";
+                    var stopRes = await _apiClient.StopScannerAsync(_cts?.Token ?? default);
+                    if (stopRes.IsSuccess)
+                    {
+                        ActionFeedback = $"SUCCESS: {stopRes.Value?.Message ?? "Background scanner paused."}";
+                    }
+                    else
+                    {
+                        ActionFeedback = $"ERROR STOPPING SCANNER: {stopRes.ErrorMessage}";
+                    }
+                    break;
+
+                case "SINGLE_SCAN":
+                    ActionFeedback = "Executing single 10 -> 3 -> 1 Groq AI cycle in PAPER mode...";
+                    var scanRes = await _apiClient.TriggerSingleScanAsync(_cts?.Token ?? default);
+                    if (scanRes.IsSuccess)
+                    {
+                        ActionFeedback = "SUCCESS: Single AI Funnel cycle completed in PAPER mode. Telemetry updated.";
+                    }
+                    else
+                    {
+                        ActionFeedback = $"ERROR TRIGGERING SCAN CYCLE: {scanRes.ErrorMessage}";
+                    }
+                    break;
+
+                case "REAUTH":
+                    var reauthRes = await _apiClient.ReauthorizeSessionAsync("OPERATOR", _cts?.Token ?? default);
+                    if (reauthRes.IsSuccess)
+                    {
+                        ActionFeedback = "SUCCESS: Live session reauthorized and active.";
+                    }
+                    else
+                    {
+                        ActionFeedback = $"REAUTHORIZATION FAILED: {reauthRes.ErrorMessage}";
+                    }
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            ActionFeedback = $"Action execution failed: {ex.Message}";
+        }
+        finally
+        {
+            await RefreshScreeningLogAsync();
+            IsActionPending = false;
+        }
+    }
+
+    [RelayCommand]
     public async Task RefreshScreeningLogAsync()
     {
         if (IsLoading) return;
@@ -113,6 +308,62 @@ public partial class GroqHunterViewModel : ViewModelBase
 
         try
         {
+            // 1. Fetch live session state & cycle telemetry
+            var sessionRes = await _apiClient.GetLiveSessionAsync(_cts.Token);
+            if (sessionRes.IsSuccess && sessionRes.Value?.Data != null)
+            {
+                var data = sessionRes.Value.Data;
+                SessionState = data.State;
+                SessionStateColor = GetSessionStateColor(data.State);
+                AuthorizedBy = string.IsNullOrWhiteSpace(data.AuthorizedBy) ? "NONE" : data.AuthorizedBy;
+                LastScanTimeUtc = !string.IsNullOrWhiteSpace(data.LastScanUtc)
+                    ? (DateTimeOffset.TryParse(data.LastScanUtc, out var sdt) ? sdt.UtcDateTime.ToString("HH:mm:ss") + " UTC" : data.LastScanUtc)
+                    : "--:--:--";
+                LastStatusMessage = data.LastStatusMessage ?? "No status message";
+                RecoveryReason = data.RecoveryReason ?? string.Empty;
+
+                if (data.CycleTelemetry != null)
+                {
+                    CurrentCycleStage = data.CycleTelemetry.CurrentStage ?? "IDLE";
+                    NextCycleDueUtc = !string.IsNullOrWhiteSpace(data.CycleTelemetry.NextCycleDueUtc)
+                        ? (DateTimeOffset.TryParse(data.CycleTelemetry.NextCycleDueUtc, out var ndt) ? ndt.UtcDateTime.ToString("HH:mm:ss") + " UTC" : data.CycleTelemetry.NextCycleDueUtc)
+                        : "--:--:--";
+                }
+
+                // Resolve accurate ScannerState
+                if (data.State.Equals("REAUTHORIZATION_REQUIRED", StringComparison.OrdinalIgnoreCase))
+                {
+                    ScannerState = "AUTH_REQUIRED";
+                    ScannerStateColor = "#FF9100";
+                }
+                else if (!string.IsNullOrWhiteSpace(data.RecoveryReason))
+                {
+                    ScannerState = "ERROR";
+                    ScannerStateColor = "#FF5252";
+                }
+                else if (data.ScannerActive || data.IsActive)
+                {
+                    ScannerState = "RUNNING";
+                    ScannerStateColor = "#00E676";
+                }
+                else if (data.IsPaused || data.State.Equals("PAUSED", StringComparison.OrdinalIgnoreCase) || !data.ScannerActive)
+                {
+                    ScannerState = "STOPPED";
+                    ScannerStateColor = "#8B949E";
+                }
+                else
+                {
+                    ScannerState = data.State;
+                    ScannerStateColor = "#8B949E";
+                }
+            }
+            else if (!sessionRes.IsSuccess)
+            {
+                ScannerState = "UNAVAILABLE";
+                ScannerStateColor = "#FF5252";
+            }
+
+            // 2. Fetch screening history & candidates
             var res = await _apiClient.GetScreeningLogAsync(_cts.Token);
             if (res.IsSuccess && res.Value != null)
             {
@@ -167,6 +418,17 @@ public partial class GroqHunterViewModel : ViewModelBase
             IsLoading = false;
         }
     }
+
+    private static string GetSessionStateColor(string state) => state.ToUpperInvariant() switch
+    {
+        "ACTIVE" => "#00E676",
+        "PAUSED" => "#FFB300",
+        "REAUTHORIZATION_REQUIRED" => "#FF9100",
+        "HALTED" => "#8B949E",
+        "KILL_SWITCH_HALTED" => "#FF5252",
+        "RECOVERY_REQUIRED" => "#FF5252",
+        _ => "#8B949E"
+    };
 
     private void ApplyCycleData(ScreeningCycleDto cycle)
     {

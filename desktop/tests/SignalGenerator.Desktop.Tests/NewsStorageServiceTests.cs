@@ -167,4 +167,77 @@ public class NewsStorageServiceTests : IDisposable
         Assert.Equal("Synthesized AI summary content.", retrieved.AiSummary);
         Assert.True(retrieved.IsAiSummarized);
     }
+
+    [Fact]
+    public async Task GetArticlesAsync_FiltersByPublisherAndCombinedConditions()
+    {
+        var cdArticle = new NewsArticleDto
+        {
+            Title = "CoinDesk Crypto Analysis",
+            Publisher = "CoinDesk",
+            Url = "https://coindesk.com/article1",
+            PublishDateUtc = new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc),
+            Category = "CRYPTO"
+        };
+
+        var ctArticle = new NewsArticleDto
+        {
+            Title = "CoinTelegraph Crypto Analysis",
+            Publisher = "CoinTelegraph",
+            Url = "https://cointelegraph.com/article2",
+            PublishDateUtc = new DateTime(2026, 10, 21, 12, 0, 0, DateTimeKind.Utc),
+            Category = "CRYPTO"
+        };
+
+        var fedArticle = new NewsArticleDto
+        {
+            Title = "Federal Reserve Monetary Policy",
+            Publisher = "Federal Reserve",
+            Url = "https://federalreserve.gov/article3",
+            PublishDateUtc = new DateTime(2026, 10, 22, 12, 0, 0, DateTimeKind.Utc),
+            Category = "CENTRAL_BANK"
+        };
+
+        await _storage.SaveArticlesAsync(new[] { cdArticle, ctArticle, fedArticle });
+
+        // Filter strictly by publisher
+        var byPub = await _storage.GetArticlesAsync(publisher: "CoinDesk");
+        Assert.Single(byPub);
+        Assert.Equal("CoinDesk", byPub[0].Publisher);
+
+        // Combined filter: Publisher + Category
+        var combined = await _storage.GetArticlesAsync(category: "CRYPTO", publisher: "CoinTelegraph");
+        Assert.Single(combined);
+        Assert.Equal("CoinTelegraph", combined[0].Publisher);
+
+        // Empty intersection
+        var emptyIntersection = await _storage.GetArticlesAsync(category: "CENTRAL_BANK", publisher: "CoinDesk");
+        Assert.Empty(emptyIntersection);
+    }
+
+    [Fact]
+    public async Task Persistence_AcrossServiceRestarts()
+    {
+        var article = new NewsArticleDto
+        {
+            Id = "restart_persisted_art",
+            Title = "Article That Must Persist Across Restart",
+            Publisher = "CoinDesk",
+            Url = "https://coindesk.com/persisted",
+            PublishDateUtc = DateTime.UtcNow,
+            Category = "CRYPTO",
+            AiSummary = "Pre-computed AI intelligence summary",
+            SummaryGeneratedUtc = DateTime.UtcNow
+        };
+
+        await _storage.SaveArticlesAsync(new[] { article });
+
+        // Simulate application restart by creating a second service instance with the same database file
+        var secondInstance = new NewsStorageService(_testDbPath);
+        var loaded = await secondInstance.GetArticlesAsync(searchQuery: "Must Persist Across Restart");
+
+        Assert.Single(loaded);
+        Assert.Equal("restart_persisted_art", loaded[0].Id);
+        Assert.Equal("Pre-computed AI intelligence summary", loaded[0].AiSummary);
+    }
 }

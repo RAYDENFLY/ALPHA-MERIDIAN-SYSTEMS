@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,9 +18,11 @@ public class RssNewsService : IRssNewsService
     private readonly INewsStorageService _storageService;
     private readonly List<NewsArticleDto> _cachedArticles = new();
     private readonly HashSet<string> _seenUrls = new();
+    private readonly List<FeedSourceStatusDto> _sourceStatuses = new();
     private DateTime _lastFetchUtc = DateTime.MinValue;
 
     public INewsStorageService Storage => _storageService;
+    public IReadOnlyList<FeedSourceStatusDto> SourceStatuses => _sourceStatuses;
 
     private static readonly (string Name, string Url, string Category, string DefaultAssets)[] Feeds = new[]
     {
@@ -31,6 +35,19 @@ public class RssNewsService : IRssNewsService
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _storageService = storageService ?? new NewsStorageService();
+
+        foreach (var (name, url, _, _) in Feeds)
+        {
+            _sourceStatuses.Add(new FeedSourceStatusDto
+            {
+                Name = name,
+                FeedUrl = url,
+                Status = "ONLINE",
+                ArticleCount = 0,
+                LastFetchUtc = null,
+                ErrorMessage = null
+            });
+        }
     }
 
     public async Task<List<NewsArticleDto>> FetchLatestNewsAsync(CancellationToken ct = default)
@@ -43,8 +60,11 @@ public class RssNewsService : IRssNewsService
 
         var results = new List<NewsArticleDto>();
 
-        foreach (var (publisher, feedUrl, category, defaultAssets) in Feeds)
+        for (int i = 0; i < Feeds.Length; i++)
         {
+            var (publisher, feedUrl, category, defaultAssets) = Feeds[i];
+            var statusDto = _sourceStatuses.Find(s => s.Name == publisher) ?? _sourceStatuses[i];
+
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -54,12 +74,18 @@ public class RssNewsService : IRssNewsService
                 req.Headers.Add("User-Agent", "AlphaMeridianSystems/1.0 (AMS Capital Institutional Workstation)");
 
                 using var res = await _httpClient.SendAsync(req, cts.Token);
-                if (!res.IsSuccessStatusCode) continue;
+                if (!res.IsSuccessStatusCode)
+                {
+                    statusDto.Status = "ERROR";
+                    statusDto.ErrorMessage = $"HTTP {(int)res.StatusCode} {res.ReasonPhrase}";
+                    continue;
+                }
 
                 var content = await res.Content.ReadAsStringAsync(cts.Token);
                 var doc = XDocument.Parse(content);
 
                 var items = doc.Descendants("item");
+                int parsedFromFeed = 0;
                 foreach (var item in items)
                 {
                     var title = CleanHtml(item.Element("title")?.Value ?? "");
@@ -90,11 +116,19 @@ public class RssNewsService : IRssNewsService
                         AffectedAssets = defaultAssets,
                         IsStale = false
                     });
+                    parsedFromFeed++;
                 }
+
+                statusDto.Status = "ONLINE";
+                statusDto.ArticleCount = parsedFromFeed;
+                statusDto.LastFetchUtc = DateTime.UtcNow;
+                statusDto.ErrorMessage = null;
             }
-            catch
+            catch (Exception ex)
             {
                 // Graceful fallback per feed to prevent one slow external feed from breaking others
+                statusDto.Status = "ERROR";
+                statusDto.ErrorMessage = ex.Message;
             }
         }
 
@@ -153,9 +187,10 @@ public class RssNewsService : IRssNewsService
         string? searchQuery = null,
         DateTime? startDateUtc = null,
         DateTime? endDateUtc = null,
+        string? publisher = null,
         CancellationToken ct = default)
     {
-        return await _storageService.GetArticlesAsync(category, searchQuery, startDateUtc, endDateUtc, limit: 100);
+        return await _storageService.GetArticlesAsync(category, searchQuery, startDateUtc, endDateUtc, publisher, limit: 100);
     }
 
     public async Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default)
@@ -163,20 +198,125 @@ public class RssNewsService : IRssNewsService
         var article = await _storageService.GetArticleByIdAsync(articleId) ?? _cachedArticles.Find(a => a.Id == articleId);
         if (article == null) return null;
 
-        // Client-side structured synthesis preserving GROQ_NEWS_SUMMARY isolation
-        article.AiSummary = $"[INTELLIGENCE SYNTHESIS] {article.Title}. Key impact: Volatility in {article.AffectedAssets}. Bias: {article.SentimentBias}.";
-        article.SummaryGeneratedUtc = DateTime.UtcNow;
-
-        await _storageService.UpdateArticleSummaryAsync(articleId, article.AiSummary, article.SummaryGeneratedUtc.Value);
-
-        // Update in-memory cache as well
-        var idx = _cachedArticles.FindIndex(a => a.Id == articleId);
-        if (idx >= 0)
+        // Invariant: If article is already summarized and cached, return immediately without re-querying Groq
+        if (article.IsAiSummarized && !string.IsNullOrWhiteSpace(article.AiSummary))
         {
-            _cachedArticles[idx] = article;
+            return article;
+        }
+
+        var apiKey = GetGroqApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            article.AiSummary = "GROQ_NEWS_SUMMARY NOT CONFIGURED: Environment variable GROQ_NEWS_SUMMARY is missing. Set GROQ_NEWS_SUMMARY=<your_groq_api_key> in your environment or .env file to enable institutional AI news summaries.";
+            article.SummaryGeneratedUtc = DateTime.UtcNow;
+            return article;
+        }
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(12));
+
+            var prompt = $"Analyze this financial news article:\nHeadline: {article.Title}\nPublisher: {article.Publisher}\nExcerpt: {article.Excerpt}\n\nFormat your response with the following exact sections:\n1. CONCISE FACTUAL SUMMARY: [2-3 sentences]\n2. MARKET IMPLICATIONS (ANALYSIS): [Strategic analysis of volatility, liquidity, or rate impacts]\n3. AFFECTED ASSETS: [{article.AffectedAssets}]";
+
+            var reqBody = new
+            {
+                model = "openai/gpt-oss-120b",
+                messages = new[]
+                {
+                    new { role = "system", content = "You are an institutional financial analyst at AMS Capital. Analyze market news objectively." },
+                    new { role = "user", content = prompt }
+                },
+                max_tokens = 300,
+                temperature = 0.2
+            };
+
+            var json = JsonSerializer.Serialize(reqBody);
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+            req.Headers.Add("Authorization", $"Bearer {apiKey}");
+            req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AlphaMeridianSystems/1.0");
+
+            using var res = await _httpClient.SendAsync(req, cts.Token);
+            if (!res.IsSuccessStatusCode)
+            {
+                var errorDetail = await res.Content.ReadAsStringAsync(cts.Token);
+                article.AiSummary = $"GROQ AI SUMMARIZATION ERROR (HTTP {(int)res.StatusCode}): {res.ReasonPhrase}. Analysis unavailable.";
+                article.SummaryGeneratedUtc = DateTime.UtcNow;
+                return article;
+            }
+
+            var responseStream = await res.Content.ReadAsStreamAsync(cts.Token);
+            using var doc = await JsonDocument.ParseAsync(responseStream, cancellationToken: cts.Token);
+
+            var root = doc.RootElement;
+            if (root.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
+            {
+                var message = choices[0].GetProperty("message");
+                var summaryText = message.GetProperty("content").GetString()?.Trim() ?? string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(summaryText))
+                {
+                    article.AiSummary = summaryText;
+                    article.SummaryGeneratedUtc = DateTime.UtcNow;
+
+                    await _storageService.UpdateArticleSummaryAsync(articleId, article.AiSummary, article.SummaryGeneratedUtc.Value);
+
+                    var idx = _cachedArticles.FindIndex(a => a.Id == articleId);
+                    if (idx >= 0)
+                    {
+                        _cachedArticles[idx] = article;
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            article.AiSummary = "GROQ AI SUMMARIZATION TIMED OUT: Groq inference did not complete within 12 seconds.";
+            article.SummaryGeneratedUtc = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            article.AiSummary = $"GROQ AI SUMMARIZATION FAILED: {ex.Message}";
+            article.SummaryGeneratedUtc = DateTime.UtcNow;
         }
 
         return article;
+    }
+
+    private static string? GetGroqApiKey()
+    {
+        var key = Environment.GetEnvironmentVariable("GROQ_NEWS_SUMMARY");
+        if (!string.IsNullOrWhiteSpace(key)) return key.Trim();
+
+        try
+        {
+            var dir = Directory.GetCurrentDirectory();
+            for (int i = 0; i < 4; i++)
+            {
+                var envPath = Path.Combine(dir, ".env");
+                if (File.Exists(envPath))
+                {
+                    foreach (var line in File.ReadAllLines(envPath))
+                    {
+                        var trimmed = line.Trim();
+                        if (trimmed.StartsWith("GROQ_NEWS_SUMMARY=", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var val = trimmed.Substring("GROQ_NEWS_SUMMARY=".Length).Trim().Trim('"').Trim('\'');
+                            if (!string.IsNullOrWhiteSpace(val)) return val;
+                        }
+                    }
+                }
+                var parent = Directory.GetParent(dir);
+                if (parent == null) break;
+                dir = parent.FullName;
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     private static string CleanHtml(string input)

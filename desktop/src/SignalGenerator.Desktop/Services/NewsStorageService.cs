@@ -162,6 +162,7 @@ public class NewsStorageService : INewsStorageService
         string? searchQuery = null,
         DateTime? startDateUtc = null,
         DateTime? endDateUtc = null,
+        string? publisher = null,
         int limit = 100)
     {
         await InitializeAsync();
@@ -188,6 +189,12 @@ public class NewsStorageService : INewsStorageService
                 cmd.Parameters.AddWithValue("@category", category);
             }
 
+            if (!string.IsNullOrWhiteSpace(publisher) && !publisher.Equals("ALL", StringComparison.OrdinalIgnoreCase))
+            {
+                sb.Append(" AND UPPER(publisher) = @publisher");
+                cmd.Parameters.AddWithValue("@publisher", publisher.Trim().ToUpperInvariant());
+            }
+
             if (startDateUtc.HasValue)
             {
                 sb.Append(" AND publish_date_utc >= @startDate");
@@ -196,8 +203,11 @@ public class NewsStorageService : INewsStorageService
 
             if (endDateUtc.HasValue)
             {
+                var adjustedEnd = endDateUtc.Value.TimeOfDay == TimeSpan.Zero
+                    ? endDateUtc.Value.Date.AddDays(1).AddTicks(-1)
+                    : endDateUtc.Value;
                 sb.Append(" AND publish_date_utc <= @endDate");
-                cmd.Parameters.AddWithValue("@endDate", endDateUtc.Value.ToString("o", CultureInfo.InvariantCulture));
+                cmd.Parameters.AddWithValue("@endDate", adjustedEnd.ToString("o", CultureInfo.InvariantCulture));
             }
 
             if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -217,7 +227,7 @@ public class NewsStorageService : INewsStorageService
             {
                 var id = reader.GetString(0);
                 var url = reader.GetString(1);
-                var publisher = reader.GetString(2);
+                var pub = reader.GetString(2);
                 var title = reader.GetString(3);
                 var excerpt = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
                 var pubDateStr = reader.GetString(5);
@@ -241,7 +251,7 @@ public class NewsStorageService : INewsStorageService
                 {
                     Id = id,
                     Url = url,
-                    Publisher = publisher,
+                    Publisher = pub,
                     Title = title,
                     Excerpt = excerpt,
                     PublishDateUtc = pubDate,

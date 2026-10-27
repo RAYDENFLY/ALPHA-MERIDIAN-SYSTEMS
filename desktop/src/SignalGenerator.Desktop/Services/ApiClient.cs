@@ -220,6 +220,34 @@ public class ApiClient : IApiClient
         return await ExecuteGetAsync<List<KlineDto>>($"/api/chart/klines?symbol={Uri.EscapeDataString(symbol)}&timeframe={Uri.EscapeDataString(timeframe)}&limit={limit}", ct);
     }
 
+    public async Task<ApiResult<ScannerControlResponseDto>> StartScannerAsync(CancellationToken ct = default)
+    {
+        return await ExecuteMutationAsync<ScannerControlResponseDto>(HttpMethod.Post, "/api/scanner/start", null, ct);
+    }
+
+    public async Task<ApiResult<ScannerControlResponseDto>> StopScannerAsync(CancellationToken ct = default)
+    {
+        return await ExecuteMutationAsync<ScannerControlResponseDto>(HttpMethod.Post, "/api/scanner/stop", null, ct);
+    }
+
+    public async Task<ApiResult<LiveSessionEnvelopeDto>> ReauthorizeSessionAsync(string operatorId = "OPERATOR", CancellationToken ct = default)
+    {
+        var payload = new { operator_id = operatorId };
+        return await ExecuteMutationAsync<LiveSessionEnvelopeDto>(HttpMethod.Post, "/api/inspector/live-session/reauthorize", payload, ct);
+    }
+
+    public async Task<ApiResult<GroqAutoSetupResponseDto>> TriggerSingleScanAsync(CancellationToken ct = default)
+    {
+        var payload = new
+        {
+            risk_preset = "CONSERVATIVE_035",
+            execution_venue = "PAPER",
+            auto_fire_limit_order = false,
+            operator_confirmed = false
+        };
+        return await ExecuteMutationAsync<GroqAutoSetupResponseDto>(HttpMethod.Post, "/api/inspector/groq-auto-setup", payload, ct);
+    }
+
     private async Task<ApiResult<T>> ExecuteGetAsync<T>(string relativeUri, CancellationToken ct)
     {
         try
@@ -261,9 +289,15 @@ public class ApiClient : IApiClient
 
     private static void ValidateAuthorizedMutationRoute(string relativeUri)
     {
-        if (!relativeUri.StartsWith("/api/alerts", StringComparison.OrdinalIgnoreCase))
+        bool isAuthorized = relativeUri.StartsWith("/api/alerts", StringComparison.OrdinalIgnoreCase)
+            || relativeUri.Equals("/api/scanner/start", StringComparison.OrdinalIgnoreCase)
+            || relativeUri.Equals("/api/scanner/stop", StringComparison.OrdinalIgnoreCase)
+            || relativeUri.Equals("/api/inspector/live-session/reauthorize", StringComparison.OrdinalIgnoreCase)
+            || relativeUri.Equals("/api/inspector/groq-auto-setup", StringComparison.OrdinalIgnoreCase);
+
+        if (!isAuthorized)
         {
-            throw new InvalidOperationException($"Security Boundary Violation: Mutation to '{relativeUri}' is strictly prohibited. Only Price Alert endpoints (/api/alerts/*) are authorized for desktop client.");
+            throw new InvalidOperationException($"Security Boundary Violation: Mutation to '{relativeUri}' is strictly prohibited. Desktop client is restricted to Price Alerts and authorized Scanner Lifecycle controls.");
         }
     }
 

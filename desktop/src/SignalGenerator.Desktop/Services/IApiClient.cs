@@ -35,4 +35,8 @@ public interface IApiClient
     Task<ApiResult<ChartSymbolsResponseDto>> GetChartSymbolsAsync(CancellationToken ct = default);
     Task<ApiResult<LiquidityLayersResponseDto>> GetLiquidityLayersAsync(string symbol, string timeframe = "1h", CancellationToken ct = default);
     Task<ApiResult<List<KlineDto>>> GetKlinesAsync(string symbol, string timeframe = "1h", int limit = 100, CancellationToken ct = default);
+    Task<ApiResult<ScannerControlResponseDto>> StartScannerAsync(CancellationToken ct = default);
+    Task<ApiResult<ScannerControlResponseDto>> StopScannerAsync(CancellationToken ct = default);
+    Task<ApiResult<LiveSessionEnvelopeDto>> ReauthorizeSessionAsync(string operatorId = "OPERATOR", CancellationToken ct = default);
+    Task<ApiResult<GroqAutoSetupResponseDto>> TriggerSingleScanAsync(CancellationToken ct = default);
 }

@@ -83,6 +83,7 @@ public class OverviewViewModelTests
     private class MockRssNewsService : IRssNewsService
     {
         public INewsStorageService Storage { get; } = null!;
+        public IReadOnlyList<FeedSourceStatusDto> SourceStatuses { get; } = new List<FeedSourceStatusDto>();
 
         public Task<List<NewsArticleDto>> FetchLatestNewsAsync(CancellationToken ct = default) =>
             Task.FromResult(new List<NewsArticleDto>
@@ -91,7 +92,7 @@ public class OverviewViewModelTests
                 new() { Title = "Federal Reserve Holds Policy Steady Amid Economic Invariants", Publisher = "Federal Reserve", Url = "https://federalreserve.gov/test", PublishDateUtc = DateTime.UtcNow }
             });
 
-        public Task<List<NewsArticleDto>> FilterNewsAsync(string? category = null, string? searchQuery = null, DateTime? startDateUtc = null, DateTime? endDateUtc = null, CancellationToken ct = default) =>
+        public Task<List<NewsArticleDto>> FilterNewsAsync(string? category = null, string? searchQuery = null, DateTime? startDateUtc = null, DateTime? endDateUtc = null, string? publisher = null, CancellationToken ct = default) =>
             Task.FromResult(new List<NewsArticleDto>());
 
         public Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default) =>

@@ -31,6 +31,9 @@ public partial class CryptoNewsViewModel : ViewModelBase
     private string _filterCategory = "ALL";
 
     [ObservableProperty]
+    private string _filterPublisher = "ALL";
+
+    [ObservableProperty]
     private string _searchQuery = string.Empty;
 
     [ObservableProperty]
@@ -49,10 +52,25 @@ public partial class CryptoNewsViewModel : ViewModelBase
     private bool _isLoading;
 
     [ObservableProperty]
+    private bool _isSummarizing;
+
+    [ObservableProperty]
     private string _groqSummaryNotice = "GROQ_NEWS_SUMMARY: Isolated Server-Side Secret Architecture Configured";
 
     [ObservableProperty]
     private string _summaryStatusText = "Select an article to view excerpt or generate safe contextual summary.";
+
+    [ObservableProperty]
+    private string _aiSummaryContent = string.Empty;
+
+    [ObservableProperty]
+    private string _aiSummaryGeneratedTime = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasAiSummary;
+
+    [ObservableProperty]
+    private ObservableCollection<FeedSourceStatusDto> _feedSources = new();
 
     public CryptoNewsViewModel(IRssNewsService newsService, IPollingCoordinator? pollingCoordinator = null)
     {
@@ -75,11 +93,18 @@ public partial class CryptoNewsViewModel : ViewModelBase
         try
         {
             var articles = await _newsService.FetchLatestNewsAsync(_cts.Token);
+            FeedSources.Clear();
+            foreach (var s in _newsService.SourceStatuses)
+            {
+                FeedSources.Add(s);
+            }
+
             await ApplyFilterInternalAsync();
             LastWireTimeUtc = DateTime.UtcNow.ToString("HH:mm:ss") + " UTC";
             if (NewsArticles.Count > 0 && SelectedArticle == null)
             {
                 SelectedArticle = NewsArticles[0];
+                SelectArticle(NewsArticles[0]);
             }
         }
         catch (OperationCanceledException) { }
@@ -101,6 +126,13 @@ public partial class CryptoNewsViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task FilterByPublisherAsync(string publisher)
+    {
+        FilterPublisher = publisher;
+        await ApplyFilterInternalAsync();
+    }
+
+    [RelayCommand]
     public async Task ApplySearchAsync()
     {
         await ApplyFilterInternalAsync();
@@ -110,6 +142,7 @@ public partial class CryptoNewsViewModel : ViewModelBase
     public async Task ResetFilterAsync()
     {
         FilterCategory = "ALL";
+        FilterPublisher = "ALL";
         SearchQuery = string.Empty;
         StartDateText = string.Empty;
         EndDateText = string.Empty;
@@ -122,9 +155,22 @@ public partial class CryptoNewsViewModel : ViewModelBase
         SelectedArticle = article;
         if (article != null)
         {
-            SummaryStatusText = article.IsAiSummarized 
-                ? $"[AI SUMMARY - {article.SummaryGeneratedUtc:HH:mm:ss}] {article.AiSummary}" 
+            HasAiSummary = article.IsAiSummarized && !string.IsNullOrWhiteSpace(article.AiSummary);
+            AiSummaryContent = article.AiSummary ?? string.Empty;
+            AiSummaryGeneratedTime = article.SummaryGeneratedUtc.HasValue 
+                ? article.SummaryGeneratedUtc.Value.ToString("yyyy-MM-dd HH:mm:ss") + " UTC" 
+                : string.Empty;
+
+            SummaryStatusText = HasAiSummary 
+                ? $"[AI SUMMARY AVAILABLE] Generated at {AiSummaryGeneratedTime}" 
                 : $"[SOURCE EXCERPT] {article.Excerpt}";
+        }
+        else
+        {
+            HasAiSummary = false;
+            AiSummaryContent = string.Empty;
+            AiSummaryGeneratedTime = string.Empty;
+            SummaryStatusText = "No article selected.";
         }
     }
 
@@ -151,14 +197,26 @@ public partial class CryptoNewsViewModel : ViewModelBase
     [RelayCommand]
     public async Task GenerateSummaryAsync()
     {
-        if (SelectedArticle == null) return;
-        SummaryStatusText = "Synthesizing safe summary (preserving GROQ_NEWS_SUMMARY isolation)...";
+        if (SelectedArticle == null || IsSummarizing) return;
+        IsSummarizing = true;
+        SummaryStatusText = "Synthesizing AI summary with Groq (isolated server-side secret architecture)...";
 
-        var updated = await _newsService.SummarizeArticleAsync(SelectedArticle.Id);
-        if (updated != null)
+        try
         {
-            SelectedArticle = updated;
-            SummaryStatusText = $"[AI SUMMARY] {updated.AiSummary}";
+            var updated = await _newsService.SummarizeArticleAsync(SelectedArticle.Id);
+            if (updated != null)
+            {
+                SelectedArticle = updated;
+                SelectArticle(updated);
+            }
+        }
+        catch (Exception ex)
+        {
+            SummaryStatusText = $"Summarization failed: {ex.Message}";
+        }
+        finally
+        {
+            IsSummarizing = false;
         }
     }
 
@@ -180,7 +238,8 @@ public partial class CryptoNewsViewModel : ViewModelBase
             category: FilterCategory,
             searchQuery: SearchQuery,
             startDateUtc: startDate,
-            endDateUtc: endDate);
+            endDateUtc: endDate,
+            publisher: FilterPublisher);
 
         NewsArticles.Clear();
         foreach (var a in filtered)
@@ -201,6 +260,7 @@ public partial class CryptoNewsViewModel : ViewModelBase
         else
         {
             SelectedArticle = null;
+            SelectArticle(null!);
             SummaryStatusText = "NO ARTICLES FOUND MATCHING CURRENT FILTER CRITERIA.";
         }
     }
