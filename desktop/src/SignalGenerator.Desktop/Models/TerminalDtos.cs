@@ -143,6 +143,9 @@ public class Top10CandidateDto
     [JsonPropertyName("trend_1h")]
     public string? Trend1h { get; set; }
 
+    [JsonPropertyName("trend_4h")]
+    public string? Trend4h { get; set; }
+
     [JsonPropertyName("rsi_15m")]
     public decimal Rsi15m { get; set; }
 

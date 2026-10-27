@@ -27,7 +27,8 @@ public class ApiClient : IApiClient
         var options = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
-            NumberHandling = JsonNumberHandling.AllowReadingFromString
+            NumberHandling = JsonNumberHandling.AllowReadingFromString,
+            MaxDepth = 32
         };
         options.Converters.Add(new SafeDecimalConverter());
         options.Converters.Add(new SafeNullableDecimalConverter());
@@ -279,7 +280,8 @@ public class ApiClient : IApiClient
             }
 
             var contentStream = await response.Content.ReadAsStreamAsync(ct);
-            var parsed = await JsonSerializer.DeserializeAsync<T>(contentStream, JsonOptions, ct);
+            var sanitizedStream = await JsonRecursionSanitizer.SanitizeStreamAsync(contentStream, ct);
+            var parsed = await JsonSerializer.DeserializeAsync<T>(sanitizedStream, JsonOptions, ct);
 
             if (parsed == null)
             {
@@ -339,7 +341,8 @@ public class ApiClient : IApiClient
             }
 
             var contentStream = await response.Content.ReadAsStreamAsync(ct);
-            var parsed = await JsonSerializer.DeserializeAsync<T>(contentStream, JsonOptions, ct);
+            var sanitizedStream = await JsonRecursionSanitizer.SanitizeStreamAsync(contentStream, ct);
+            var parsed = await JsonSerializer.DeserializeAsync<T>(sanitizedStream, JsonOptions, ct);
             if (parsed == null)
             {
                 return ApiResult<T>.Failure("API returned an empty or unparseable JSON payload.", (int)response.StatusCode);

@@ -52,10 +52,25 @@ public partial class GroqHunterViewModel : ViewModelBase
     private string _latestTimestampUtc = "--:--:--";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FreshnessStatusColor))]
     private string _freshnessStatus = "LIVE";
+
+    public string FreshnessStatusColor => FreshnessStatus?.ToUpperInvariant() switch
+    {
+        "LIVE" => "#00E676",
+        "STALE" => "#FF9D00",
+        "ERROR" => "#FF5252",
+        _ => "#8B949E"
+    };
 
     [ObservableProperty]
     private string _dataProvenance = "LIVE /api/autotrader/screening-log";
+
+    [ObservableProperty]
+    private DateTime? _lastSuccessfulUpdateTimeUtc;
+
+    [ObservableProperty]
+    private string _lastSuccessfulUpdateTimeString = "--:--:--";
 
     [ObservableProperty]
     private int _selectedStageTab = 0; // 0: Top 10, 1: Top 3, 2: Final Setup, 3: Cycles History
@@ -367,18 +382,22 @@ public partial class GroqHunterViewModel : ViewModelBase
             var res = await _apiClient.GetScreeningLogAsync(_cts.Token);
             if (res.IsSuccess && res.Value != null)
             {
+                LastSuccessfulUpdateTimeUtc = DateTime.UtcNow;
+                LastSuccessfulUpdateTimeString = DateTime.UtcNow.ToString("HH:mm:ss") + " UTC";
                 FreshnessStatus = "LIVE";
-                DataProvenance = "LIVE /api/autotrader/screening-log";
 
-                if (res.Value.ActiveCycle != null)
+                if (res.Value.ActiveCycle != null && !string.IsNullOrWhiteSpace(res.Value.ActiveCycle.CycleId))
                 {
                     ActiveCycleId = res.Value.ActiveCycle.CycleId;
                 }
 
-                CycleHistory.Clear();
-                foreach (var cycle in res.Value.History)
+                if (res.Value.History.Count > 0)
                 {
-                    CycleHistory.Add(cycle);
+                    CycleHistory.Clear();
+                    foreach (var cycle in res.Value.History)
+                    {
+                        CycleHistory.Add(cycle);
+                    }
                 }
 
                 var primaryCycle = res.Value.History.Count > 0 ? res.Value.History[0] : res.Value.Latest;
@@ -396,12 +415,22 @@ public partial class GroqHunterViewModel : ViewModelBase
                         ?? "Cycle evaluated without candidate execution.";
 
                     LatestTimestampUtc = primaryCycle.DisplayTimestamp;
+
+                    DataProvenance = $"LIVE /api/autotrader/screening-log (Synced {LastSuccessfulUpdateTimeString})";
+                }
+                else
+                {
+                    // Valid empty screening state (scanner initialized but awaiting first candidate cycle)
+                    DataProvenance = $"LIVE /api/autotrader/screening-log (Awaiting initial cycle; synced {LastSuccessfulUpdateTimeString})";
                 }
             }
             else
             {
                 FreshnessStatus = "STALE";
-                DataProvenance = "STALE (Last poll failed: " + (res.ErrorMessage ?? "Unknown") + ")";
+                string lastSyncNote = LastSuccessfulUpdateTimeUtc.HasValue
+                    ? $"Last successful sync: {LastSuccessfulUpdateTimeString}"
+                    : "No prior sync";
+                DataProvenance = $"STALE ({lastSyncNote} | Reason: {res.ErrorMessage ?? "Unknown API failure"})";
             }
         }
         catch (OperationCanceledException)
@@ -411,7 +440,10 @@ public partial class GroqHunterViewModel : ViewModelBase
         catch (Exception ex)
         {
             FreshnessStatus = "STALE";
-            DataProvenance = $"ERROR: {ex.Message}";
+            string lastSyncNote = LastSuccessfulUpdateTimeUtc.HasValue
+                ? $"Last successful sync: {LastSuccessfulUpdateTimeString}"
+                : "No prior sync";
+            DataProvenance = $"STALE ({lastSyncNote} | Error: {ex.Message})";
         }
         finally
         {

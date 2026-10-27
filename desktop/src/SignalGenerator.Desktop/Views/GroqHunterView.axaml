@@ -25,7 +25,7 @@
                                            FontFamily="Consolas, monospace" 
                                            Foreground="#FF9D00" />
                                 <Border Background="#1C2128" BorderBrush="#242A34" BorderThickness="1" Padding="6,1" CornerRadius="2">
-                                    <TextBlock Text="{Binding FreshnessStatus}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                    <TextBlock Text="{Binding FreshnessStatus}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding FreshnessStatusColor}" />
                                 </Border>
                                 <TextBlock Text="{Binding DataProvenance}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
                             </StackPanel>
@@ -361,6 +361,7 @@
 
                     <ListBox ItemsSource="{Binding CycleHistory}"
                              SelectedItem="{Binding SelectedCycle}"
+                             AutoScrollToSelectedItem="False"
                              Background="Transparent"
                              BorderThickness="0"
                              MaxHeight="200">

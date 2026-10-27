@@ -2569,7 +2569,11 @@ class GroqAutoTrader:
             "daily_realized_loss_usd": coord.daily_realized_loss,
             "daily_loss_limit_usd": coord.config.risk.daily_loss_limit_usd,
             "kill_switch_active": coord.kill_switch_triggered,
-            "session_info": sess_mgr.get_session_info() if sess_mgr else {},
+            "session_info": (
+                sess_mgr.get_session_info_obj().to_dict()
+                if sess_mgr and hasattr(sess_mgr, "get_session_info_obj")
+                else (sess_mgr.get_session_info() if sess_mgr else {})
+            ),
         }
 
         pipeline_status = stage3.status
