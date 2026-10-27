@@ -17,6 +17,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
     private readonly IPaperTradingService _paperTradingService;
     private readonly ISettingsService? _settingsService;
     private CancellationTokenSource? _pollingCts;
+    private readonly Dictionary<string, (Dictionary<decimal, decimal> Bids, Dictionary<decimal, decimal> Asks)> _snapshots = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<MarketBookTileModel> MarketTiles { get; } = new();
 
@@ -209,7 +210,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                         ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - responseTimestamp.Value
                         : (long?)null;
                     tile.FeedAgeMs = feedAgeMs ?? 0;
-                    tile.ConnectionState = feedAgeMs.HasValue && feedAgeMs.Value > 30_000 ? "STALE" : "LIVE";
+                    tile.ConnectionState = feedAgeMs.HasValue && feedAgeMs.Value <= 30_000 ? "LIVE" : "STALE";
                     tile.LastUpdatedText = $"RESPONSE {DateTime.UtcNow:HH:mm:ss} UTC";
 
                     // Populate bids
@@ -217,7 +218,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                     decimal bidCum = 0m;
                     if (book.BidsTop5 != null && book.BidsTop5.Count > 0)
                     {
-                        foreach (var b in book.BidsTop5)
+                        foreach (var b in book.BidsTop5.OrderByDescending(x => x.Price))
                         {
                             decimal notional = b.Price * b.Size;
                             bidCum += notional;
@@ -227,7 +228,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                                 Size = b.Size,
                                 CumulativeNotional = bidCum,
                                 DepthPct = 50.0,
-                                IsWall = notional > 50000m
+                                IsChanged = HasChanged(tile.Symbol, true, b.Price, b.Size)
                             });
                         }
                     }
@@ -237,7 +238,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                     decimal askCum = 0m;
                     if (book.AsksTop5 != null && book.AsksTop5.Count > 0)
                     {
-                        foreach (var a in book.AsksTop5)
+                        foreach (var a in book.AsksTop5.OrderBy(x => x.Price))
                         {
                             decimal notional = a.Price * a.Size;
                             askCum += notional;
@@ -247,17 +248,21 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                                 Size = a.Size,
                                 CumulativeNotional = askCum,
                                 DepthPct = 50.0,
-                                IsWall = notional > 50000m
+                                IsChanged = HasChanged(tile.Symbol, false, a.Price, a.Size)
                             });
                         }
                     }
 
                     tile.BidDepthNotional = bidCum;
                     tile.AskDepthNotional = askCum;
-                    tile.MajorBidWallPrice = tile.Bids.FirstOrDefault(b => b.IsWall)?.Price ?? tile.BestBid;
-                    tile.MajorBidWallNotional = tile.Bids.FirstOrDefault(b => b.IsWall)?.Notional ?? 0m;
-                    tile.MajorAskWallPrice = tile.Asks.FirstOrDefault(a => a.IsWall)?.Price ?? tile.BestAsk;
-                    tile.MajorAskWallNotional = tile.Asks.FirstOrDefault(a => a.IsWall)?.Notional ?? 0m;
+                    tile.MajorBidWallPrice = 0;
+                    tile.MajorBidWallNotional = 0;
+                    tile.MajorAskWallPrice = 0;
+                    tile.MajorAskWallNotional = 0;
+
+                    _snapshots[tile.Symbol] = (
+                        tile.Bids.ToDictionary(x => x.Price, x => x.Size),
+                        tile.Asks.ToDictionary(x => x.Price, x => x.Size));
 
                     // Update simulator reference prices
                     _paperTradingService.UpdateMarketPrices(tile.Symbol, tile.LastPrice, tile.BestBid, tile.BestAsk);
@@ -265,13 +270,20 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
             }
             else
             {
-                tile.ConnectionState = "STALE";
+                tile.ConnectionState = "ERROR";
             }
         }
         catch
         {
             tile.ConnectionState = "ERROR";
         }
+    }
+
+    private bool HasChanged(string symbol, bool bid, decimal price, decimal size)
+    {
+        if (!_snapshots.TryGetValue(symbol, out var snapshot)) return false;
+        var side = bid ? snapshot.Bids : snapshot.Asks;
+        return !side.TryGetValue(price, out var previous) || previous != size;
     }
 
     [RelayCommand]
@@ -297,6 +309,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
             tuple.Item1.ConnectionState = "UNAVAILABLE";
             return;
         }
+        var previousSymbol = tuple.Item1.Symbol;
         tuple.Item1.Symbol = tuple.Item2;
         tuple.Item1.LastPrice = 0;
         tuple.Item1.BestBid = 0;
@@ -304,6 +317,8 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         tuple.Item1.Bids.Clear();
         tuple.Item1.Asks.Clear();
         tuple.Item1.ConnectionState = "LOADING";
+        _snapshots.Remove(previousSymbol);
+        _snapshots.Remove(tuple.Item1.Symbol);
         _ = UpdateTileAsync(tuple.Item1, CancellationToken.None);
         PersistLayout();
     }
@@ -338,6 +353,23 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         if (oldIndex >= 0 && oldIndex != newIndex) MarketTiles.Move(oldIndex, newIndex);
         PersistLayout();
     }
+
+    [RelayCommand]
+    public void MoveTileByOffset(Tuple<MarketBookTileModel, int> request)
+    {
+        if (request?.Item1 == null) return;
+        var index = MarketTiles.IndexOf(request.Item1);
+        if (index < 0) return;
+        var target = index + request.Item2;
+        if (target >= 0 && target < MarketTiles.Count) MarketTiles.Move(index, target);
+        PersistLayout();
+    }
+
+    [RelayCommand]
+    public void MoveTileUp(MarketBookTileModel tile) => MoveTileByOffset(new Tuple<MarketBookTileModel, int>(tile, -1));
+
+    [RelayCommand]
+    public void MoveTileDown(MarketBookTileModel tile) => MoveTileByOffset(new Tuple<MarketBookTileModel, int>(tile, 1));
 
     private void PersistLayout()
     {

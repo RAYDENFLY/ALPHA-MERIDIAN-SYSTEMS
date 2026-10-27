@@ -104,11 +104,11 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- Compact Order Book Ladder: Asks on top, Mid in center, Bids below -->
-                                <Grid Grid.Row="2" RowDefinitions="*,Auto,*" Margin="0,0,0,6">
+                                <!-- Two-sided order book: bids left, asks right. -->
+                                <Grid Grid.Row="2" ColumnDefinitions="*,Auto,*" Margin="0,0,0,6">
                                     
                                     <!-- Asks (Red) -->
-                                    <ItemsControl Grid.Row="0" ItemsSource="{Binding Asks}">
+                                    <ItemsControl Grid.Column="2" ItemsSource="{Binding Asks}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:OrderBookLevelItem">
                                                 <Grid ColumnDefinitions="*,*,*" Margin="0,1">
@@ -121,15 +121,15 @@
                                     </ItemsControl>
 
                                     <!-- Mid-Price Divider -->
-                                    <Border Grid.Row="1" Background="#161B22" BorderBrush="#242A34" BorderThickness="0,1,0,1" Padding="4,2" Margin="0,2">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Text="MID SPREAD" FontSize="8" Foreground="#8B949E" FontFamily="Consolas, monospace" />
-                                            <TextBlock Grid.Column="1" Text="{Binding LastPriceFormatted}" FontSize="10" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
-                                        </Grid>
+                                    <Border Grid.Column="1" Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="4,2" Margin="4,0">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="MID" FontSize="8" Foreground="#8B949E" FontFamily="Consolas, monospace" HorizontalAlignment="Center" />
+                                            <TextBlock Text="{Binding LastPriceFormatted}" FontSize="10" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                                        </StackPanel>
                                     </Border>
 
                                     <!-- Bids (Green) -->
-                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Bids}">
+                                    <ItemsControl Grid.Column="0" ItemsSource="{Binding Bids}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:OrderBookLevelItem">
                                                 <Grid ColumnDefinitions="*,*,*" Margin="0,1">
@@ -145,9 +145,11 @@
 
                                 <!-- Tile Footer: Trade Button + Timestamp -->
                                 <Border Grid.Row="3" BorderBrush="#1C2128" BorderThickness="0,1,0,0" Padding="0,4,0,0">
-                                    <Grid ColumnDefinitions="*,Auto">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                         <TextBlock Grid.Column="0" Text="{Binding LastUpdatedText}" FontSize="8" Foreground="#8B949E" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
-                                        <Button Grid.Column="1" 
+                                        <Button Grid.Column="1" Content="▲" Command="{Binding $parent[UserControl].((vm:MultiMarketOrderBookViewModel)DataContext).MoveTileUpCommand}" CommandParameter="{Binding}" ToolTip.Tip="Move tile up" />
+                                        <Button Grid.Column="2" Content="▼" Command="{Binding $parent[UserControl].((vm:MultiMarketOrderBookViewModel)DataContext).MoveTileDownCommand}" CommandParameter="{Binding}" ToolTip.Tip="Move tile down" />
+                                        <Button Grid.Column="3" 
                                                 Command="{Binding $parent[UserControl].((vm:MultiMarketOrderBookViewModel)DataContext).OpenInTradingWorkstationCommand}"
                                                 CommandParameter="{Binding Symbol}"
                                                 Background="#161B22" BorderBrush="#FF9D00" BorderThickness="1" CornerRadius="0" Padding="6,2">

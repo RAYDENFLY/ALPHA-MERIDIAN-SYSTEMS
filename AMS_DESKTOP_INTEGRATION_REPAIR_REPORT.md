@@ -48,9 +48,20 @@ The initial failure was caused by the sandbox identity having only inherited `Re
 
 ## Remaining limitations
 
-- The Avalonia template now exposes add-symbol and remove-tile controls; reorder remains available through the VM command and needs a dedicated drag/drop affordance.
+- Phase 3 exposes visible move-up/move-down controls as the accessible reorder path and preserves tile instances/data while moving them. Native pointer drag/drop is not yet implemented.
 - Spot/perpetual and venue metadata require a richer backend catalog contract before they can be shown without inference.
-- Deterministic level-change animation tracking and dedicated delayed/malformed-response tests remain outstanding.
+- Dedicated delayed/malformed-response tests and a timed fade-out animation are still outstanding; the current change marker is deterministic and only set for changed verified levels.
+
+## Phase 3 validation
+
+- Production chart and trading/session paths were unchanged.
+- Build: **passed**, 0 warnings, 0 errors.
+- Selected regression tests: **12 passed**, 0 failed.
+- Bids are sorted descending by price and asks ascending by price from verified backend levels.
+- The tile now renders bids on the left, asks on the right, with a centered mid-price column.
+- Missing feed timestamps now produce `STALE`, not `LIVE`; invalid or empty responses produce `ERROR`.
+- Per-symbol snapshots mark only changed price/quantity levels; identical levels are not marked, and snapshots are cleared on symbol replacement.
+- No order/session mutation endpoints were invoked.
 
 ## Rollback
 

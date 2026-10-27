@@ -166,6 +166,8 @@ public class OrderBookLevelItem
     public decimal CumulativeNotional { get; set; }
     public double DepthPct { get; set; }
     public bool IsWall { get; set; }
+    public bool IsChanged { get; set; }
+    public string ChangeBrush => IsChanged ? "#304A24" : "Transparent";
 
     public string PriceFormatted => Price > 100 ? Price.ToString("N2") : Price > 1 ? Price.ToString("N4") : Price.ToString("N6");
     public string SizeFormatted => Size.ToString("N3");
