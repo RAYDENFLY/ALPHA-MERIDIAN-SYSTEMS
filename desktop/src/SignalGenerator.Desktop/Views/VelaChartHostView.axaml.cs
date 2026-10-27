@@ -33,7 +33,7 @@ public partial class VelaChartHostView : UserControl
 
         try
         {
-            Browser.Navigate(new Uri(page));
+            Browser.Navigate(new Uri(page + "?host=production"));
         }
         catch (Exception ex)
         {

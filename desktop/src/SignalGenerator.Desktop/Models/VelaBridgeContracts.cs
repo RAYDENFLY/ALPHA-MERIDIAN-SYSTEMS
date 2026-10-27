@@ -11,10 +11,17 @@ public sealed record VelaBridgeMessage(
     string Timeframe,
     long Sequence,
     IReadOnlyList<VelaCandleMessage> Candles,
+    IReadOnlyList<VelaLevelMessage> StructuralLevels,
+    IReadOnlyList<VelaSweepMessage> SweepEvents,
+    VelaDepthMessage? Depth,
     string State,
     string? Error = null);
 
 public sealed record VelaCandleMessage(long Time, decimal Open, decimal High, decimal Low, decimal Close, decimal Volume);
+public sealed record VelaLevelMessage(string? Id, string? Type, decimal Price, decimal? ZoneTop, decimal? ZoneBottom, long? TimestampMs);
+public sealed record VelaSweepMessage(string? Id, string? Side, decimal Price, decimal? ReclaimPrice, long TimestampMs);
+public sealed record VelaDepthMessage(string Status, decimal? MidPrice, decimal? SpreadBps, long? TimestampMs, IReadOnlyList<VelaWallMessage> Walls);
+public sealed record VelaWallMessage(string Side, decimal Price, decimal Notional, decimal? Quantity, string? Venue);
 
 public static class VelaBridgeValidator
 {

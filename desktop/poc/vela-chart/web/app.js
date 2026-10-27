@@ -13,7 +13,7 @@
     let autoRefresh = true;
     let pollInterval = null;
     let currentBars = [];
-    let productionBridge = false;
+    let productionBridge = new URLSearchParams(window.location.search).get('host') === 'production';
     let latestBridgeSequence = -1;
 
     // Production host contract: C# owns GET polling and injects versioned snapshots.

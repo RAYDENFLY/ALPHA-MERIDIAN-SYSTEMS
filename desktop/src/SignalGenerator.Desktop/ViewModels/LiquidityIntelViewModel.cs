@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,6 +16,9 @@ public partial class LiquidityIntelViewModel : ViewModelBase
     private readonly IApiClient _apiClient;
     private readonly ISettingsService? _settingsService;
     private CancellationTokenSource? _cts;
+    private long _velaSequence;
+
+    public event Action<VelaBridgeMessage>? VelaSnapshotReady;
 
     [ObservableProperty]
     private string _symbol = "BTCUSDT";
@@ -226,10 +230,15 @@ public partial class LiquidityIntelViewModel : ViewModelBase
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
+        var requestSequence = ++_velaSequence;
+        var requestSymbol = Symbol;
+        var requestTimeframe = Timeframe;
 
         try
         {
             var res = await _apiClient.GetLiquidityLayersAsync(Symbol, Timeframe, _cts.Token);
+            if (requestSequence != _velaSequence || requestSymbol != Symbol || requestTimeframe != Timeframe)
+                return;
             if (res.IsSuccess && res.Value != null)
             {
                 Status = res.Value.FeedStatus?.Status ?? "AVAILABLE";
@@ -318,12 +327,15 @@ public partial class LiquidityIntelViewModel : ViewModelBase
                         AsksBuckets.Add(a);
                     }
                 }
+
+                EmitVelaSnapshot(res.Value, requestSequence);
             }
             else
             {
                 Status = "UNAVAILABLE";
                 StatusColor = "#8B949E";
                 FeedProvenance = "UNAVAILABLE: " + (res.ErrorMessage ?? "Unknown");
+                EmitVelaState(requestSymbol, requestTimeframe, requestSequence, "UNAVAILABLE", res.ErrorMessage);
             }
         }
         catch (OperationCanceledException) { }
@@ -332,10 +344,36 @@ public partial class LiquidityIntelViewModel : ViewModelBase
             Status = "ERROR";
             StatusColor = "#FF5252";
             FeedProvenance = $"ERROR: {ex.Message}";
+            EmitVelaState(requestSymbol, requestTimeframe, requestSequence, "ERROR", ex.Message);
         }
         finally
         {
             IsLoading = false;
         }
     }
+
+    private void EmitVelaSnapshot(LiquidityLayersResponseDto response, long sequence)
+    {
+        var candles = response.Candles
+            .Where(c => c.TimestampMs > 0 && c.High >= Math.Max(c.Open, c.Close) && c.Low <= Math.Min(c.Open, c.Close) && c.Volume >= 0)
+            .OrderBy(c => c.TimestampMs)
+            .Select(c => new VelaCandleMessage(c.TimestampMs, c.Open, c.High, c.Low, c.Close, c.Volume))
+            .ToList();
+        var state = response.FeedStatus?.IsStale == true ? "STALE" : candles.Count == 0 ? "EMPTY" : "LIVE";
+        var depth = response.OrderBookOverlay == null ? null : new VelaDepthMessage(
+            response.OrderBookOverlay.Status,
+            response.OrderBookOverlay.MidPrice,
+            response.OrderBookOverlay.SpreadBps,
+            response.OrderBookOverlay.TimestampMs,
+            response.OrderBookOverlay.Walls.Select(w => new VelaWallMessage(w.Side, w.Price, w.NotionalUsdt, w.Quantity, w.Venue)).ToList());
+        VelaSnapshotReady?.Invoke(new VelaBridgeMessage(1, "vela.snapshot", response.Symbol, response.Timeframe, sequence,
+            candles,
+            response.StructuralLevels.Select(l => new VelaLevelMessage(l.LevelId, l.LevelType, l.Price, l.ZoneTop, l.ZoneBottom, l.ConfirmedTimestampMs)).ToList(),
+            response.SweepEvents.Select(s => new VelaSweepMessage(s.EventId, s.Side, s.SweepPrice, s.ReclaimPrice, s.TimestampMs)).ToList(),
+            depth, state));
+    }
+
+    private void EmitVelaState(string symbol, string timeframe, long sequence, string state, string? error) =>
+        VelaSnapshotReady?.Invoke(new VelaBridgeMessage(1, "vela.snapshot", symbol, timeframe, sequence,
+            Array.Empty<VelaCandleMessage>(), Array.Empty<VelaLevelMessage>(), Array.Empty<VelaSweepMessage>(), null, state, error));
 }
