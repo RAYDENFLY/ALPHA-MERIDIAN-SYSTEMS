@@ -25,4 +25,10 @@ public class DesktopSettings
 
     [JsonPropertyName("multi_market_symbols")]
     public List<string> MultiMarketSymbols { get; set; } = new();
+
+    [JsonPropertyName("multi_market_depth")]
+    public int MultiMarketDepth { get; set; } = 5;
+
+    [JsonPropertyName("use_vela_chart")]
+    public bool UseVelaChart { get; set; } = false;
 }

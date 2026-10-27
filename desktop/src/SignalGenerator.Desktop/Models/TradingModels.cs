@@ -178,6 +178,8 @@ public class OrderBookLevelItem
 public class MarketBookTileModel
 {
     public string Symbol { get; set; } = "BTCUSDT";
+    public string SelectedSymbol { get; set; } = "BTCUSDT";
+    public string DepthSummary => $"BIDS {Bids.Count} / ASKS {Asks.Count}";
     public string MarketType { get; set; } = "PERP";
     public decimal LastPrice { get; set; }
     public decimal PriceChange24hPct { get; set; }

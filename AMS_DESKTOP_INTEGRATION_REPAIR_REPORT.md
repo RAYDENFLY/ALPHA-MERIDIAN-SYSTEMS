@@ -63,6 +63,16 @@ The initial failure was caused by the sandbox identity having only inherited `Re
 - Per-symbol snapshots mark only changed price/quantity levels; identical levels are not marked, and snapshots are cleared on symbol replacement.
 - No order/session mutation endpoints were invoked.
 
+## Phase 4 pair selector, add action, and depth validation
+
+- The tile pair control is now a keyboard-focusable editable ComboBox populated from the verified chart symbol directory. Selection invokes the existing replacement path for only that tile and clears its prior snapshot before loading.
+- The Add button was correctly bound to `AddTileCommand`; the verified failure mode was silent rejection when no symbol was selected, the directory had not loaded, the eight-slot `UniformGrid` was full, or the symbol was duplicated. The command now reports each reason, guards duplicate execution, adds immediately in `LOADING`, and preserves the existing eight-tile 4x2 capacity.
+- A read-only backend inspection of `/api/model_b/orderbook/BTCUSDT` showed only `bids_top5` and `asks_top5` for AsterDEX and Hyperliquid. No deeper list or supported depth parameter was present in the response or existing client method. The depth selector is persisted with options 5/10/20/50, but rendering is capped by actual returned data; selecting a larger value does not fabricate levels.
+- Bid and ask ordering remains descending and ascending respectively, and the visible counts reflect actual returned levels.
+- Build with the running desktop executable holding the output DLL: **completed with 0 errors and 6 file-lock warnings** using `UseAppHost=false`; the executable was not stopped. Selected regression tests: **12 passed**, 0 failed.
+
+Remaining limitations for this phase: editable symbol search is provided by the native ComboBox but does not yet have a separate filtered-results query box; the backend must expose a deeper order-book contract before 10/20/50 can render more than five levels.
+
 ## Rollback
 
 Revert only the tracked change to `MultiMarketOrderBookViewModel.cs`; do not reset or clean the worktree. The Vela PoC remains isolated and production chart files are unchanged.

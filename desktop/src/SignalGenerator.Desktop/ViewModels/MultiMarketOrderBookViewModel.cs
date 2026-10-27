@@ -22,6 +22,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
     public ObservableCollection<MarketBookTileModel> MarketTiles { get; } = new();
 
     public ObservableCollection<string> AvailableSymbols { get; } = new();
+    public IReadOnlyList<int> DepthOptions { get; } = new[] { 5, 10, 20, 50 };
 
     [ObservableProperty]
     private bool _isRefreshing;
@@ -35,6 +36,15 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
     [ObservableProperty]
     private string? _selectedSymbolToAdd;
 
+    [ObservableProperty]
+    private int _selectedDepth;
+
+    [ObservableProperty]
+    private string _addTileMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _isAddingTile;
+
     // Callbacks to MainViewModel for inter-view coordination
     public Action<string>? OnNavigateToTradingWorkstation { get; set; }
     public Action<decimal>? OnPrefillLimitPrice { get; set; }
@@ -44,6 +54,8 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _paperTradingService = paperTradingService ?? throw new ArgumentNullException(nameof(paperTradingService));
         _settingsService = settingsService;
+        var configuredDepth = _settingsService?.CurrentSettings.MultiMarketDepth ?? 5;
+        SelectedDepth = DepthOptions.Contains(configuredDepth) ? configuredDepth : 5;
 
         InitializeTiles();
     }
@@ -218,7 +230,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                     decimal bidCum = 0m;
                     if (book.BidsTop5 != null && book.BidsTop5.Count > 0)
                     {
-                        foreach (var b in book.BidsTop5.OrderByDescending(x => x.Price))
+                        foreach (var b in book.BidsTop5.OrderByDescending(x => x.Price).Take(SelectedDepth))
                         {
                             decimal notional = b.Price * b.Size;
                             bidCum += notional;
@@ -238,7 +250,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                     decimal askCum = 0m;
                     if (book.AsksTop5 != null && book.AsksTop5.Count > 0)
                     {
-                        foreach (var a in book.AsksTop5.OrderBy(x => x.Price))
+                        foreach (var a in book.AsksTop5.OrderBy(x => x.Price).Take(SelectedDepth))
                         {
                             decimal notional = a.Price * a.Size;
                             askCum += notional;
@@ -311,6 +323,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         }
         var previousSymbol = tuple.Item1.Symbol;
         tuple.Item1.Symbol = tuple.Item2;
+        tuple.Item1.SelectedSymbol = tuple.Item2;
         tuple.Item1.LastPrice = 0;
         tuple.Item1.BestBid = 0;
         tuple.Item1.BestAsk = 0;
@@ -334,14 +347,34 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
     [RelayCommand]
     public void AddTile(string symbol)
     {
-        if (string.IsNullOrWhiteSpace(symbol) || MarketTiles.Count >= 8 ||
-            !AvailableSymbols.Contains(symbol, StringComparer.OrdinalIgnoreCase) ||
-            MarketTiles.Any(t => t.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase))) return;
+        if (IsAddingTile) return;
+        AddTileMessage = string.Empty;
+        if (string.IsNullOrWhiteSpace(symbol)) { AddTileMessage = "Select a supported symbol first."; return; }
+        if (MarketTiles.Count >= 8) { AddTileMessage = "Maximum 8 tiles reached. Replace a pair or remove a tile to add another."; return; }
+        if (!AvailableSymbols.Contains(symbol, StringComparer.OrdinalIgnoreCase)) { AddTileMessage = $"Unsupported symbol: {symbol}"; return; }
+        if (MarketTiles.Any(t => t.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase))) { AddTileMessage = $"{symbol} is already displayed."; return; }
 
-        var tile = new MarketBookTileModel { Symbol = symbol.Trim().ToUpperInvariant(), MarketType = "PERP", ConnectionState = "LOADING" };
-        MarketTiles.Add(tile);
-        _ = UpdateTileAsync(tile, CancellationToken.None);
-        PersistLayout();
+        IsAddingTile = true;
+        try
+        {
+            var normalized = symbol.Trim().ToUpperInvariant();
+            var tile = new MarketBookTileModel { Symbol = normalized, SelectedSymbol = normalized, MarketType = "PERP", ConnectionState = "LOADING" };
+            MarketTiles.Add(tile);
+            _ = UpdateTileAsync(tile, CancellationToken.None);
+            PersistLayout();
+        }
+        finally { IsAddingTile = false; }
+    }
+
+    partial void OnSelectedDepthChanged(int value)
+    {
+        if (!DepthOptions.Contains(value)) return;
+        if (_settingsService != null)
+        {
+            _settingsService.CurrentSettings.MultiMarketDepth = value;
+            _settingsService.SaveSettings(_settingsService.CurrentSettings);
+        }
+        _ = RefreshAllTilesAsync();
     }
 
     [RelayCommand]

@@ -5,6 +5,7 @@
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
              xmlns:models="using:SignalGenerator.Desktop.Models"
              xmlns:controls="using:SignalGenerator.Desktop.Controls"
+             xmlns:views="using:SignalGenerator.Desktop.Views"
              mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="1100"
              x:Class="SignalGenerator.Desktop.Views.LiquidityIntelView"
              x:DataType="vm:LiquidityIntelViewModel"
@@ -106,6 +107,7 @@
 
             <!-- MAIN TRADINGVIEW-STYLE CANDLESTICK & INDICATOR CHART -->
             <Border Background="#080A0D" BorderBrush="#242A34" BorderThickness="1" Padding="4">
+                <Grid>
                 <controls:CandlestickChartControl x:Name="MainCandlestickChart"
                                                   Height="430"
                                                   Candles="{Binding Candles}"
@@ -121,6 +123,8 @@
                                                   ShowStochastic="{Binding ShowStochastic}"
                                                   ShowBidWalls="{Binding ShowBidWalls}"
                                                   ShowAskWalls="{Binding ShowAskWalls}" />
+                <views:VelaChartHostView x:Name="VelaChartHost" IsVisible="{Binding UseVelaChart}" Height="430" />
+                </Grid>
             </Border>
 
             <!-- CUMULATIVE MARKET DEPTH CHART (SEPARATE PANE) -->

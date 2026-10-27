@@ -30,6 +30,8 @@
                     <Button Command="{Binding AddTileCommand}" CommandParameter="{Binding SelectedSymbolToAdd}" Classes="terminal-btn" Padding="8,4">
                         <TextBlock Text="+ ADD" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
                     </Button>
+                    <ComboBox ItemsSource="{Binding DepthOptions}" SelectedItem="{Binding SelectedDepth}" Width="70" ToolTip.Tip="Requested depth; backend currently returns five levels" />
+                    <TextBlock Text="{Binding AddTileMessage}" Foreground="#FF9D00" FontSize="9" VerticalAlignment="Center" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
@@ -65,7 +67,10 @@
                                 <Border Grid.Row="0" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,6" Margin="0,0,0,6">
                                     <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                                            <TextBlock Text="{Binding Symbol}" FontSize="12" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                            <ComboBox ItemsSource="{Binding $parent[UserControl].((vm:MultiMarketOrderBookViewModel)DataContext).AvailableSymbols}"
+                                                      SelectedItem="{Binding SelectedSymbol, Mode=TwoWay}"
+                                                      SelectionChanged="OnTileSymbolSelectionChanged"
+                                                      IsEditable="True" Width="112" FontSize="11" ToolTip.Tip="Search and select a supported symbol" />
                                             <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="4,1" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding MarketType}" FontSize="8" FontWeight="Bold" Foreground="#8B949E" FontFamily="Consolas, monospace" />
                                             </Border>

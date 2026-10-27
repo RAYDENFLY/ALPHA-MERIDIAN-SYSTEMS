@@ -13,6 +13,7 @@ namespace SignalGenerator.Desktop.ViewModels;
 public partial class LiquidityIntelViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
+    private readonly ISettingsService? _settingsService;
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -118,9 +119,14 @@ public partial class LiquidityIntelViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isLoading;
 
-    public LiquidityIntelViewModel(IApiClient apiClient)
+    [ObservableProperty]
+    private bool _useVelaChart;
+
+    public LiquidityIntelViewModel(IApiClient apiClient, ISettingsService? settingsService = null)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+        _settingsService = settingsService;
+        UseVelaChart = _settingsService?.CurrentSettings.UseVelaChart ?? false;
         _ = InitializeWorkstationAsync();
     }
 

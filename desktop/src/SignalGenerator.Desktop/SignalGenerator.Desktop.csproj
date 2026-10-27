@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
@@ -33,5 +34,13 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
     <PackageReference Include="ScottPlot.Avalonia" Version="5.1.59" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\poc\vela-chart\web\index.html" Link="VelaChart\index.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\poc\vela-chart\web\adapter.js" Link="VelaChart\adapter.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\poc\vela-chart\web\app.js" Link="VelaChart\app.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\poc\vela-chart\web\style.css" Link="VelaChart\style.css" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\poc\vela-chart\web\lib\vela.global.js" Link="VelaChart\lib\vela.global.js" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:web="clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls.WebView"
+             x:Class="SignalGenerator.Desktop.Views.VelaChartHostView"
+             Background="#050505">
+  <Grid>
+    <web:NativeWebView x:Name="Browser" />
+    <Border x:Name="ErrorPanel" Background="#11161C" Padding="18" IsVisible="False">
+      <TextBlock x:Name="ErrorText" Foreground="#FF5252" TextWrapping="Wrap" />
+    </Border>
+  </Grid>
+</UserControl>
