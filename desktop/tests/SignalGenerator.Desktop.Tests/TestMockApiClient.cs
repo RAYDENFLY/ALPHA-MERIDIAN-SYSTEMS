@@ -139,4 +139,40 @@ public class TestMockApiClient : IApiClient
             Status = "SUCCESS",
             TimestampUtc = DateTime.UtcNow.ToString("o")
         }));
+
+    public virtual Task<ApiResult<CrossBookResponseDto>> GetCrossBookAsync(string symbol, CancellationToken ct = default) =>
+        Task.FromResult(ApiResult<CrossBookResponseDto>.Success(new CrossBookResponseDto
+        {
+            Symbol = symbol,
+            Status = "AVAILABLE"
+        }));
+
+    public virtual Task<ApiResult<ModelBOrderBookResponseDto>> GetModelBOrderBookAsync(string symbol, CancellationToken ct = default) =>
+        Task.FromResult(ApiResult<ModelBOrderBookResponseDto>.Success(new ModelBOrderBookResponseDto
+        {
+            Symbol = symbol,
+            Books = new Dictionary<string, ModelBExchangeBookDto>
+            {
+                ["asterdex"] = new()
+                {
+                    Symbol = symbol,
+                    Exchange = "asterdex",
+                    BestBid = 80000m,
+                    BestAsk = 80001m,
+                    MidPrice = 80000.5m,
+                    SpreadBps = 0.01m,
+                    BidsTop5 = new() { new() { Price = 80000m, Size = 1.5m } },
+                    AsksTop5 = new() { new() { Price = 80001m, Size = 1.2m } }
+                }
+            }
+        }));
+
+    public virtual Task<ApiResult<AccountSnapshotDto>> GetAccountSnapshotAsync(CancellationToken ct = default) =>
+        Task.FromResult(ApiResult<AccountSnapshotDto>.Success(new AccountSnapshotDto
+        {
+            Status = "CONNECTED",
+            IsConnected = true,
+            TotalEquityUsdt = 14.34m,
+            AvailableBalanceUsdt = 12.29m
+        }));
 }

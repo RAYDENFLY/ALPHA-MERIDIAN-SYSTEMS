@@ -72,11 +72,14 @@ public partial class App : Application
         services.AddSingleton<INewsStorageService, NewsStorageService>();
         services.AddSingleton<IRssNewsService, RssNewsService>();
         services.AddSingleton<IFxRateService, FxRateService>();
+        services.AddSingleton<IPaperTradingService, PaperTradingService>();
 
         // ViewModels
         services.AddSingleton<OverviewViewModel>();
         services.AddSingleton<MarketMonitorViewModel>();
         services.AddSingleton<ScreenerViewModel>();
+        services.AddSingleton<MultiMarketOrderBookViewModel>();
+        services.AddSingleton<TradingWorkstationViewModel>();
         services.AddSingleton<LiquidityIntelViewModel>();
         services.AddSingleton<GroqHunterViewModel>();
         services.AddSingleton<JournalViewModel>();

@@ -35,30 +35,38 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
             case Key.F3:
-                vm.Navigate("Alerts");
+                vm.Navigate("MultiMarketOrderBook");
                 e.Handled = true;
                 break;
             case Key.F4:
-                vm.Navigate("LiquidityIntel");
+                vm.Navigate("TradingWorkstation");
                 e.Handled = true;
                 break;
             case Key.F5:
-                vm.Navigate("GroqHunter");
+                vm.Navigate("Alerts");
                 e.Handled = true;
                 break;
             case Key.F6:
-                vm.Navigate("Journal");
+                vm.Navigate("LiquidityIntel");
                 e.Handled = true;
                 break;
             case Key.F7:
-                vm.Navigate("MarketParticipants");
+                vm.Navigate("GroqHunter");
                 e.Handled = true;
                 break;
             case Key.F8:
-                vm.Navigate("CryptoNews");
+                vm.Navigate("Journal");
                 e.Handled = true;
                 break;
             case Key.F9:
+                vm.Navigate("MarketParticipants");
+                e.Handled = true;
+                break;
+            case Key.F10:
+                vm.Navigate("CryptoNews");
+                e.Handled = true;
+                break;
+            case Key.F11:
                 vm.Navigate("Settings");
                 e.Handled = true;
                 break;

@@ -248,6 +248,21 @@ public class ApiClient : IApiClient
         return await ExecuteMutationAsync<GroqAutoSetupResponseDto>(HttpMethod.Post, "/api/inspector/groq-auto-setup", payload, ct);
     }
 
+    public async Task<ApiResult<CrossBookResponseDto>> GetCrossBookAsync(string symbol, CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<CrossBookResponseDto>($"/api/chart/cross_book?symbol={Uri.EscapeDataString(symbol)}", ct);
+    }
+
+    public async Task<ApiResult<ModelBOrderBookResponseDto>> GetModelBOrderBookAsync(string symbol, CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<ModelBOrderBookResponseDto>($"/api/model_b/orderbook/{Uri.EscapeDataString(symbol)}", ct);
+    }
+
+    public async Task<ApiResult<AccountSnapshotDto>> GetAccountSnapshotAsync(CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<AccountSnapshotDto>("/api/account", ct);
+    }
+
     private async Task<ApiResult<T>> ExecuteGetAsync<T>(string relativeUri, CancellationToken ct)
     {
         try

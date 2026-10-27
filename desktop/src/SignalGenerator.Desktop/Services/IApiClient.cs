@@ -39,4 +39,7 @@ public interface IApiClient
     Task<ApiResult<ScannerControlResponseDto>> StopScannerAsync(CancellationToken ct = default);
     Task<ApiResult<LiveSessionEnvelopeDto>> ReauthorizeSessionAsync(string operatorId = "OPERATOR", CancellationToken ct = default);
     Task<ApiResult<GroqAutoSetupResponseDto>> TriggerSingleScanAsync(CancellationToken ct = default);
+    Task<ApiResult<CrossBookResponseDto>> GetCrossBookAsync(string symbol, CancellationToken ct = default);
+    Task<ApiResult<ModelBOrderBookResponseDto>> GetModelBOrderBookAsync(string symbol, CancellationToken ct = default);
+    Task<ApiResult<AccountSnapshotDto>> GetAccountSnapshotAsync(CancellationToken ct = default);
 }

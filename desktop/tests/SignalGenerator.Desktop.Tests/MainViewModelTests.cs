@@ -89,10 +89,13 @@ public class MainViewModelTests
         var personalJournal = new MockPersonalJournalService();
         var newsService = new MockRssNewsService();
         var fxService = new MockFxRateService();
+        var paperService = new PaperTradingService();
 
         var overviewVm = new OverviewViewModel(coord, client, fxService, newsService);
         var monitorVm = new MarketMonitorViewModel(client, coord);
         var screenerVm = new ScreenerViewModel(client);
+        var multiBookVm = new MultiMarketOrderBookViewModel(client, paperService);
+        var workstationVm = new TradingWorkstationViewModel(client, paperService);
         var liquidityVm = new LiquidityIntelViewModel(client);
         var hunterVm = new GroqHunterViewModel(client);
         var journalVm = new JournalViewModel(coord, client, personalJournal);
@@ -104,6 +107,7 @@ public class MainViewModelTests
         var mainVm = new MainViewModel(
             coord, settings,
             overviewVm, monitorVm, screenerVm,
+            multiBookVm, workstationVm,
             liquidityVm, hunterVm, journalVm,
             alertsVm, participantsVm, newsVm,
             settingsVm

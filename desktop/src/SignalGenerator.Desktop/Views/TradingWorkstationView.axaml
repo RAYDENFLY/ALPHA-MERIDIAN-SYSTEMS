@@ -1,0 +1,403 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             xmlns:models="using:SignalGenerator.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1400" d:DesignHeight="850"
+             x:Class="SignalGenerator.Desktop.Views.TradingWorkstationView"
+             x:DataType="vm:TradingWorkstationViewModel"
+             Background="#000000">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- 1. Top Market & Account Status Strip -->
+        <Border Grid.Row="0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="12,8">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                
+                <!-- Venue & Market Type Selectors -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="VENUE:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding Venues}" SelectedItem="{Binding SelectedVenue}" 
+                              Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontSize="11" Width="100" />
+
+                    <TextBlock Text="TYPE:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    <ComboBox ItemsSource="{Binding MarketTypes}" SelectedItem="{Binding SelectedMarketType}" 
+                              Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontSize="11" Width="110" />
+
+                    <TextBlock Text="PAIR:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    <ComboBox ItemsSource="{Binding Symbols}" SelectedItem="{Binding SelectedSymbol}" 
+                              Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontSize="11" Width="120" />
+                </StackPanel>
+
+                <!-- Market Live Pricing Context -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" Margin="20,0,0,0">
+                    <Border Background="#12161C" BorderBrush="#242A34" BorderThickness="1" Padding="8,4">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="LAST:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            <TextBlock Text="{Binding LastPriceText}" FontSize="11" FontWeight="Bold" Foreground="#00E676" FontFamily="Consolas, monospace" />
+                        </StackPanel>
+                    </Border>
+                    <Border Background="#12161C" BorderBrush="#242A34" BorderThickness="1" Padding="8,4">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="BID:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            <TextBlock Text="{Binding BestBidText}" FontSize="11" FontWeight="Bold" Foreground="#00E676" FontFamily="Consolas, monospace" />
+                        </StackPanel>
+                    </Border>
+                    <Border Background="#12161C" BorderBrush="#242A34" BorderThickness="1" Padding="8,4">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="ASK:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            <TextBlock Text="{Binding BestAskText}" FontSize="11" FontWeight="Bold" Foreground="#FF5252" FontFamily="Consolas, monospace" />
+                        </StackPanel>
+                    </Border>
+                    <Border Background="#12161C" BorderBrush="#242A34" BorderThickness="1" Padding="8,4">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="SPREAD:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            <TextBlock Text="{Binding SpreadText}" FontSize="11" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Right Simulated Account Snapshot -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <Border Background="#161B22" BorderBrush="#448AFF" BorderThickness="1" Padding="6,2">
+                        <TextBlock Text="[SIMULATED - PAPER TRADING]" FontSize="9" FontWeight="Bold" Foreground="#448AFF" FontFamily="Consolas, monospace" />
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="EQUITY:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="{Binding TotalEquityText}" FontSize="11" FontWeight="Bold" Foreground="#F0F4F8" FontFamily="Consolas, monospace" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="AVAIL:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="{Binding AvailableBalanceText}" FontSize="11" FontWeight="Bold" Foreground="#00E676" FontFamily="Consolas, monospace" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="UPNL:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="{Binding UnrealizedPnlText}" FontSize="11" FontWeight="Bold" Foreground="#F0F4F8" FontFamily="Consolas, monospace" />
+                    </StackPanel>
+                    <Button Command="{Binding ResetPaperAccountCommand}" Classes="terminal-btn" Padding="6,3">
+                        <TextBlock Text="↺ RESET" FontSize="9" Foreground="#FF9D00" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                    </Button>
+                </StackPanel>
+
+            </Grid>
+        </Border>
+
+        <!-- 2. Unsupported Warning Banner (if SPOT selected with AsterDEX) -->
+        <Border Grid.Row="1" Background="#3D1214" BorderBrush="#FF5252" BorderThickness="0,0,0,1" Padding="12,6" 
+                IsVisible="{Binding IsVenueMarketUnsupported}">
+            <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0" Text="⚠️ WARNING:" FontSize="11" FontWeight="Bold" Foreground="#FF5252" FontFamily="Consolas, monospace" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1" Text="{Binding UnsupportedReasonMessage}" FontSize="11" Foreground="#FF5252" FontFamily="Consolas, monospace" />
+            </Grid>
+        </Border>
+
+        <!-- 3. Main Workstation Body: Order Entry (Left) + Orders/Positions Tables (Right) -->
+        <Grid Grid.Row="2" ColumnDefinitions="320,*" Margin="8">
+            
+            <!-- Left Order Entry Panel -->
+            <Border Grid.Column="0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12" Margin="0,0,8,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="10">
+                        
+                        <!-- Panel Header -->
+                        <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,6">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="■ ORDER ENTRY" FontSize="11" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                                <TextBlock Grid.Column="1" Text="10x LEVERAGE" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Buy / Sell Toggle Buttons -->
+                        <Grid ColumnDefinitions="*,*">
+                            <Button Grid.Column="0" Command="{Binding SelectBuySideCommand}"
+                                    Background="{Binding OrderSide, Converter={x:Null}}"
+                                    BorderBrush="#00E676" BorderThickness="1" CornerRadius="0" Margin="0,0,3,0" Padding="8">
+                                <TextBlock Text="BUY / LONG" FontSize="11" FontWeight="Bold" Foreground="#00E676" HorizontalAlignment="Center" FontFamily="Consolas, monospace" />
+                            </Button>
+                            <Button Grid.Column="1" Command="{Binding SelectSellSideCommand}"
+                                    BorderBrush="#FF5252" BorderThickness="1" CornerRadius="0" Margin="3,0,0,0" Padding="8">
+                                <TextBlock Text="SELL / SHORT" FontSize="11" FontWeight="Bold" Foreground="#FF5252" HorizontalAlignment="Center" FontFamily="Consolas, monospace" />
+                            </Button>
+                        </Grid>
+
+                        <!-- Order Type Selector -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="ORDER TYPE" FontSize="9" FontWeight="Bold" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            <ComboBox SelectedIndex="{Binding OrderType}" HorizontalAlignment="Stretch" Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontSize="11">
+                                <ComboBoxItem Content="LIMIT ORDER" />
+                                <ComboBoxItem Content="MARKET ORDER" />
+                                <ComboBoxItem Content="STOP LIMIT" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Quantity Input -->
+                        <StackPanel Spacing="4">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="QUANTITY" FontSize="9" FontWeight="Bold" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                                <TextBlock Grid.Column="1" Text="STEP: 0.001" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            </Grid>
+                            <TextBox Text="{Binding InputQuantity}" Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontFamily="Consolas, monospace" FontSize="12" />
+                        </StackPanel>
+
+                        <!-- Price Input -->
+                        <StackPanel Spacing="4">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="LIMIT PRICE (USDT)" FontSize="9" FontWeight="Bold" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                                <TextBlock Grid.Column="1" Text="TICK: 0.10" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            </Grid>
+                            <TextBox Text="{Binding InputPrice}" Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontFamily="Consolas, monospace" FontSize="12" />
+                        </StackPanel>
+
+                        <!-- Time In Force & Execution Flags -->
+                        <Grid ColumnDefinitions="*,*">
+                            <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,4,0">
+                                <TextBlock Text="TIF" FontSize="9" FontWeight="Bold" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                                <ComboBox SelectedIndex="{Binding TimeInForce}" HorizontalAlignment="Stretch" Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontSize="10">
+                                    <ComboBoxItem Content="GTC" />
+                                    <ComboBoxItem Content="IOC" />
+                                    <ComboBoxItem Content="FOK" />
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="6" Margin="4,16,0,0">
+                                <CheckBox IsChecked="{Binding ReduceOnly}" Content="Reduce Only" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                                <CheckBox IsChecked="{Binding PostOnly}" Content="Post Only" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Custom Client Order ID -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="CLIENT ORDER ID (OPTIONAL)" FontSize="9" FontWeight="Bold" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                            <TextBox Text="{Binding ClientOrderId}" PlaceholderText="Auto-generated if empty" Background="#12161C" Foreground="#F0F4F8" BorderBrush="#242A34" FontFamily="Consolas, monospace" FontSize="10" />
+                        </StackPanel>
+
+                        <!-- Real-Time Pre-Validation Box -->
+                        <Border Background="#12161C" BorderBrush="#242A34" BorderThickness="1" Padding="8">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Est. Notional:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EstimatedNotionalText}" FontSize="10" FontWeight="Bold" Foreground="#F0F4F8" FontFamily="Consolas, monospace" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Est. Taker Fee (0.05%):" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EstimatedFeeText}" FontSize="10" Foreground="#F0F4F8" FontFamily="Consolas, monospace" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Est. Required Margin:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EstimatedMarginText}" FontSize="10" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                                </Grid>
+                                <TextBlock Text="{Binding ValidationErrorMessage}" IsVisible="{Binding HasValidationError}"
+                                           FontSize="10" Foreground="#FF5252" FontFamily="Consolas, monospace" TextWrapping="Wrap" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Order Submit Button -->
+                        <Button Command="{Binding RequestOrderConfirmationCommand}"
+                                IsEnabled="{Binding !IsActionPending}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Background="#161B22" BorderBrush="#FF9D00" BorderThickness="1" CornerRadius="0" Padding="10">
+                            <TextBlock Text="SUBMIT ORDER [PAPER]" FontSize="11" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                        </Button>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Right Panel: Positions, Open Orders, Fills Tables -->
+            <Border Grid.Column="1" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
+                <Grid RowDefinitions="Auto,*,Auto,*,Auto,*">
+                    
+                    <!-- Section 1: Positions -->
+                    <Border Grid.Row="0" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4" Margin="0,0,0,4">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="■ ACTIVE POSITIONS" FontSize="11" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                            <TextBlock Grid.Column="1" Text="ISOLATED MARGIN (10x)" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                        </Grid>
+                    </Border>
+                    <Border Grid.Row="1" Background="#06080A" BorderBrush="#242A34" BorderThickness="1" Margin="0,0,0,8">
+                        <Grid RowDefinitions="Auto,*">
+                            <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="8,4">
+                                <Grid ColumnDefinitions="80,60,70,80,80,80,120,80,*">
+                                    <TextBlock Grid.Column="0" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="SIDE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="2" Text="SIZE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="3" Text="ENTRY PX" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="4" Text="MARK PX" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="5" Text="LIQ PX" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="6" Text="UNREALIZED PNL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="7" Text="MARGIN" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="8" Text="ACTION" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                                </Grid>
+                            </Border>
+                            <ListBox Grid.Row="1" ItemsSource="{Binding Positions}" Background="Transparent" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PaperPositionModel">
+                                        <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,3">
+                                            <Grid ColumnDefinitions="80,60,70,80,80,80,120,80,*">
+                                                <TextBlock Grid.Column="0" Text="{Binding Symbol}" FontSize="11" FontWeight="Bold" Foreground="#F0F4F8" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Side}" FontSize="11" FontWeight="Bold" Foreground="{Binding SideColor}" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Size}" FontSize="11" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding EntryPriceFormatted}" FontSize="11" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4" Text="{Binding MarkPriceFormatted}" FontSize="11" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="5" Text="{Binding LiqPriceFormatted}" FontSize="11" Foreground="#FF5252" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="6" Text="{Binding PnlDisplay}" FontSize="11" FontWeight="Bold" Foreground="{Binding PnlColor}" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="7" Text="{Binding MarginFormatted}" FontSize="11" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <Button Grid.Column="8" 
+                                                        Command="{Binding $parent[UserControl].((vm:TradingWorkstationViewModel)DataContext).ClosePositionCommand}"
+                                                        CommandParameter="{Binding Symbol}"
+                                                        Background="#3D1214" BorderBrush="#FF5252" BorderThickness="1" Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0">
+                                                    <TextBlock Text="CLOSE" FontSize="9" FontWeight="Bold" Foreground="#FF5252" FontFamily="Consolas, monospace" />
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <!-- Section 2: Open Orders -->
+                    <Border Grid.Row="2" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4" Margin="0,4,0,4">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="■ ACTIVE OPEN ORDERS" FontSize="11" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                            <TextBlock Grid.Column="1" Text="RESTING LIMIT &amp; CONDITIONAL" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                        </Grid>
+                    </Border>
+                    <Border Grid.Row="3" Background="#06080A" BorderBrush="#242A34" BorderThickness="1" Margin="0,0,0,8">
+                        <Grid RowDefinitions="Auto,*">
+                            <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="8,4">
+                                <Grid ColumnDefinitions="120,70,90,70,80,60,60,70,60,*">
+                                    <TextBlock Grid.Column="0" Text="ORDER ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="2" Text="SIDE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="3" Text="TYPE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="4" Text="PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="5" Text="QTY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="6" Text="FILLED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="7" Text="STATUS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="8" Text="TIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="9" Text="ACTIONS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                                </Grid>
+                            </Border>
+                            <ListBox Grid.Row="1" ItemsSource="{Binding OpenOrders}" Background="Transparent" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PaperOrderModel">
+                                        <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,3">
+                                            <Grid ColumnDefinitions="120,70,90,70,80,60,60,70,60,*">
+                                                <TextBlock Grid.Column="0" Text="{Binding OrderId}" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Symbol}" FontSize="11" FontWeight="Bold" Foreground="#F0F4F8" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding SideDisplay}" FontSize="10" FontWeight="Bold" Foreground="{Binding SideColor}" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding OrderType}" FontSize="10" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4" Text="{Binding PriceFormatted}" FontSize="11" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="5" Text="{Binding OriginalQty}" FontSize="11" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="6" Text="{Binding FilledQty}" FontSize="11" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="7" Text="{Binding Status}" FontSize="10" FontWeight="Bold" Foreground="{Binding StatusColor}" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="8" Text="{Binding TimeDisplay}" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <StackPanel Grid.Column="9" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                                                    <Button Command="{Binding $parent[UserControl].((vm:TradingWorkstationViewModel)DataContext).CancelOrderCommand}"
+                                                            CommandParameter="{Binding OrderId}"
+                                                            Background="#3D1214" BorderBrush="#FF5252" BorderThickness="1" Padding="4,1">
+                                                        <TextBlock Text="CANCEL" FontSize="8" FontWeight="Bold" Foreground="#FF5252" FontFamily="Consolas, monospace" />
+                                                    </Button>
+                                                    <Button Command="{Binding $parent[UserControl].((vm:TradingWorkstationViewModel)DataContext).ReplaceOrderCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="#1A2733" BorderBrush="#448AFF" BorderThickness="1" Padding="4,1">
+                                                        <TextBlock Text="AMEND" FontSize="8" FontWeight="Bold" Foreground="#448AFF" FontFamily="Consolas, monospace" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <!-- Section 3: Trade Fills & Executions -->
+                    <Border Grid.Row="4" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4" Margin="0,4,0,4">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="■ RECENT FILLS &amp; EXECUTIONS" FontSize="11" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                            <TextBlock Grid.Column="1" Text="PAPER LEDGER (LAST 50)" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                        </Grid>
+                    </Border>
+                    <Border Grid.Row="5" Background="#06080A" BorderBrush="#242A34" BorderThickness="1">
+                        <Grid RowDefinitions="Auto,*">
+                            <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="8,4">
+                                <Grid ColumnDefinitions="110,70,60,80,60,80,70,90,70,*">
+                                    <TextBlock Grid.Column="0" Text="FILL ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="2" Text="SIDE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="3" Text="PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="4" Text="QTY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="5" Text="NOTIONAL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="6" Text="FEE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="7" Text="REALIZED PNL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="8" Text="TIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="9" Text="VENUE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                                </Grid>
+                            </Border>
+                            <ListBox Grid.Row="1" ItemsSource="{Binding FillsHistory}" Background="Transparent" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PaperFillModel">
+                                        <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,2">
+                                            <Grid ColumnDefinitions="110,70,60,80,60,80,70,90,70,*">
+                                                <TextBlock Grid.Column="0" Text="{Binding FillId}" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Symbol}" FontSize="10" FontWeight="Bold" Foreground="#F0F4F8" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding SideDisplay}" FontSize="10" FontWeight="Bold" Foreground="{Binding SideColor}" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="3" Text="{Binding PriceFormatted}" FontSize="10" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="4" Text="{Binding Qty}" FontSize="10" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="5" Text="{Binding NotionalFormatted}" FontSize="10" Foreground="#C9D1D9" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="6" Text="{Binding FeeFormatted}" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="7" Text="{Binding PnlDisplay}" FontSize="10" FontWeight="Bold" Foreground="#00E676" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="8" Text="{Binding TimeDisplay}" FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="9" Text="{Binding Venue}" FontSize="9" Foreground="#448AFF" FontFamily="Consolas, monospace" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                </Grid>
+            </Border>
+
+        </Grid>
+
+        <!-- 4. Explicit Order Confirmation Modal Overlay -->
+        <Border Grid.Row="0" Grid.RowSpan="4" Background="#CC000000" IsVisible="{Binding ShowConfirmationModal}">
+            <Border Background="#0D1117" BorderBrush="#FF9D00" BorderThickness="1" Width="500" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20">
+                <StackPanel Spacing="14">
+                    
+                    <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,8">
+                        <TextBlock Text="■ CONFIRM ORDER EXECUTION" FontSize="13" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                    </Border>
+
+                    <TextBlock Text="{Binding ConfirmSummary}" FontSize="12" Foreground="#F0F4F8" FontFamily="Consolas, monospace" TextWrapping="Wrap" LineHeight="20" />
+
+                    <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="SAFETY DISCLOSURE:" FontSize="10" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" />
+                            <TextBlock Text="This order will be processed inside the isolated paper simulation environment. No funds or positions on live AsterDEX exchange accounts are altered." FontSize="9" Foreground="#8B949E" FontFamily="Consolas, monospace" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid ColumnDefinitions="*,*">
+                        <Button Grid.Column="0" Command="{Binding CancelConfirmationCommand}"
+                                Background="#21262D" BorderBrush="#8B949E" BorderThickness="1" CornerRadius="0" Padding="10" Margin="0,0,6,0"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                            <TextBlock Text="ABORT" FontSize="11" FontWeight="Bold" Foreground="#8B949E" FontFamily="Consolas, monospace" />
+                        </Button>
+                        <Button Grid.Column="1" Command="{Binding ConfirmAndSubmitOrderCommand}"
+                                Background="#1A2733" BorderBrush="#00E676" BorderThickness="1" CornerRadius="0" Padding="10" Margin="6,0,0,0"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                            <TextBlock Text="AUTHORIZE SUBMIT" FontSize="11" FontWeight="Bold" Foreground="#00E676" FontFamily="Consolas, monospace" />
+                        </Button>
+                    </Grid>
+
+                </StackPanel>
+            </Border>
+        </Border>
+
+    </Grid>
+</UserControl>

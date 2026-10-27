@@ -129,8 +129,8 @@
                             
                             <Button Command="{Binding NavigateCommand}" CommandParameter="Overview" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
                                     <TextBlock Grid.Column="0" Text="&lt;F1&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                                     <TextBlock Grid.Column="1" Text="OVERVIEW" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
@@ -138,74 +138,92 @@
 
                             <Button Command="{Binding NavigateCommand}" CommandParameter="MarketIntelligence" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
                                     <TextBlock Grid.Column="0" Text="&lt;F2&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                                     <TextBlock Grid.Column="1" Text="MARKET INTELLIGENCE" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="MultiMarketOrderBook" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F3&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="MULTI-MARKET BOOK" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
+
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="TradingWorkstation" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F4&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="TRADING WORKSTATION" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
+
                             <Button Command="{Binding NavigateCommand}" CommandParameter="Alerts" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F3&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F5&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                                     <TextBlock Grid.Column="1" Text="PRICE ALERTS" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
                             <Button Command="{Binding NavigateCommand}" CommandParameter="LiquidityIntel" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F4&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="LIQUIDITY &amp; ORDER FLOW" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F6&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="LIQUIDITY &amp; FLOW" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
                             <Button Command="{Binding NavigateCommand}" CommandParameter="GroqHunter" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F5&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="AI SIGNAL &amp; EXECUTION" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F7&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="AI SIGNAL &amp; SCAN" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
                             <Button Command="{Binding NavigateCommand}" CommandParameter="Journal" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F6&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F8&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                                     <TextBlock Grid.Column="1" Text="TRADE JOURNAL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
                             <Button Command="{Binding NavigateCommand}" CommandParameter="MarketParticipants" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F7&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F9&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                                     <TextBlock Grid.Column="1" Text="MARKET POSITIONING" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
                             <Button Command="{Binding NavigateCommand}" CommandParameter="CryptoNews" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F8&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F10&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                                     <TextBlock Grid.Column="1" Text="GLOBAL NEWS INTEL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
-                            <Separator Background="#242A34" Margin="10,6" />
+                            <Separator Background="#242A34" Margin="10,4" />
 
                             <Button Command="{Binding NavigateCommand}" CommandParameter="Settings" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F9&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,7">
+                                <Grid ColumnDefinitions="34,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F11&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
                                     <TextBlock Grid.Column="1" Text="TERMINAL CONFIG" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
                                 </Grid>
                             </Button>
@@ -214,11 +232,11 @@
                     </ScrollViewer>
 
                     <!-- Sidebar Terminal Footer -->
-                    <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="0,1,0,0" Padding="12,10">
+                    <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="0,1,0,0" Padding="12,8">
                         <StackPanel Spacing="3">
                             <TextBlock Text="VENUE: ASTERDEX PERP" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                             <TextBlock Text="BRANCH: feature/avalonia-desktop" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
-                            <TextBlock Text="TRADE EXECUTION: NOT ACCESSIBLE FROM DESKTOP" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
+                            <TextBlock Text="TRADE EXECUTION: PAPER SIMULATION ACTIVE // LIVE DISPATCH STRICTLY ISOLATED" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" TextWrapping="Wrap" />
                             <TextBlock Text="ALERT MANAGEMENT: ENABLED FOR SUPPORTED ALERT OPERATIONS" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -236,7 +254,7 @@
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Grid.Column="0" Text="© 2026 PT Authentic Media Services. Alpha Meridian Systems is a product of AMS Capital." 
                            FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="TRADE EXECUTION: NOT ACCESSIBLE FROM DESKTOP | ALERT MANAGEMENT: ENABLED FOR SUPPORTED ALERT OPERATIONS" 
+                <TextBlock Grid.Column="2" Text="TRADE EXECUTION: PAPER SIMULATION ACTIVE // LIVE DISPATCH STRICTLY ISOLATED | ALERT MANAGEMENT: ENABLED" 
                            FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" VerticalAlignment="Center" />
             </Grid>
         </Border>

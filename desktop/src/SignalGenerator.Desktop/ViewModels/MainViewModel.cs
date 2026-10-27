@@ -16,6 +16,8 @@ public partial class MainViewModel : ViewModelBase
     public OverviewViewModel OverviewVm { get; }
     public MarketMonitorViewModel MarketMonitorVm { get; }
     public ScreenerViewModel ScreenerVm { get; }
+    public MultiMarketOrderBookViewModel MultiMarketOrderBookVm { get; }
+    public TradingWorkstationViewModel TradingWorkstationVm { get; }
     public LiquidityIntelViewModel LiquidityIntelVm { get; }
     public GroqHunterViewModel GroqHunterVm { get; }
     public JournalViewModel JournalVm { get; }
@@ -96,6 +98,8 @@ public partial class MainViewModel : ViewModelBase
         OverviewViewModel overviewVm,
         MarketMonitorViewModel marketMonitorVm,
         ScreenerViewModel screenerVm,
+        MultiMarketOrderBookViewModel multiMarketOrderBookVm,
+        TradingWorkstationViewModel tradingWorkstationVm,
         LiquidityIntelViewModel liquidityIntelVm,
         GroqHunterViewModel groqHunterVm,
         JournalViewModel journalVm,
@@ -110,6 +114,8 @@ public partial class MainViewModel : ViewModelBase
         OverviewVm = overviewVm;
         MarketMonitorVm = marketMonitorVm;
         ScreenerVm = screenerVm;
+        MultiMarketOrderBookVm = multiMarketOrderBookVm;
+        TradingWorkstationVm = tradingWorkstationVm;
         LiquidityIntelVm = liquidityIntelVm;
         GroqHunterVm = groqHunterVm;
         JournalVm = journalVm;
@@ -117,6 +123,18 @@ public partial class MainViewModel : ViewModelBase
         MarketParticipantsVm = marketParticipantsVm;
         CryptoNewsVm = cryptoNewsVm;
         SettingsVm = settingsVm;
+
+        MultiMarketOrderBookVm.OnNavigateToTradingWorkstation = symbol =>
+        {
+            TradingWorkstationVm.SelectedSymbol = symbol;
+            _ = TradingWorkstationVm.LoadMarketContextAsync(symbol);
+            Navigate("TradingWorkstation");
+        };
+
+        MultiMarketOrderBookVm.OnPrefillLimitPrice = price =>
+        {
+            TradingWorkstationVm.SetPrefillPrice(price);
+        };
 
         _currentViewModel = OverviewVm;
         _backendUrl = _settingsService.CurrentSettings.BaseUrl;
@@ -141,6 +159,8 @@ public partial class MainViewModel : ViewModelBase
         {
             "Overview" => OverviewVm,
             "MarketIntelligence" or "MarketMonitor" => MarketMonitorVm,
+            "MultiMarketOrderBook" => MultiMarketOrderBookVm,
+            "TradingWorkstation" => TradingWorkstationVm,
             "Screener" => MarketMonitorVm,
             "Alerts" => AlertsVm,
             "LiquidityIntel" => LiquidityIntelVm,
@@ -152,7 +172,15 @@ public partial class MainViewModel : ViewModelBase
             _ => OverviewVm
         };
 
-        if ((destination == "MarketIntelligence" || destination == "MarketMonitor") && MarketMonitorVm.Markets.Count == 0)
+        if (destination == "MultiMarketOrderBook")
+        {
+            _ = MultiMarketOrderBookVm.RefreshAllTilesAsync();
+        }
+        else if (destination == "TradingWorkstation")
+        {
+            _ = TradingWorkstationVm.LoadMarketContextAsync(TradingWorkstationVm.SelectedSymbol);
+        }
+        else if ((destination == "MarketIntelligence" || destination == "MarketMonitor") && MarketMonitorVm.Markets.Count == 0)
         {
             MarketMonitorVm.SetMonitorMode();
             _ = MarketMonitorVm.LoadMarketMatrixAsync();
