@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -79,10 +80,16 @@ public class MarketAssetTickerDto
     [JsonPropertyName("venues")]
     public Dictionary<string, VenueDetailDto>? Venues { get; set; }
 
+    [JsonPropertyName("contract_type")]
+    public string? ContractType { get; set; }
+
     public string InstrumentType
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(ContractType))
+                return ContractType.ToUpperInvariant();
+
             if (Venues != null)
             {
                 foreach (var v in Venues.Values)
@@ -99,7 +106,20 @@ public class MarketAssetTickerDto
 
     public string FormattedPrice => BenchmarkPrice.HasValue ? BenchmarkPrice.Value.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) : "--";
     public string FormattedVolume => TotalVolume24hUsdt > 0 ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "${0:N0}", TotalVolume24hUsdt) : "--";
-    public string FormattedOi => TotalOpenInterestUsdt > 0 ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "${0:N0}", TotalOpenInterestUsdt) : "--";
+    
+    public string FormattedOi
+    {
+        get
+        {
+            if (InstrumentType.Equals("SPOT", StringComparison.OrdinalIgnoreCase))
+                return "N/A (SPOT)";
+
+            return TotalOpenInterestUsdt > 0 
+                ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "${0:N0}", TotalOpenInterestUsdt) 
+                : "--";
+        }
+    }
+
     public string FormattedSpread => BestSpreadBps.HasValue ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F2} bps", BestSpreadBps.Value) : "--";
     public string FormattedChange => PriceChange24hPct.HasValue ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:+0.00;-0.00}%", PriceChange24hPct.Value) : "--";
     public string ChangeColor => (PriceChange24hPct ?? 0) >= 0 ? "#00E676" : "#FF5252";

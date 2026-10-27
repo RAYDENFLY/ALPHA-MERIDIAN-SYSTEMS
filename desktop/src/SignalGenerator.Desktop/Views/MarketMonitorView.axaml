@@ -113,16 +113,25 @@
                     <TextBlock Text="TYPE:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,4,0" />
                     
                     <Button Command="{Binding SelectMarketTypeCommand}" CommandParameter="ALL" 
+                            Background="{Binding TypeAllBackground}"
+                            BorderBrush="{Binding TypeAllBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="ALL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="ALL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding TypeAllForeground}" />
                     </Button>
                     <Button Command="{Binding SelectMarketTypeCommand}" CommandParameter="PERPETUAL" 
+                            Background="{Binding TypePerpBackground}"
+                            BorderBrush="{Binding TypePerpBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="PERPETUAL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="PERPETUAL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding TypePerpForeground}" />
                     </Button>
                     <Button Command="{Binding SelectMarketTypeCommand}" CommandParameter="SPOT" 
+                            Background="{Binding TypeSpotBackground}"
+                            BorderBrush="{Binding TypeSpotBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="SPOT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="SPOT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding TypeSpotForeground}" />
                     </Button>
                 </StackPanel>
 
@@ -131,24 +140,39 @@
                     <TextBlock Text="VENUE:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,4,0" />
                     
                     <Button Command="{Binding SelectVenueCommand}" CommandParameter="ALL" 
+                            Background="{Binding VenueAllBackground}"
+                            BorderBrush="{Binding VenueAllBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="ALL VENUES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="ALL VENUES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding VenueAllForeground}" />
                     </Button>
                     <Button Command="{Binding SelectVenueCommand}" CommandParameter="ASTERDEX" 
+                            Background="{Binding VenueAsterBackground}"
+                            BorderBrush="{Binding VenueAsterBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="ASTERDEX" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="ASTERDEX" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding VenueAsterForeground}" />
                     </Button>
                     <Button Command="{Binding SelectVenueCommand}" CommandParameter="BINANCE" 
+                            Background="{Binding VenueBinanceBackground}"
+                            BorderBrush="{Binding VenueBinanceBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="BINANCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="BINANCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding VenueBinanceForeground}" />
                     </Button>
                     <Button Command="{Binding SelectVenueCommand}" CommandParameter="BYBIT" 
+                            Background="{Binding VenueBybitBackground}"
+                            BorderBrush="{Binding VenueBybitBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="BYBIT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="BYBIT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding VenueBybitForeground}" />
                     </Button>
                     <Button Command="{Binding SelectVenueCommand}" CommandParameter="HYPERLIQUID" 
+                            Background="{Binding VenueHyperliquidBackground}"
+                            BorderBrush="{Binding VenueHyperliquidBorder}"
+                            BorderThickness="1"
                             Classes="terminal-btn" Padding="8,4">
-                        <TextBlock Text="HYPERLIQUID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" />
+                        <TextBlock Text="HYPERLIQUID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding VenueHyperliquidForeground}" />
                     </Button>
                 </StackPanel>
 
@@ -209,13 +233,13 @@
                     </Grid>
                 </Border>
 
-                <!-- Data List Items -->
+                <!-- 1. Populated Data List Items -->
                 <ListBox Grid.Row="1" 
                          ItemsSource="{Binding Markets}" 
                          SelectedItem="{Binding SelectedMarket}"
                          Background="Transparent" 
                          BorderThickness="0"
-                         IsVisible="{Binding !IsSpotUnavailable}">
+                         IsVisible="{Binding ShowDataTable}">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="models:MarketAssetTickerDto">
                             <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="8,6">
@@ -261,50 +285,163 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- Spot Market Unavailable Notice -->
+                <!-- 2. Loading State Overlay -->
                 <Border Grid.Row="1" 
                         Background="#080A0D" 
+                        BorderBrush="#448AFF" 
+                        BorderThickness="1" 
+                        Padding="28" 
+                        HorizontalAlignment="Center" 
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding IsLoading}">
+                    <StackPanel Spacing="10" HorizontalAlignment="Center">
+                        <TextBlock Text="↻ SYNCHRONIZING MULTI-EXCHANGE MARKET DATA..." 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#448AFF" 
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="Connecting to AsterDEX, Binance, Bybit, and Hyperliquid perpetual feeds..." 
+                                   FontSize="10" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#8B949E" 
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 3. API Unavailable / Data Mapping Error State -->
+                <Border Grid.Row="1" 
+                        Background="#140608" 
+                        BorderBrush="#FF5252" 
+                        BorderThickness="1" 
+                        Padding="24" 
+                        HorizontalAlignment="Center" 
+                        VerticalAlignment="Center"
+                        MaxWidth="650"
+                        IsVisible="{Binding HasError}">
+                    <StackPanel Spacing="10" HorizontalAlignment="Center">
+                        <TextBlock Text="■ MARKET INTELLIGENCE SYNCHRONIZATION ERROR" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#FF5252" 
+                                   HorizontalAlignment="Center" />
+                        <Border Background="#1F0B0E" BorderBrush="#52171B" BorderThickness="1" Padding="10,6">
+                            <TextBlock Text="{Binding ErrorMessage}" 
+                                       FontSize="10" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#FF8A80" 
+                                       TextWrapping="Wrap"
+                                       HorizontalAlignment="Center" />
+                        </Border>
+                        <Button Command="{Binding LoadMarketMatrixCommand}" 
+                                Classes="terminal-btn" 
+                                Padding="12,5" 
+                                HorizontalAlignment="Center">
+                            <TextBlock Text="↻ RETRY CONNECTION" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <!-- 4. Spot Market Unavailable Notice (Explicit Venue Limitation Notice) -->
+                <Border Grid.Row="1" 
+                        Background="#0A0D10" 
                         BorderBrush="#FF9D00" 
                         BorderThickness="1" 
                         Padding="24" 
                         HorizontalAlignment="Center" 
                         VerticalAlignment="Center"
-                        IsVisible="{Binding IsSpotUnavailable}">
-                    <StackPanel Spacing="6" HorizontalAlignment="Center">
-                        <TextBlock Text="■ SPOT MARKET DATA UNAVAILABLE" 
-                                   FontSize="12" 
-                                   FontWeight="Bold" 
-                                   FontFamily="Consolas, monospace" 
-                                   Foreground="#FF9D00" 
-                                   HorizontalAlignment="Center" />
-                        <TextBlock Text="{Binding SpotUnavailableMessage}" 
-                                   FontSize="10" 
-                                   FontFamily="Consolas, monospace" 
-                                   Foreground="#8B949E" 
-                                   HorizontalAlignment="Center" />
-                        <TextBlock Text="Select PERPETUAL or ALL to view real-time multi-exchange derivatives." 
+                        MaxWidth="680"
+                        IsVisible="{Binding ShowSpotUnavailable}">
+                    <StackPanel Spacing="10" HorizontalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                            <TextBlock Text="■ SPOT MARKET DATA NOT SUPPORTED" 
+                                       FontSize="12" 
+                                       FontWeight="Bold" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#FF9D00" />
+                            <Border Background="#1F1400" BorderBrush="#FF9D00" BorderThickness="1" Padding="6,1">
+                                <TextBlock Text="{Binding SelectedVenue, StringFormat='VENUE: {0}'}" 
+                                           FontSize="9" 
+                                           FontWeight="Bold" 
+                                           FontFamily="Consolas, monospace" 
+                                           Foreground="#FF9D00" />
+                            </Border>
+                        </StackPanel>
+                        
+                        <Border Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
+                            <TextBlock Text="{Binding SpotUnavailableMessage}" 
+                                       FontSize="10" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#F0F4F8" 
+                                       TextWrapping="Wrap"
+                                       HorizontalAlignment="Center" />
+                        </Border>
+
+                        <TextBlock Text="Alpha Meridian screener is currently configured for linear perpetual futures across connected venues. Spot order books and AMM pools are not integrated." 
                                    FontSize="9" 
                                    FontFamily="Consolas, monospace" 
-                                   Foreground="#545D68" 
+                                   Foreground="#8B949E" 
+                                   TextWrapping="Wrap"
                                    HorizontalAlignment="Center" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,4,0,0">
+                            <Button Command="{Binding SelectMarketTypeCommand}" CommandParameter="PERPETUAL" 
+                                    Classes="terminal-btn" Padding="12,5">
+                                <TextBlock Text="[SWITCH TO PERPETUAL]" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                            </Button>
+                            <Button Command="{Binding SelectMarketTypeCommand}" CommandParameter="ALL" 
+                                    Classes="terminal-btn" Padding="12,5">
+                                <TextBlock Text="[VIEW ALL INSTRUMENTS]" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            </Button>
+                            <Button Command="{Binding ResetFiltersCommand}" 
+                                    Classes="terminal-btn" Padding="12,5">
+                                <TextBlock Text="[RESET FILTERS]" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                            </Button>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
-                <!-- Empty State Notice -->
+                <!-- 5. Generic Empty State Notice (Filters Yielded No Matches) -->
                 <Border Grid.Row="1" 
                         Background="#080A0D" 
                         BorderBrush="#242A34" 
                         BorderThickness="1" 
-                        Padding="20" 
+                        Padding="24" 
                         HorizontalAlignment="Center" 
                         VerticalAlignment="Center"
-                        IsVisible="{Binding !Markets.Count}">
-                    <TextBlock Text="{Binding EmptyMessage}" 
-                               FontSize="11" 
-                               FontWeight="Bold" 
-                               FontFamily="Consolas, monospace" 
-                               Foreground="#8B949E" 
-                               HorizontalAlignment="Center" />
+                        MaxWidth="600"
+                        IsVisible="{Binding ShowGenericEmptyNotice}">
+                    <StackPanel Spacing="10" HorizontalAlignment="Center">
+                        <TextBlock Text="■ NO MATCHING INSTRUMENTS FOUND" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#8B949E" 
+                                   HorizontalAlignment="Center" />
+                        
+                        <TextBlock Text="{Binding EmptyMessage}" 
+                                   FontSize="10" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#C9D1D9" 
+                                   HorizontalAlignment="Center" />
+
+                        <Border Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="8,4">
+                            <TextBlock Text="{Binding ActiveFilterSummary}" 
+                                       FontSize="9" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#FF9D00" 
+                                       HorizontalAlignment="Center" />
+                        </Border>
+
+                        <Button Command="{Binding ResetFiltersCommand}" 
+                                Classes="terminal-btn" 
+                                Padding="12,5" 
+                                HorizontalAlignment="Center"
+                                Margin="0,4,0,0">
+                            <TextBlock Text="[CLEAR ALL FILTERS]" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        </Button>
+                    </StackPanel>
                 </Border>
 
             </Grid>

@@ -158,7 +158,7 @@ public partial class MainViewModel : ViewModelBase
         CurrentViewModel = destination switch
         {
             "Overview" => OverviewVm,
-            "MarketIntelligence" or "MarketMonitor" => MarketMonitorVm,
+            "MarketIntelligence" or "MarketMonitor" or "MarketIntelligenceSpot" => MarketMonitorVm,
             "MultiMarketOrderBook" => MultiMarketOrderBookVm,
             "TradingWorkstation" => TradingWorkstationVm,
             "Screener" => MarketMonitorVm,
@@ -183,6 +183,12 @@ public partial class MainViewModel : ViewModelBase
         else if ((destination == "MarketIntelligence" || destination == "MarketMonitor") && MarketMonitorVm.Markets.Count == 0)
         {
             MarketMonitorVm.SetMonitorMode();
+            _ = MarketMonitorVm.LoadMarketMatrixAsync();
+        }
+        else if (destination == "MarketIntelligenceSpot")
+        {
+            MarketMonitorVm.SetMonitorMode();
+            MarketMonitorVm.SelectMarketType("SPOT");
             _ = MarketMonitorVm.LoadMarketMatrixAsync();
         }
         else if (destination == "Screener")

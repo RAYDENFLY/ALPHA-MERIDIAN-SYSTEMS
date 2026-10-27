@@ -52,6 +52,8 @@ public partial class MarketMonitorViewModel : ViewModelBase
     [ObservableProperty]
     private int _totalMarketsCount;
 
+    public int FilteredMarketsCount => Markets.Count;
+
     [ObservableProperty]
     private string _topGainerSymbol = "--";
 
@@ -91,6 +93,52 @@ public partial class MarketMonitorViewModel : ViewModelBase
 
     [ObservableProperty]
     private int _totalMatchedAssets;
+
+    // Mutually Exclusive UI State Discriminators
+    public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
+    public bool IsDataMappingError => HasError && (ErrorMessage?.Contains("JSON", StringComparison.OrdinalIgnoreCase) == true ||
+                                                   ErrorMessage?.Contains("deserializ", StringComparison.OrdinalIgnoreCase) == true ||
+                                                   ErrorMessage?.Contains("format", StringComparison.OrdinalIgnoreCase) == true);
+    public bool IsApiUnavailableError => HasError && !IsDataMappingError;
+    public bool ShowSpotUnavailable => !IsLoading && !HasError && IsSpotUnavailable;
+    public bool ShowGenericEmptyNotice => !IsLoading && !HasError && !IsSpotUnavailable && Markets.Count == 0;
+    public bool ShowDataTable => !IsLoading && !HasError && !IsSpotUnavailable && Markets.Count > 0;
+
+    public string ActiveFilterSummary => $"VENUE: {SelectedVenue} | TYPE: {SelectedMarketType}" +
+                                         (!string.IsNullOrWhiteSpace(SearchFilter) ? $" | SEARCH: '{SearchFilter.Trim().ToUpperInvariant()}'" : "");
+
+    // Dynamic Filter Button Styling (Active vs Inactive)
+    public string TypeAllBackground => SelectedMarketType == "ALL" ? "#1F2836" : "#0A0D10";
+    public string TypeAllForeground => SelectedMarketType == "ALL" ? "#FF9D00" : "#8B949E";
+    public string TypeAllBorder => SelectedMarketType == "ALL" ? "#FF9D00" : "#242A34";
+
+    public string TypePerpBackground => SelectedMarketType == "PERPETUAL" ? "#1F2836" : "#0A0D10";
+    public string TypePerpForeground => SelectedMarketType == "PERPETUAL" ? "#448AFF" : "#8B949E";
+    public string TypePerpBorder => SelectedMarketType == "PERPETUAL" ? "#448AFF" : "#242A34";
+
+    public string TypeSpotBackground => SelectedMarketType == "SPOT" ? "#1F2836" : "#0A0D10";
+    public string TypeSpotForeground => SelectedMarketType == "SPOT" ? "#FFB300" : "#8B949E";
+    public string TypeSpotBorder => SelectedMarketType == "SPOT" ? "#FFB300" : "#242A34";
+
+    public string VenueAllBackground => SelectedVenue == "ALL" ? "#1F2836" : "#0A0D10";
+    public string VenueAllForeground => SelectedVenue == "ALL" ? "#FF9D00" : "#8B949E";
+    public string VenueAllBorder => SelectedVenue == "ALL" ? "#FF9D00" : "#242A34";
+
+    public string VenueAsterBackground => SelectedVenue == "ASTERDEX" ? "#1F2836" : "#0A0D10";
+    public string VenueAsterForeground => SelectedVenue == "ASTERDEX" ? "#00E676" : "#8B949E";
+    public string VenueAsterBorder => SelectedVenue == "ASTERDEX" ? "#00E676" : "#242A34";
+
+    public string VenueBinanceBackground => SelectedVenue == "BINANCE" ? "#1F2836" : "#0A0D10";
+    public string VenueBinanceForeground => SelectedVenue == "BINANCE" ? "#F0B90B" : "#8B949E";
+    public string VenueBinanceBorder => SelectedVenue == "BINANCE" ? "#F0B90B" : "#242A34";
+
+    public string VenueBybitBackground => SelectedVenue == "BYBIT" ? "#1F2836" : "#0A0D10";
+    public string VenueBybitForeground => SelectedVenue == "BYBIT" ? "#F7A600" : "#8B949E";
+    public string VenueBybitBorder => SelectedVenue == "BYBIT" ? "#F7A600" : "#242A34";
+
+    public string VenueHyperliquidBackground => SelectedVenue == "HYPERLIQUID" ? "#1F2836" : "#0A0D10";
+    public string VenueHyperliquidForeground => SelectedVenue == "HYPERLIQUID" ? "#50E3C2" : "#8B949E";
+    public string VenueHyperliquidBorder => SelectedVenue == "HYPERLIQUID" ? "#50E3C2" : "#242A34";
 
     public MarketMonitorViewModel(IApiClient apiClient, IPollingCoordinator pollingCoordinator)
     {
@@ -135,6 +183,15 @@ public partial class MarketMonitorViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void ResetFilters()
+    {
+        SelectedMarketType = "ALL";
+        SelectedVenue = "ALL";
+        SearchFilter = string.Empty;
+        ApplyFiltersAndSort();
+    }
+
+    [RelayCommand]
     public void SetSort(string sortField)
     {
         SortBy = sortField;
@@ -151,6 +208,16 @@ public partial class MarketMonitorViewModel : ViewModelBase
     partial void OnSearchFilterChanged(string value)
     {
         ApplyFiltersAndSort();
+    }
+
+    partial void OnIsLoadingChanged(bool value)
+    {
+        NotifyFilterStateChanged();
+    }
+
+    partial void OnErrorMessageChanged(string? value)
+    {
+        NotifyFilterStateChanged();
     }
 
     [RelayCommand]
@@ -229,6 +296,17 @@ public partial class MarketMonitorViewModel : ViewModelBase
         }
     }
 
+    public void SeedMarkets(IEnumerable<MarketAssetTickerDto> items, int totalCount = 0)
+    {
+        _rawMarkets.Clear();
+        _rawMarkets.AddRange(items);
+        TotalMarketsCount = totalCount > 0 ? totalCount : _rawMarkets.Count;
+        TotalMatchedAssets = TotalMarketsCount;
+        ComputeMarketLeaders(_rawMarkets);
+        LastRefreshUtc = DateTime.UtcNow.ToString("HH:mm:ss") + " UTC";
+        ApplyFiltersAndSort();
+    }
+
     private void ComputeMarketLeaders(IEnumerable<MarketAssetTickerDto> items)
     {
         decimal maxVol = 0;
@@ -256,37 +334,56 @@ public partial class MarketMonitorViewModel : ViewModelBase
         TopGainerChange = maxChg != decimal.MinValue ? string.Create(CultureInfo.InvariantCulture, $"{maxChg:+0.00;-0.00}%") : "--";
     }
 
+    public static string GetSpotUnavailableExplanation(string venue)
+    {
+        return venue.ToUpperInvariant() switch
+        {
+            "ASTERDEX" => "SPOT MARKET DATA IS NOT PROVIDED: AsterDEX is an on-chain decentralized perpetual exchange on Arbitrum/Berachain. Spot trading is not supported by the AsterDEX protocol.",
+            "BINANCE" => "SPOT MARKET DATA IS NOT PROVIDED: Binance USD-M Futures adapter is active (fapi.binance.com). Binance Spot market feeds (api.binance.com) are not configured in the screener engine.",
+            "BYBIT" => "SPOT MARKET DATA IS NOT PROVIDED: Bybit Linear Perpetuals adapter is active (category=linear). Bybit Spot market feeds (category=spot) are not configured in the screener engine.",
+            "HYPERLIQUID" => "SPOT MARKET DATA IS NOT PROVIDED: Hyperliquid Perpetuals adapter is active (metaAndAssetCtxs). Hyperliquid Spot order books (spotMetaAndAssetCtxs) are not queried by the screener adapter.",
+            _ => "SPOT MARKET DATA IS NOT PROVIDED BY CONNECTED VENUES: Connected exchange adapters (AsterDEX, Binance, Bybit, Hyperliquid) provide perpetual futures exclusively. No spot market feeds are configured."
+        };
+    }
+
     public void ApplyFiltersAndSort()
     {
         Markets.Clear();
         IsSpotUnavailable = false;
 
+        // Scope to venue if specific venue chosen
+        IEnumerable<MarketAssetTickerDto> venueScoped = _rawMarkets;
+        if (SelectedVenue != "ALL")
+        {
+            var vKey = SelectedVenue.ToLowerInvariant();
+            venueScoped = venueScoped.Where(m => m.Venues != null && m.Venues.Keys.Any(k => k.Equals(vKey, StringComparison.OrdinalIgnoreCase)));
+        }
+
         // Spot Market Verification Rule:
         // Do not infer spot solely from ticker suffix. Check actual instrument metadata.
         if (SelectedMarketType == "SPOT")
         {
-            var spotItems = _rawMarkets.Where(m => m.InstrumentType.Equals("SPOT", StringComparison.OrdinalIgnoreCase)).ToList();
+            var spotItems = venueScoped.Where(m => m.InstrumentType.Equals("SPOT", StringComparison.OrdinalIgnoreCase)).ToList();
             if (spotItems.Count == 0)
             {
                 IsSpotUnavailable = true;
-                EmptyMessage = "NO SPOT INSTRUMENTS AVAILABLE ON CONNECTED VENUES.";
+                SpotUnavailableMessage = GetSpotUnavailableExplanation(SelectedVenue);
+                EmptyMessage = $"NO SPOT INSTRUMENTS AVAILABLE ON {(SelectedVenue == "ALL" ? "CONNECTED VENUES" : SelectedVenue)}.";
+                NotifyFilterStateChanged();
                 return;
             }
         }
 
-        IEnumerable<MarketAssetTickerDto> query = _rawMarkets;
+        IEnumerable<MarketAssetTickerDto> query = venueScoped;
 
         // Market type filter
-        if (SelectedMarketType == "PERPETUAL")
+        if (SelectedMarketType == "SPOT")
+        {
+            query = query.Where(m => m.InstrumentType.Equals("SPOT", StringComparison.OrdinalIgnoreCase));
+        }
+        else if (SelectedMarketType == "PERPETUAL")
         {
             query = query.Where(m => m.InstrumentType.Equals("PERPETUAL", StringComparison.OrdinalIgnoreCase));
-        }
-
-        // Venue filter (for local filtering if not handled on backend)
-        if (SelectedVenue != "ALL")
-        {
-            var vKey = SelectedVenue.ToLowerInvariant();
-            query = query.Where(m => m.Venues == null || m.Venues.ContainsKey(vKey));
         }
 
         // Search filter
@@ -320,7 +417,47 @@ public partial class MarketMonitorViewModel : ViewModelBase
         {
             EmptyMessage = !string.IsNullOrWhiteSpace(SearchFilter)
                 ? $"NO INSTRUMENTS MATCHING '{SearchFilter.ToUpperInvariant()}'"
-                : "NO ACTIVE MARKET INSTRUMENTS FOUND.";
+                : $"NO RESULTS MATCH ACTIVE FILTERS (VENUE: {SelectedVenue}, TYPE: {SelectedMarketType}).";
         }
+
+        NotifyFilterStateChanged();
+    }
+
+    private void NotifyFilterStateChanged()
+    {
+        OnPropertyChanged(nameof(HasError));
+        OnPropertyChanged(nameof(IsDataMappingError));
+        OnPropertyChanged(nameof(IsApiUnavailableError));
+        OnPropertyChanged(nameof(ShowSpotUnavailable));
+        OnPropertyChanged(nameof(ShowGenericEmptyNotice));
+        OnPropertyChanged(nameof(ShowDataTable));
+        OnPropertyChanged(nameof(ActiveFilterSummary));
+        OnPropertyChanged(nameof(FilteredMarketsCount));
+
+        OnPropertyChanged(nameof(TypeAllBackground));
+        OnPropertyChanged(nameof(TypeAllForeground));
+        OnPropertyChanged(nameof(TypeAllBorder));
+        OnPropertyChanged(nameof(TypePerpBackground));
+        OnPropertyChanged(nameof(TypePerpForeground));
+        OnPropertyChanged(nameof(TypePerpBorder));
+        OnPropertyChanged(nameof(TypeSpotBackground));
+        OnPropertyChanged(nameof(TypeSpotForeground));
+        OnPropertyChanged(nameof(TypeSpotBorder));
+
+        OnPropertyChanged(nameof(VenueAllBackground));
+        OnPropertyChanged(nameof(VenueAllForeground));
+        OnPropertyChanged(nameof(VenueAllBorder));
+        OnPropertyChanged(nameof(VenueAsterBackground));
+        OnPropertyChanged(nameof(VenueAsterForeground));
+        OnPropertyChanged(nameof(VenueAsterBorder));
+        OnPropertyChanged(nameof(VenueBinanceBackground));
+        OnPropertyChanged(nameof(VenueBinanceForeground));
+        OnPropertyChanged(nameof(VenueBinanceBorder));
+        OnPropertyChanged(nameof(VenueBybitBackground));
+        OnPropertyChanged(nameof(VenueBybitForeground));
+        OnPropertyChanged(nameof(VenueBybitBorder));
+        OnPropertyChanged(nameof(VenueHyperliquidBackground));
+        OnPropertyChanged(nameof(VenueHyperliquidForeground));
+        OnPropertyChanged(nameof(VenueHyperliquidBorder));
     }
 }
