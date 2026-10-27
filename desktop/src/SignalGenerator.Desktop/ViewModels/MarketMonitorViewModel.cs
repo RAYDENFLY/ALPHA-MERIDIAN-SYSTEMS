@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Threading.Tasks;
@@ -13,9 +14,25 @@ public partial class MarketMonitorViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
     private readonly IPollingCoordinator _pollingCoordinator;
+    private readonly List<AlertItemDto> _allAlerts = new();
 
     [ObservableProperty]
     private ObservableCollection<MarketAssetTickerDto> _markets = new();
+
+    [ObservableProperty]
+    private MarketAssetTickerDto? _selectedMarket;
+
+    [ObservableProperty]
+    private ObservableCollection<AlertItemDto> _alerts = new();
+
+    [ObservableProperty]
+    private bool _filterAlertsBySymbol = true;
+
+    [ObservableProperty]
+    private string _alertsHeaderTitle = "■ ACTIVE PRICE ALERTS";
+
+    [ObservableProperty]
+    private string _alertsEmptyMessage = "NO ACTIVE ALERTS CONFIGURED";
 
     [ObservableProperty]
     private string _searchFilter = string.Empty;
@@ -50,6 +67,28 @@ public partial class MarketMonitorViewModel : ViewModelBase
         _pollingCoordinator = pollingCoordinator ?? throw new ArgumentNullException(nameof(pollingCoordinator));
     }
 
+    partial void OnSelectedMarketChanged(MarketAssetTickerDto? value)
+    {
+        UpdateAlertsFilter();
+    }
+
+    partial void OnFilterAlertsBySymbolChanged(bool value)
+    {
+        UpdateAlertsFilter();
+    }
+
+    [RelayCommand]
+    public void ToggleAlertFilter()
+    {
+        FilterAlertsBySymbol = !FilterAlertsBySymbol;
+    }
+
+    [RelayCommand]
+    public void ClearSelectedMarket()
+    {
+        SelectedMarket = null;
+    }
+
     [RelayCommand]
     public async Task LoadMarketMatrixAsync()
     {
@@ -59,7 +98,12 @@ public partial class MarketMonitorViewModel : ViewModelBase
 
         try
         {
-            var res = await _apiClient.GetScreenerMarketsAsync(SearchFilter, page: 1, pageSize: 50);
+            var marketTask = _apiClient.GetScreenerMarketsAsync(SearchFilter, page: 1, pageSize: 50);
+            var alertsTask = _apiClient.GetAlertsAsync();
+
+            await Task.WhenAll(marketTask, alertsTask);
+
+            var res = await marketTask;
             if (res.IsSuccess && res.Value != null)
             {
                 Markets.Clear();
@@ -94,6 +138,14 @@ public partial class MarketMonitorViewModel : ViewModelBase
             {
                 ErrorMessage = res.ErrorMessage ?? "Failed to load market matrix.";
             }
+
+            var alertRes = await alertsTask;
+            if (alertRes.IsSuccess && alertRes.Value != null)
+            {
+                _allAlerts.Clear();
+                _allAlerts.AddRange(alertRes.Value);
+                UpdateAlertsFilter();
+            }
         }
         catch (Exception ex)
         {
@@ -102,6 +154,36 @@ public partial class MarketMonitorViewModel : ViewModelBase
         finally
         {
             IsLoading = false;
+        }
+    }
+
+    public void UpdateAlertsFilter()
+    {
+        Alerts.Clear();
+
+        if (SelectedMarket != null && FilterAlertsBySymbol)
+        {
+            var sym = SelectedMarket.NormalizedSymbol;
+            foreach (var a in _allAlerts)
+            {
+                if (a.Symbol.Equals(sym, StringComparison.OrdinalIgnoreCase))
+                {
+                    Alerts.Add(a);
+                }
+            }
+
+            AlertsHeaderTitle = $"■ PRICE ALERTS // {sym} ({Alerts.Count})";
+            AlertsEmptyMessage = $"NO ACTIVE ALERTS FOR {sym}";
+        }
+        else
+        {
+            foreach (var a in _allAlerts)
+            {
+                Alerts.Add(a);
+            }
+
+            AlertsHeaderTitle = $"■ ALL ACTIVE ALERTS ({Alerts.Count})";
+            AlertsEmptyMessage = "NO ACTIVE ALERTS CONFIGURED";
         }
     }
 }

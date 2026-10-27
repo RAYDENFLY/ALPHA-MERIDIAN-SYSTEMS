@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using SignalGenerator.Desktop.Models;
+using SignalGenerator.Desktop.Serialization;
 
 namespace SignalGenerator.Desktop.Services;
 
@@ -17,11 +18,23 @@ public class ApiClient : IApiClient
 {
     private readonly HttpClient _httpClient;
     private string _baseUrl;
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    public static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    public static JsonSerializerOptions CreateJsonOptions()
     {
-        PropertyNameCaseInsensitive = true,
-        NumberHandling = JsonNumberHandling.AllowReadingFromString
-    };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            NumberHandling = JsonNumberHandling.AllowReadingFromString
+        };
+        options.Converters.Add(new SafeDecimalConverter());
+        options.Converters.Add(new SafeNullableDecimalConverter());
+        options.Converters.Add(new SafeDoubleConverter());
+        options.Converters.Add(new SafeNullableDoubleConverter());
+        options.Converters.Add(new SafeLongConverter());
+        options.Converters.Add(new SafeNullableLongConverter());
+        return options;
+    }
 
     public string BaseUrl => _baseUrl;
 

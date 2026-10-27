@@ -144,7 +144,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="■ PERSONAL TRADING JOURNAL (ISOLATED LOCAL STORAGE)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
-                            <TextBlock Text="Stored securely in %APPDATA%\SignalGeneratorDesktop\personal-journal.db. Zero exchange execution calls." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="Stored securely in %LOCALAPPDATA%\AMS Capital\Alpha Meridian Systems\personal-journal.db. Zero exchange execution calls." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
                         </StackPanel>
                         
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">

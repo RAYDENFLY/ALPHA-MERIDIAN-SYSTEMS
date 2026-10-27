@@ -518,6 +518,15 @@ public class FeedStatusDto
 
     [JsonPropertyName("order_book_age_seconds")]
     public double? OrderBookAgeSeconds { get; set; }
+
+    [JsonPropertyName("candle_age_seconds")]
+    public double? CandleAgeSeconds { get; set; }
+
+    [JsonPropertyName("candle_count")]
+    public int CandleCount { get; set; }
+
+    [JsonPropertyName("error_message")]
+    public string? ErrorMessage { get; set; }
 }
 
 public class StructuralLevelDto
@@ -525,17 +534,49 @@ public class StructuralLevelDto
     [JsonPropertyName("level_id")]
     public string? LevelId { get; set; }
 
+    [JsonPropertyName("level_type")]
+    public string? LevelType { get; set; }
+
     [JsonPropertyName("type")]
-    public string? Type { get; set; }
+    public string? LegacyType
+    {
+        get => LevelType;
+        set { if (LevelType == null) LevelType = value; }
+    }
 
     [JsonPropertyName("price")]
     public decimal Price { get; set; }
 
+    [JsonPropertyName("zone_top")]
+    public decimal? ZoneTop { get; set; }
+
+    [JsonPropertyName("zone_bottom")]
+    public decimal? ZoneBottom { get; set; }
+
+    [JsonPropertyName("created_timestamp_ms")]
+    public long? CreatedTimestampMs { get; set; }
+
+    [JsonPropertyName("confirmed_timestamp_ms")]
+    public long? ConfirmedTimestampMs { get; set; }
+
     [JsonPropertyName("timestamp_ms")]
-    public long TimestampMs { get; set; }
+    public long? LegacyTimestampMs
+    {
+        get => ConfirmedTimestampMs;
+        set { if (ConfirmedTimestampMs == null) ConfirmedTimestampMs = value; }
+    }
 
     [JsonPropertyName("timeframe")]
     public string? Timeframe { get; set; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("source_label")]
+    public string? SourceLabel { get; set; }
+
+    [JsonPropertyName("is_htf")]
+    public bool IsHtf { get; set; }
 
     [JsonPropertyName("is_broken")]
     public bool IsBroken { get; set; }
@@ -546,22 +587,76 @@ public class SweepEventDto
     [JsonPropertyName("event_id")]
     public string? EventId { get; set; }
 
+    [JsonPropertyName("direction")]
+    public string? Direction { get; set; }
+
     [JsonPropertyName("side")]
-    public string? Side { get; set; }
+    public string? LegacySide
+    {
+        get => Direction;
+        set { if (Direction == null) Direction = value; }
+    }
+
+    [JsonIgnore]
+    public string Side => Direction ?? LegacySide ?? "LONG";
 
     [JsonPropertyName("sweep_price")]
     public decimal SweepPrice { get; set; }
 
     [JsonPropertyName("reclaim_price")]
-    public decimal ReclaimPrice { get; set; }
+    public decimal? ReclaimPrice { get; set; }
+
+    [JsonPropertyName("sweep_timestamp_ms")]
+    public long? SweepTimestampMs { get; set; }
 
     [JsonPropertyName("timestamp_ms")]
-    public long TimestampMs { get; set; }
+    public long? LegacyTimestampMs
+    {
+        get => SweepTimestampMs;
+        set { if (SweepTimestampMs == null) SweepTimestampMs = value; }
+    }
+
+    [JsonIgnore]
+    public long TimestampMs => SweepTimestampMs ?? LegacyTimestampMs ?? 0;
+
+    [JsonPropertyName("sweep_depth_usdt")]
+    public decimal? SweepDepthUsdt { get; set; }
 
     [JsonPropertyName("volume_usdt")]
-    public decimal VolumeUsdt { get; set; }
+    public decimal? LegacyVolumeUsdt
+    {
+        get => SweepDepthUsdt;
+        set { if (SweepDepthUsdt == null) SweepDepthUsdt = value; }
+    }
 
-    public string EventTimeUtc => DateTimeOffset.FromUnixTimeMilliseconds(TimestampMs).UtcDateTime.ToString("HH:mm:ss");
+    [JsonIgnore]
+    public decimal VolumeUsdt => SweepDepthUsdt ?? LegacyVolumeUsdt ?? 0m;
+
+    [JsonPropertyName("sweep_depth_bps")]
+    public decimal? SweepDepthBps { get; set; }
+
+    [JsonPropertyName("invalidation_price")]
+    public decimal? InvalidationPrice { get; set; }
+
+    [JsonPropertyName("target_tp1")]
+    public decimal? TargetTp1 { get; set; }
+
+    [JsonPropertyName("target_tp2")]
+    public decimal? TargetTp2 { get; set; }
+
+    [JsonPropertyName("target_sl")]
+    public decimal? TargetSl { get; set; }
+
+    [JsonPropertyName("is_valid_entry_candidate")]
+    public bool IsValidEntryCandidate { get; set; }
+
+    [JsonPropertyName("evidence_text")]
+    public string? EvidenceText { get; set; }
+
+    [JsonIgnore]
+    public string EventTimeUtc => TimestampMs > 0 
+        ? DateTimeOffset.FromUnixTimeMilliseconds(TimestampMs).UtcDateTime.ToString("HH:mm:ss") 
+        : "--:--:--";
 }
 
 public class OrderBookOverlayDto
@@ -576,10 +671,10 @@ public class OrderBookOverlayDto
     public decimal? SpreadBps { get; set; }
 
     [JsonPropertyName("timestamp_ms")]
-    public long TimestampMs { get; set; }
+    public long? TimestampMs { get; set; }
 
     [JsonPropertyName("age_seconds")]
-    public double AgeSeconds { get; set; }
+    public double? AgeSeconds { get; set; }
 
     [JsonPropertyName("total_bid_depth_usdt")]
     public decimal? TotalBidDepthUsdt { get; set; }
@@ -592,6 +687,15 @@ public class OrderBookOverlayDto
 
     [JsonPropertyName("contributing_venues")]
     public List<string> ContributingVenues { get; set; } = new();
+
+    [JsonPropertyName("venue_filter")]
+    public string? VenueFilter { get; set; }
+
+    [JsonPropertyName("venue_name")]
+    public string? VenueName { get; set; }
+
+    [JsonPropertyName("error_message")]
+    public string? ErrorMessage { get; set; }
 }
 
 public class OrderBookWallDto
@@ -599,23 +703,63 @@ public class OrderBookWallDto
     [JsonPropertyName("price")]
     public decimal Price { get; set; }
 
-    [JsonPropertyName("quantity")]
-    public decimal Quantity { get; set; }
+    [JsonPropertyName("depth_usdt")]
+    public decimal? DepthUsdt { get; set; }
 
     [JsonPropertyName("notional_usdt")]
-    public decimal NotionalUsdt { get; set; }
+    public decimal? LegacyNotionalUsdt
+    {
+        get => DepthUsdt;
+        set { if (DepthUsdt == null) DepthUsdt = value; }
+    }
+
+    [JsonIgnore]
+    public decimal NotionalUsdt => DepthUsdt ?? LegacyNotionalUsdt ?? 0m;
+
+    [JsonPropertyName("quantity")]
+    public decimal? Quantity { get; set; }
 
     [JsonPropertyName("side")]
     public string Side { get; set; } = string.Empty;
 
+    [JsonPropertyName("distance_bps")]
+    public decimal? DistanceBps { get; set; }
+
     [JsonPropertyName("distance_pct")]
-    public decimal DistancePct { get; set; }
+    public decimal? LegacyDistancePct
+    {
+        get => DistanceBps.HasValue ? DistanceBps.Value / 100m : null;
+        set { if (!DistanceBps.HasValue && value.HasValue) DistanceBps = value.Value * 100m; }
+    }
+
+    [JsonIgnore]
+    public decimal DistancePct => LegacyDistancePct ?? (DistanceBps.HasValue ? DistanceBps.Value / 100m : 0m);
+
+    [JsonPropertyName("multiple")]
+    public decimal? Multiple { get; set; }
+
+    [JsonPropertyName("persistence_sec")]
+    public double? PersistenceSec { get; set; }
+
+    [JsonPropertyName("is_persistent")]
+    public bool IsPersistent { get; set; }
 
     [JsonPropertyName("venue")]
     public string? Venue { get; set; }
 
+    [JsonPropertyName("venues")]
+    public List<string>? Venues { get; set; }
+
+    [JsonPropertyName("confirmation_tier")]
+    public string? ConfirmationTier { get; set; }
+
+    [JsonIgnore]
     public string FormattedPrice => Price.ToString("F4", CultureInfo.InvariantCulture);
+
+    [JsonIgnore]
     public string FormattedNotional => "$" + NotionalUsdt.ToString("N0", CultureInfo.InvariantCulture);
+
+    [JsonIgnore]
     public string FormattedDistance => (DistancePct >= 0 ? "+" : "") + DistancePct.ToString("F2", CultureInfo.InvariantCulture) + "%";
 }
 

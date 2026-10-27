@@ -20,13 +20,20 @@ public class PersonalJournalService : IPersonalJournalService
         }
         else
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var dir = Path.Combine(appData, "SignalGeneratorDesktop");
-            if (!Directory.Exists(dir))
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var amsDir = Path.Combine(localAppData, "AMS Capital", "Alpha Meridian Systems");
+            Directory.CreateDirectory(amsDir);
+            var modernPath = Path.Combine(amsDir, "personal-journal.db");
+
+            var legacyDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SignalGeneratorDesktop");
+            var legacyPath = Path.Combine(legacyDir, "personal-journal.db");
+
+            if (!File.Exists(modernPath) && File.Exists(legacyPath))
             {
-                Directory.CreateDirectory(dir);
+                try { File.Copy(legacyPath, modernPath, overwrite: false); } catch { }
             }
-            DatabasePath = Path.Combine(dir, "personal-journal.db");
+
+            DatabasePath = modernPath;
         }
 
         _connectionString = new SqliteConnectionStringBuilder

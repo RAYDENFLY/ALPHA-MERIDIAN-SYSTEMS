@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,7 +17,6 @@ public partial class CryptoNewsViewModel : ViewModelBase
     private readonly IRssNewsService _newsService;
     private readonly IPollingCoordinator? _pollingCoordinator;
     private CancellationTokenSource? _cts;
-    private List<NewsArticleDto> _allArticles = new();
 
     [ObservableProperty]
     private string _terminalTitle = "GLOBAL MARKET INTELLIGENCE";
@@ -28,6 +29,15 @@ public partial class CryptoNewsViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _filterCategory = "ALL";
+
+    [ObservableProperty]
+    private string _searchQuery = string.Empty;
+
+    [ObservableProperty]
+    private string _startDateText = string.Empty;
+
+    [ObservableProperty]
+    private string _endDateText = string.Empty;
 
     [ObservableProperty]
     private int _itemCount;
@@ -65,8 +75,7 @@ public partial class CryptoNewsViewModel : ViewModelBase
         try
         {
             var articles = await _newsService.FetchLatestNewsAsync(_cts.Token);
-            _allArticles = articles;
-            ApplyFilter();
+            await ApplyFilterInternalAsync();
             LastWireTimeUtc = DateTime.UtcNow.ToString("HH:mm:ss") + " UTC";
             if (NewsArticles.Count > 0 && SelectedArticle == null)
             {
@@ -85,10 +94,26 @@ public partial class CryptoNewsViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public void FilterByCategory(string category)
+    public async Task FilterByCategoryAsync(string category)
     {
         FilterCategory = category;
-        ApplyFilter();
+        await ApplyFilterInternalAsync();
+    }
+
+    [RelayCommand]
+    public async Task ApplySearchAsync()
+    {
+        await ApplyFilterInternalAsync();
+    }
+
+    [RelayCommand]
+    public async Task ResetFilterAsync()
+    {
+        FilterCategory = "ALL";
+        SearchQuery = string.Empty;
+        StartDateText = string.Empty;
+        EndDateText = string.Empty;
+        await ApplyFilterInternalAsync();
     }
 
     [RelayCommand]
@@ -100,6 +125,26 @@ public partial class CryptoNewsViewModel : ViewModelBase
             SummaryStatusText = article.IsAiSummarized 
                 ? $"[AI SUMMARY - {article.SummaryGeneratedUtc:HH:mm:ss}] {article.AiSummary}" 
                 : $"[SOURCE EXCERPT] {article.Excerpt}";
+        }
+    }
+
+    [RelayCommand]
+    public void OpenSourceArticle()
+    {
+        if (SelectedArticle == null || string.IsNullOrWhiteSpace(SelectedArticle.Url)) return;
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = SelectedArticle.Url,
+                UseShellExecute = true
+            };
+            Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            SummaryStatusText = $"Could not open article source: {ex.Message}";
         }
     }
 
@@ -117,16 +162,46 @@ public partial class CryptoNewsViewModel : ViewModelBase
         }
     }
 
-    private void ApplyFilter()
+    private async Task ApplyFilterInternalAsync()
     {
-        NewsArticles.Clear();
-        foreach (var a in _allArticles)
+        DateTime? startDate = null;
+        if (!string.IsNullOrWhiteSpace(StartDateText) && DateTime.TryParse(StartDateText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var sdt))
         {
-            if (FilterCategory == "ALL" || a.Category.Equals(FilterCategory, StringComparison.OrdinalIgnoreCase))
+            startDate = sdt.ToUniversalTime();
+        }
+
+        DateTime? endDate = null;
+        if (!string.IsNullOrWhiteSpace(EndDateText) && DateTime.TryParse(EndDateText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var edt))
+        {
+            endDate = edt.ToUniversalTime();
+        }
+
+        var filtered = await _newsService.FilterNewsAsync(
+            category: FilterCategory,
+            searchQuery: SearchQuery,
+            startDateUtc: startDate,
+            endDateUtc: endDate);
+
+        NewsArticles.Clear();
+        foreach (var a in filtered)
+        {
+            NewsArticles.Add(a);
+        }
+
+        ItemCount = NewsArticles.Count;
+
+        if (NewsArticles.Count > 0)
+        {
+            if (SelectedArticle == null || !NewsArticles.Contains(SelectedArticle))
             {
-                NewsArticles.Add(a);
+                SelectedArticle = NewsArticles[0];
+                SelectArticle(NewsArticles[0]);
             }
         }
-        ItemCount = NewsArticles.Count;
+        else
+        {
+            SelectedArticle = null;
+            SummaryStatusText = "NO ARTICLES FOUND MATCHING CURRENT FILTER CRITERIA.";
+        }
     }
 }

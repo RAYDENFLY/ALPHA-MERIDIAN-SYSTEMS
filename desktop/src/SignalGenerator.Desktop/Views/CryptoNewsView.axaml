@@ -9,18 +9,18 @@
              x:DataType="vm:CryptoNewsViewModel"
              Background="#000000">
 
-    <Grid RowDefinitions="Auto,Auto,*" Margin="14">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="14">
         
         <!-- Header Banner -->
         <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8" Margin="0,0,0,10">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="■ GLOBAL MARKET INTELLIGENCE // MULTI-MARKET RSS WIRE &amp; AI SUMMARIES" 
+                    <TextBlock Text="■ GLOBAL MARKET INTELLIGENCE // MULTI-MARKET RSS WIRE &amp; PERSISTENT DATABASE" 
                                FontSize="12" 
                                FontWeight="Bold" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#FF9D00" />
-                    <TextBlock Text="Public free RSS feeds (Federal Reserve, CoinDesk, CoinTelegraph) with isolated server-side Groq news summarization" 
+                    <TextBlock Text="Persistent local SQLite storage (%LOCALAPPDATA%\AMS Capital\Alpha Meridian Systems\news.db) with isolated server-side Groq summarization" 
                                FontSize="10" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#8B949E" 
@@ -62,15 +62,80 @@
             </Grid>
         </Border>
 
+        <!-- Search Bar & Date Filter Controls (Phase D) -->
+        <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,6" Margin="0,0,0,10">
+            <Grid ColumnDefinitions="*,130,130,Auto,Auto">
+                <!-- Search Query Box -->
+                <TextBox Grid.Column="0" 
+                         Text="{Binding SearchQuery}" 
+                         PlaceholderText="SEARCH HEADLINES, EXCERPTS, PUBLISHERS, ASSETS..." 
+                         Background="#000000" 
+                         BorderBrush="#242A34" 
+                         Foreground="#F0F4F8" 
+                         FontFamily="Consolas, monospace"
+                         FontSize="10"
+                         CornerRadius="0" 
+                         Padding="6,4"
+                         Margin="0,0,6,0" />
+
+                <!-- Start Date Box -->
+                <TextBox Grid.Column="1" 
+                         Text="{Binding StartDateText}" 
+                         PlaceholderText="START: YYYY-MM-DD" 
+                         Background="#000000" 
+                         BorderBrush="#242A34" 
+                         Foreground="#F0F4F8" 
+                         FontFamily="Consolas, monospace"
+                         FontSize="10"
+                         CornerRadius="0" 
+                         Padding="6,4"
+                         Margin="0,0,6,0" />
+
+                <!-- End Date Box -->
+                <TextBox Grid.Column="2" 
+                         Text="{Binding EndDateText}" 
+                         PlaceholderText="END: YYYY-MM-DD" 
+                         Background="#000000" 
+                         BorderBrush="#242A34" 
+                         Foreground="#F0F4F8" 
+                         FontFamily="Consolas, monospace"
+                         FontSize="10"
+                         CornerRadius="0" 
+                         Padding="6,4"
+                         Margin="0,0,6,0" />
+
+                <!-- Apply Button -->
+                <Button Grid.Column="3" 
+                        Command="{Binding ApplySearchCommand}" 
+                        Classes="terminal-btn"
+                        Padding="10,4"
+                        Margin="0,0,6,0">
+                    <TextBlock Text="APPLY FILTER" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                </Button>
+
+                <!-- Reset Button -->
+                <Button Grid.Column="4" 
+                        Command="{Binding ResetFilterCommand}" 
+                        Classes="terminal-btn"
+                        Padding="10,4">
+                    <TextBlock Text="RESET" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                </Button>
+            </Grid>
+        </Border>
+
         <!-- Main 2-Column Split: Articles Stream + Detailed Panel -->
-        <Grid Grid.Row="2" ColumnDefinitions="*,400">
+        <Grid Grid.Row="3" ColumnDefinitions="*,440">
             
             <!-- Left: Articles List -->
             <Border Grid.Column="0" Margin="0,0,6,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="▶ INCOMING FINANCIAL WIRE STREAM" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                        <TextBlock Text="▶ INCOMING FINANCIAL WIRE STREAM (SQLITE PERSISTED)" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        <TextBlock Grid.Column="1" Text="{Binding ItemCount, StringFormat='{}ARTICLES: {0}'}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    </Grid>
                     
-                    <ListBox ItemsSource="{Binding NewsArticles}"
+                    <ListBox Grid.Row="1"
+                             ItemsSource="{Binding NewsArticles}"
                              SelectedItem="{Binding SelectedArticle}"
                              Background="Transparent"
                              BorderThickness="0">
@@ -95,7 +160,22 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                </StackPanel>
+
+                    <!-- Empty State Notice -->
+                    <Border Grid.Row="1" 
+                            Background="#080A0D" 
+                            BorderBrush="#242A34" 
+                            BorderThickness="1" 
+                            Padding="20"
+                            HorizontalAlignment="Center" 
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding !NewsArticles.Count}">
+                        <StackPanel Spacing="6" HorizontalAlignment="Center">
+                            <TextBlock Text="NO ARTICLES FOUND MATCHING CURRENT FILTER" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                            <TextBlock Text="Adjust category, search query, or date range, or click REFRESH NEWS." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Border>
 
             <!-- Right: Article Detail & AI Summarization -->
@@ -126,16 +206,30 @@
                         <TextBlock Text="SOURCE EXCERPT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
                         <TextBlock Text="{Binding SelectedArticle.Excerpt, TargetNullValue='Select an article to view content.'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" TextWrapping="Wrap" />
 
-                        <Button Command="{Binding GenerateSummaryCommand}" 
-                                Classes="terminal-btn"
-                                Padding="10,6"
-                                Margin="0,8,0,0"
-                                HorizontalAlignment="Stretch">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
-                                <TextBlock Text="⚡" FontSize="11" Foreground="#FF9D00" />
-                                <TextBlock Text="GENERATE CONTEXTUAL SUMMARY" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
-                            </StackPanel>
-                        </Button>
+                        <!-- Action Buttons: Generate Summary & Open Source (Phase D) -->
+                        <Grid ColumnDefinitions="*,*" Margin="0,8,0,0">
+                            <Button Grid.Column="0"
+                                    Command="{Binding GenerateSummaryCommand}" 
+                                    Classes="terminal-btn"
+                                    Padding="8,6"
+                                    Margin="0,0,4,0">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="⚡" FontSize="11" Foreground="#FF9D00" />
+                                    <TextBlock Text="AI SUMMARY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </StackPanel>
+                            </Button>
+
+                            <Button Grid.Column="1"
+                                    Command="{Binding OpenSourceArticleCommand}" 
+                                    Classes="terminal-btn"
+                                    Padding="8,6"
+                                    Margin="4,0,0,0">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="↗" FontSize="11" Foreground="#448AFF" FontWeight="Bold" />
+                                    <TextBlock Text="OPEN SOURCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
 
                         <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="8" Margin="0,4,0,0">
                             <TextBlock Text="{Binding SummaryStatusText}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FFB300" TextWrapping="Wrap" />

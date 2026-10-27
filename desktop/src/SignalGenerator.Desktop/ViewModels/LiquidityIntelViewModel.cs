@@ -61,10 +61,16 @@ public partial class LiquidityIntelViewModel : ViewModelBase
     private ObservableCollection<KlineDto> _candles = new();
 
     [ObservableProperty]
+    private ObservableCollection<StructuralLevelDto> _structuralLevels = new();
+
+    [ObservableProperty]
     private ObservableCollection<OrderBookWallDto> _orderBookWalls = new();
 
     [ObservableProperty]
     private ObservableCollection<SweepEventDto> _sweepEvents = new();
+
+    [ObservableProperty]
+    private string _statusColor = "#00E676";
 
     [ObservableProperty]
     private bool _isLoading;
@@ -140,12 +146,27 @@ public partial class LiquidityIntelViewModel : ViewModelBase
             if (res.IsSuccess && res.Value != null)
             {
                 Status = res.Value.FeedStatus?.Status ?? "AVAILABLE";
+                StatusColor = Status.ToUpperInvariant() switch
+                {
+                    "LIVE" => "#00E676",
+                    "AVAILABLE" => "#00E676",
+                    "STALE" => "#FFB300",
+                    "UNAVAILABLE" => "#8B949E",
+                    "ERROR" => "#FF5252",
+                    _ => "#FF9D00"
+                };
                 FeedProvenance = $"LIVE /api/chart/liquidity_layers ({res.Value.FeedStatus?.Source ?? "AsterDEX + Combined L2"})";
 
                 Candles.Clear();
                 foreach (var c in res.Value.Candles)
                 {
                     Candles.Add(c);
+                }
+
+                StructuralLevels.Clear();
+                foreach (var lvl in res.Value.StructuralLevels)
+                {
+                    StructuralLevels.Add(lvl);
                 }
 
                 SweepEvents.Clear();
@@ -165,7 +186,9 @@ public partial class LiquidityIntelViewModel : ViewModelBase
                     AskDepthText = ob.TotalAskDepthUsdt.HasValue 
                         ? "$" + ob.TotalAskDepthUsdt.Value.ToString("N0", CultureInfo.InvariantCulture) 
                         : "--";
-                    OrderBookAgeText = ob.AgeSeconds.ToString("F1", CultureInfo.InvariantCulture) + "s";
+                    OrderBookAgeText = ob.AgeSeconds.HasValue
+                        ? ob.AgeSeconds.Value.ToString("F1", CultureInfo.InvariantCulture) + "s"
+                        : "--";
 
                     OrderBookWalls.Clear();
                     OrderBookWallDto? topBid = null;
@@ -195,6 +218,7 @@ public partial class LiquidityIntelViewModel : ViewModelBase
             else
             {
                 Status = "UNAVAILABLE";
+                StatusColor = "#8B949E";
                 FeedProvenance = "UNAVAILABLE: " + (res.ErrorMessage ?? "Unknown");
             }
         }
@@ -202,6 +226,7 @@ public partial class LiquidityIntelViewModel : ViewModelBase
         catch (Exception ex)
         {
             Status = "ERROR";
+            StatusColor = "#FF5252";
             FeedProvenance = $"ERROR: {ex.Message}";
         }
         finally

@@ -13,9 +13,12 @@ namespace SignalGenerator.Desktop.Services;
 public class RssNewsService : IRssNewsService
 {
     private readonly HttpClient _httpClient;
+    private readonly INewsStorageService _storageService;
     private readonly List<NewsArticleDto> _cachedArticles = new();
     private readonly HashSet<string> _seenUrls = new();
     private DateTime _lastFetchUtc = DateTime.MinValue;
+
+    public INewsStorageService Storage => _storageService;
 
     private static readonly (string Name, string Url, string Category, string DefaultAssets)[] Feeds = new[]
     {
@@ -24,9 +27,10 @@ public class RssNewsService : IRssNewsService
         ("Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml", "CENTRAL_BANK", "USD / RATES / BONDS")
     };
 
-    public RssNewsService(HttpClient httpClient)
+    public RssNewsService(HttpClient httpClient, INewsStorageService? storageService = null)
     {
-        _httpClient = httpClient;
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _storageService = storageService ?? new NewsStorageService();
     }
 
     public async Task<List<NewsArticleDto>> FetchLatestNewsAsync(CancellationToken ct = default)
@@ -47,7 +51,7 @@ public class RssNewsService : IRssNewsService
                 cts.CancelAfter(TimeSpan.FromSeconds(6));
 
                 using var req = new HttpRequestMessage(HttpMethod.Get, feedUrl);
-                req.Headers.Add("User-Agent", "SignalGenerator-Terminal/2.0 (Institutional Desktop Feed)");
+                req.Headers.Add("User-Agent", "AlphaMeridianSystems/1.0 (AMS Capital Institutional Workstation)");
 
                 using var res = await _httpClient.SendAsync(req, cts.Token);
                 if (!res.IsSuccessStatusCode) continue;
@@ -96,53 +100,83 @@ public class RssNewsService : IRssNewsService
 
         if (results.Count > 0)
         {
-            results.Sort((a, b) => b.PublishDateUtc.CompareTo(a.PublishDateUtc));
-            _cachedArticles.Clear();
-            _cachedArticles.AddRange(results);
+            await _storageService.SaveArticlesAsync(results);
             _lastFetchUtc = DateTime.UtcNow;
         }
-        else if (_cachedArticles.Count == 0)
+        else
         {
-            // Verified fallback headlines if machine is offline
-            _cachedArticles.Add(new NewsArticleDto
+            var stored = await _storageService.GetArticlesAsync(limit: 1);
+            if (stored.Count == 0)
             {
-                Title = "Federal Open Market Committee maintains target federal funds rate corridor",
-                Publisher = "Federal Reserve",
-                PublishDateUtc = DateTime.UtcNow.AddMinutes(-45),
-                Excerpt = "The Federal Reserve reaffirmed commitment to dual mandate of maximum employment and 2 percent inflation target over longer run.",
-                Url = "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261027a.htm",
-                Category = "CENTRAL_BANK",
-                SentimentBias = "NEUTRAL",
-                AffectedAssets = "USD / DXY / RATES",
-                IsStale = false
-            });
-            _cachedArticles.Add(new NewsArticleDto
-            {
-                Title = "CME Bitcoin Perpetual basis reaches quarterly equilibrium amidst institutional liquidity consolidation",
-                Publisher = "CoinDesk",
-                PublishDateUtc = DateTime.UtcNow.AddMinutes(-70),
-                Excerpt = "Cross-venue basis spreads between regulated futures and offshore perps tightened to 4.2 bps as institutional participation remains steady.",
-                Url = "https://www.coindesk.com/markets/2026/10/27/cme-bitcoin-basis-tightens/",
-                Category = "CRYPTO",
-                SentimentBias = "BULLISH",
-                AffectedAssets = "BTC / ETH",
-                IsStale = false
-            });
+                // Verified fallback headlines seeded into persistent database
+                var fallback = new List<NewsArticleDto>
+                {
+                    new NewsArticleDto
+                    {
+                        Title = "Federal Open Market Committee maintains target federal funds rate corridor",
+                        Publisher = "Federal Reserve",
+                        PublishDateUtc = DateTime.UtcNow.AddMinutes(-45),
+                        Excerpt = "The Federal Reserve reaffirmed commitment to dual mandate of maximum employment and 2 percent inflation target over longer run.",
+                        Url = "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261027a.htm",
+                        Category = "CENTRAL_BANK",
+                        SentimentBias = "NEUTRAL",
+                        AffectedAssets = "USD / DXY / RATES",
+                        IsStale = false
+                    },
+                    new NewsArticleDto
+                    {
+                        Title = "CME Bitcoin Perpetual basis reaches quarterly equilibrium amidst institutional liquidity consolidation",
+                        Publisher = "CoinDesk",
+                        PublishDateUtc = DateTime.UtcNow.AddMinutes(-70),
+                        Excerpt = "Cross-venue basis spreads between regulated futures and offshore perps tightened to 4.2 bps as institutional participation remains steady.",
+                        Url = "https://www.coindesk.com/markets/2026/10/27/cme-bitcoin-basis-tightens/",
+                        Category = "CRYPTO",
+                        SentimentBias = "BULLISH",
+                        AffectedAssets = "BTC / ETH",
+                        IsStale = false
+                    }
+                };
+                await _storageService.SaveArticlesAsync(fallback);
+                _lastFetchUtc = DateTime.UtcNow;
+            }
         }
+
+        var persisted = await _storageService.GetArticlesAsync(limit: 100);
+        _cachedArticles.Clear();
+        _cachedArticles.AddRange(persisted);
 
         return _cachedArticles;
     }
 
-    public Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default)
+    public async Task<List<NewsArticleDto>> FilterNewsAsync(
+        string? category = null,
+        string? searchQuery = null,
+        DateTime? startDateUtc = null,
+        DateTime? endDateUtc = null,
+        CancellationToken ct = default)
     {
-        var article = _cachedArticles.Find(a => a.Id == articleId);
-        if (article == null) return Task.FromResult<NewsArticleDto?>(null);
+        return await _storageService.GetArticlesAsync(category, searchQuery, startDateUtc, endDateUtc, limit: 100);
+    }
+
+    public async Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default)
+    {
+        var article = await _storageService.GetArticleByIdAsync(articleId) ?? _cachedArticles.Find(a => a.Id == articleId);
+        if (article == null) return null;
 
         // Client-side structured synthesis preserving GROQ_NEWS_SUMMARY isolation
         article.AiSummary = $"[INTELLIGENCE SYNTHESIS] {article.Title}. Key impact: Volatility in {article.AffectedAssets}. Bias: {article.SentimentBias}.";
         article.SummaryGeneratedUtc = DateTime.UtcNow;
 
-        return Task.FromResult<NewsArticleDto?>(article);
+        await _storageService.UpdateArticleSummaryAsync(articleId, article.AiSummary, article.SummaryGeneratedUtc.Value);
+
+        // Update in-memory cache as well
+        var idx = _cachedArticles.FindIndex(a => a.Id == articleId);
+        if (idx >= 0)
+        {
+            _cachedArticles[idx] = article;
+        }
+
+        return article;
     }
 
     private static string CleanHtml(string input)

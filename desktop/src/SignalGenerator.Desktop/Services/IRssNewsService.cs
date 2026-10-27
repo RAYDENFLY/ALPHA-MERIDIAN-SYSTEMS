@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,6 +8,13 @@ namespace SignalGenerator.Desktop.Services;
 
 public interface IRssNewsService
 {
+    INewsStorageService Storage { get; }
     Task<List<NewsArticleDto>> FetchLatestNewsAsync(CancellationToken ct = default);
+    Task<List<NewsArticleDto>> FilterNewsAsync(
+        string? category = null,
+        string? searchQuery = null,
+        DateTime? startDateUtc = null,
+        DateTime? endDateUtc = null,
+        CancellationToken ct = default);
     Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default);
 }

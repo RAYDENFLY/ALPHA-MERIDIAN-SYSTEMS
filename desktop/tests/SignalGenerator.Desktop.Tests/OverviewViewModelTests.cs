@@ -89,12 +89,17 @@ public class OverviewViewModelTests
 
     private class MockRssNewsService : IRssNewsService
     {
+        public INewsStorageService Storage { get; } = null!;
+
         public Task<List<NewsArticleDto>> FetchLatestNewsAsync(CancellationToken ct = default) =>
             Task.FromResult(new List<NewsArticleDto>
             {
                 new() { Title = "Bitcoin Stabilizes Near 80k As Institutional Liquidity Returns", Publisher = "CoinDesk", Url = "https://coindesk.com/test", PublishDateUtc = DateTime.UtcNow },
                 new() { Title = "Federal Reserve Holds Policy Steady Amid Economic Invariants", Publisher = "Federal Reserve", Url = "https://federalreserve.gov/test", PublishDateUtc = DateTime.UtcNow }
             });
+
+        public Task<List<NewsArticleDto>> FilterNewsAsync(string? category = null, string? searchQuery = null, DateTime? startDateUtc = null, DateTime? endDateUtc = null, CancellationToken ct = default) =>
+            Task.FromResult(new List<NewsArticleDto>());
 
         public Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default) =>
             Task.FromResult<NewsArticleDto?>(null);

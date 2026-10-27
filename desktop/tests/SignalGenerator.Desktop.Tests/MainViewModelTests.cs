@@ -69,7 +69,9 @@ public class MainViewModelTests
 
     private class MockRssNewsService : IRssNewsService
     {
+        public INewsStorageService Storage { get; } = null!;
         public Task<List<NewsArticleDto>> FetchLatestNewsAsync(CancellationToken ct = default) => Task.FromResult(new List<NewsArticleDto>());
+        public Task<List<NewsArticleDto>> FilterNewsAsync(string? category = null, string? searchQuery = null, DateTime? startDateUtc = null, DateTime? endDateUtc = null, CancellationToken ct = default) => Task.FromResult(new List<NewsArticleDto>());
         public Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default) => Task.FromResult<NewsArticleDto?>(null);
     }
 

@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SignalGenerator.Desktop.Models;
+using SignalGenerator.Desktop.Services;
+using SignalGenerator.Desktop.Serialization;
 using Xunit;
 
 namespace SignalGenerator.Desktop.Tests;
@@ -243,5 +245,133 @@ public class DtoSerializationTests
         Assert.True(item.CrossListed);
         Assert.Equal(3, item.VenueCount);
         Assert.Equal(1.2m, item.BestSpreadBps);
+    }
+
+    [Fact]
+    public void LiquidityLayersDto_DeserializesCorrectly_WithNullReclaimPriceAndStringNumbers()
+    {
+        const string json = """
+        {
+          "symbol": "BTCUSDT",
+          "timeframe": "1h",
+          "venue_source": "combined",
+          "feed_status": {
+            "source": "AsterDEX Klines & Combined L2 Depth",
+            "status": "LIVE",
+            "is_stale": false,
+            "order_book_status": "AVAILABLE",
+            "order_book_age_seconds": 1.25,
+            "candle_age_seconds": 45.0,
+            "candle_count": 100
+          },
+          "candles": [
+            {
+              "time": 1700000000,
+              "open": "95000.50",
+              "high": 95500.0,
+              "low": 94800.25,
+              "close": "95200.00",
+              "volume": "125.45",
+              "quote_volume": "11942850.0",
+              "timestamp_ms": 1700000000000,
+              "datetime_utc": "2026-10-27T12:00:00Z"
+            }
+          ],
+          "structural_levels": [
+            {
+              "level_id": "lvl_btc_1",
+              "level_type": "SUPPORT",
+              "price": 94500.00,
+              "zone_top": 94600.00,
+              "zone_bottom": 94400.00,
+              "created_timestamp_ms": 1699900000000,
+              "confirmed_timestamp_ms": 1699903600000,
+              "source_label": "1H Structural Swing Low",
+              "status": "ACTIVE",
+              "is_htf": false,
+              "is_broken": false
+            }
+          ],
+          "sweep_events": [
+            {
+              "event_id": "swp_btc_101",
+              "direction": "LONG",
+              "sweep_price": 94350.25,
+              "reclaim_price": null,
+              "sweep_timestamp_ms": 1700003600000,
+              "sweep_depth_usdt": 149.75,
+              "sweep_depth_bps": 15.8,
+              "invalidation_price": 94200.0,
+              "target_tp1": 95800.0,
+              "target_tp2": null,
+              "target_sl": 94150.0,
+              "is_valid_entry_candidate": true,
+              "evidence_text": "SSL swept with clean wick rejection."
+            }
+          ],
+          "order_book_overlay": {
+            "status": "AVAILABLE",
+            "mid_price": 95100.0,
+            "spread_bps": 0.45,
+            "timestamp_ms": 1700004000000,
+            "age_seconds": 0.5,
+            "total_bid_depth_usdt": 12500000.0,
+            "total_ask_depth_usdt": 11800000.0,
+            "walls": [
+              {
+                "side": "BID",
+                "price": 94000.0,
+                "depth_usdt": 3500000.0,
+                "multiple": 4.5,
+                "distance_bps": 115.6,
+                "persistence_sec": 120.0,
+                "is_persistent": true,
+                "venues": ["asterdex", "binance"],
+                "confirmation_tier": "DUAL_CONFIRMED"
+              }
+            ],
+            "contributing_venues": ["asterdex", "binance", "bybit"]
+          }
+        }
+        """;
+
+        var dto = JsonSerializer.Deserialize<LiquidityLayersResponseDto>(json, ApiClient.JsonOptions);
+
+        Assert.NotNull(dto);
+        Assert.Equal("BTCUSDT", dto.Symbol);
+        Assert.Equal("1h", dto.Timeframe);
+        Assert.NotNull(dto.FeedStatus);
+        Assert.Equal("LIVE", dto.FeedStatus.Status);
+
+        Assert.Single(dto.Candles);
+        var candle = dto.Candles[0];
+        Assert.Equal(95000.50m, candle.Open);
+        Assert.Equal(95200.00m, candle.Close);
+        Assert.Equal(125.45m, candle.Volume);
+
+        Assert.Single(dto.StructuralLevels);
+        var lvl = dto.StructuralLevels[0];
+        Assert.Equal("lvl_btc_1", lvl.LevelId);
+        Assert.Equal("SUPPORT", lvl.LevelType);
+        Assert.Equal(94500.00m, lvl.Price);
+
+        Assert.Single(dto.SweepEvents);
+        var swp = dto.SweepEvents[0];
+        Assert.Equal("swp_btc_101", swp.EventId);
+        Assert.Equal("LONG", swp.Side);
+        Assert.Equal(94350.25m, swp.SweepPrice);
+        Assert.Null(swp.ReclaimPrice);
+        Assert.Equal(149.75m, swp.VolumeUsdt);
+        Assert.Equal(95800.0m, swp.TargetTp1);
+        Assert.Null(swp.TargetTp2);
+
+        Assert.NotNull(dto.OrderBookOverlay);
+        Assert.Single(dto.OrderBookOverlay.Walls);
+        var wall = dto.OrderBookOverlay.Walls[0];
+        Assert.Equal("BID", wall.Side);
+        Assert.Equal(94000.0m, wall.Price);
+        Assert.Equal(3500000.0m, wall.NotionalUsdt);
+        Assert.Equal(1.156m, wall.DistancePct, 3);
+        Assert.True(wall.IsPersistent);
     }
 }

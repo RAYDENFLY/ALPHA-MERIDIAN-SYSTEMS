@@ -15,12 +15,12 @@
         <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8" Margin="0,0,0,10">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="■ MARKET MONITOR // REAL-TIME PERPETUAL FUTURES MATRIX" 
+                    <TextBlock Text="■ MARKET MONITOR &amp; UNIFIED PRICE ALERTS // REAL-TIME PERPETUAL FUTURES MATRIX" 
                                FontSize="12" 
                                FontWeight="Bold" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#FF9D00" />
-                    <TextBlock Text="Cross-venue normalized prices, 24h turnover, orderbook spreads, and open interest aggregation" 
+                    <TextBlock Text="Cross-venue normalized prices, 24h turnover, orderbook spreads, and synchronized adjacent price alerts" 
                                FontSize="10" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#8B949E" 
@@ -103,71 +103,164 @@
             </Grid>
         </Border>
 
-        <!-- Terminal Dense Data Grid Table -->
-        <Border Grid.Row="3" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
-            <Grid RowDefinitions="Auto,*">
-                
-                <!-- Table Header Row -->
-                <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="10,6">
-                    <Grid ColumnDefinitions="140,120,130,130,110,80,90,*">
-                        <TextBlock Grid.Column="0" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Grid.Column="1" Text="MARK PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
-                        <TextBlock Grid.Column="2" Text="24H VOL (USDT)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
-                        <TextBlock Grid.Column="3" Text="OPEN INTEREST" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
-                        <TextBlock Grid.Column="4" Text="24H CHANGE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
-                        <TextBlock Grid.Column="5" Text="VENUES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
-                        <TextBlock Grid.Column="6" Text="BEST SPREAD" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
-                        <TextBlock Grid.Column="7" Text="SYNC AGE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,10,0" />
+        <!-- Main Split View: Left = Market Matrix DataGrid, Right = Adjacent Price Alerts (Phase F) -->
+        <Grid Grid.Row="3" ColumnDefinitions="*,390">
+            
+            <!-- Left: Terminal Dense Data Grid Table -->
+            <Border Grid.Column="0" Margin="0,0,6,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
+                <Grid RowDefinitions="Auto,*">
+                    
+                    <!-- Table Header Row -->
+                    <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="10,6">
+                        <Grid ColumnDefinitions="130,110,120,120,100,70,80,*">
+                            <TextBlock Grid.Column="0" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="1" Text="MARK PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="2" Text="24H VOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="3" Text="OPEN INTEREST" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="4" Text="24H CHANGE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="5" Text="VENUES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="6" Text="BEST SPREAD" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="7" Text="SYNC AGE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,10,0" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Data List Items -->
+                    <ListBox Grid.Row="1" 
+                             ItemsSource="{Binding Markets}" 
+                             SelectedItem="{Binding SelectedMarket}"
+                             Background="Transparent" 
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:MarketAssetTickerDto">
+                                <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,5">
+                                    <Grid ColumnDefinitions="130,110,120,120,100,70,80,*">
+                                        
+                                        <!-- Symbol Column -->
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding NormalizedSymbol}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                            <Border IsVisible="{Binding CrossListed}" Background="#1F1400" BorderBrush="#FF9D00" BorderThickness="1" Padding="3,0" VerticalAlignment="Center">
+                                                <TextBlock Text="MULTI" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Price -->
+                                        <TextBlock Grid.Column="1" Text="{Binding BenchmarkPrice, StringFormat='${0:F4}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#F0F4F8" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                        <!-- Volume -->
+                                        <TextBlock Grid.Column="2" Text="{Binding TotalVolume24hUsdt, StringFormat='${0:N0}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                        <!-- Open Interest -->
+                                        <TextBlock Grid.Column="3" Text="{Binding TotalOpenInterestUsdt, StringFormat='${0:N0}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                        <!-- 24h Change -->
+                                        <TextBlock Grid.Column="4" Text="{Binding PriceChange24hPct, StringFormat='{}{0:+0.00;-0.00}%'}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                        <!-- Venues -->
+                                        <TextBlock Grid.Column="5" Text="{Binding VenueCount}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                        <!-- Spread -->
+                                        <TextBlock Grid.Column="6" Text="{Binding BestSpreadBps, StringFormat='{}{0:F1} bps'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                        <!-- Freshness -->
+                                        <TextBlock Grid.Column="7" Text="{Binding DataFreshnessSeconds, StringFormat='{}{0:F1}s'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                </Grid>
+            </Border>
+
+            <!-- Right: Adjacent Price Alerts Workspace (Phase F) -->
+            <Border Grid.Column="1" Margin="6,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10">
+                <Grid RowDefinitions="Auto,Auto,*">
+                    
+                    <!-- Alerts Workspace Header -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding AlertsHeaderTitle}" 
+                                   FontSize="11" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#FF9D00" 
+                                   VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                            <Button Command="{Binding ToggleAlertFilterCommand}" 
+                                    Classes="terminal-btn" 
+                                    Padding="6,2">
+                                <TextBlock Text="TOGGLE FILTER" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                            </Button>
+                            <Button Command="{Binding ClearSelectedMarketCommand}" 
+                                    Classes="terminal-btn" 
+                                    Padding="6,2">
+                                <TextBlock Text="CLEAR" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            </Button>
+                        </StackPanel>
                     </Grid>
-                </Border>
 
-                <!-- Data List Items -->
-                <ListBox Grid.Row="1" 
-                         ItemsSource="{Binding Markets}" 
-                         Background="Transparent" 
-                         BorderThickness="0">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:MarketAssetTickerDto">
-                            <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,5">
-                                <Grid ColumnDefinitions="140,120,130,130,110,80,90,*">
-                                    
-                                    <!-- Symbol Column -->
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding NormalizedSymbol}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
-                                        <Border IsVisible="{Binding CrossListed}" Background="#1F1400" BorderBrush="#FF9D00" BorderThickness="1" Padding="3,0" VerticalAlignment="Center">
-                                            <TextBlock Text="MULTI" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    <!-- Alert Table Header -->
+                    <Border Grid.Row="1" Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="6,4" Margin="0,0,0,6">
+                        <Grid ColumnDefinitions="80,60,90,70,*">
+                            <TextBlock Grid.Column="0" Text="SYMBOL" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="1" Text="DIR" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="2" Text="TARGET" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="3" Text="STATUS" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="4" Text="ALERT ID" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Alerts List -->
+                    <ListBox Grid.Row="2"
+                             ItemsSource="{Binding Alerts}" 
+                             Background="Transparent" 
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:AlertItemDto">
+                                <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="4,4">
+                                    <Grid ColumnDefinitions="80,60,90,70,*">
+                                        <TextBlock Grid.Column="0" Text="{Binding Symbol}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="3,1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Direction}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
                                         </Border>
-                                    </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding TargetPrice, StringFormat='${0:F4}'}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Status}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#448AFF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="4" Text="{Binding AlertId}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
 
-                                    <!-- Price -->
-                                    <TextBlock Grid.Column="1" Text="{Binding BenchmarkPrice, StringFormat='${0:F4}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#F0F4F8" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    <!-- Empty State Notice (Phase F explicit requirement: NO ACTIVE ALERTS FOR {SYMBOL}) -->
+                    <Border Grid.Row="2" 
+                            Background="#080A0D" 
+                            BorderBrush="#242A34" 
+                            BorderThickness="1" 
+                            Padding="16" 
+                            HorizontalAlignment="Center" 
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding !Alerts.Count}">
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding AlertsEmptyMessage}" 
+                                       FontSize="10" 
+                                       FontWeight="Bold" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#FF9D00" 
+                                       HorizontalAlignment="Center" />
+                            <TextBlock Text="Select another symbol or click TOGGLE FILTER to view all alerts." 
+                                       FontSize="8" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#8B949E" 
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
 
-                                    <!-- Volume -->
-                                    <TextBlock Grid.Column="2" Text="{Binding TotalVolume24hUsdt, StringFormat='${0:N0}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
 
-                                    <!-- Open Interest -->
-                                    <TextBlock Grid.Column="3" Text="{Binding TotalOpenInterestUsdt, StringFormat='${0:N0}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
-
-                                    <!-- 24h Change -->
-                                    <TextBlock Grid.Column="4" Text="{Binding PriceChange24hPct, StringFormat='{}{0:+0.00;-0.00}%'}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" VerticalAlignment="Center" />
-
-                                    <!-- Venues -->
-                                    <TextBlock Grid.Column="5" Text="{Binding VenueCount}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Center" VerticalAlignment="Center" />
-
-                                    <!-- Spread -->
-                                    <TextBlock Grid.Column="6" Text="{Binding BestSpreadBps, StringFormat='{}{0:F1} bps'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
-
-                                    <!-- Freshness -->
-                                    <TextBlock Grid.Column="7" Text="{Binding DataFreshnessSeconds, StringFormat='{}{0:F1}s'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
-            </Grid>
-        </Border>
+        </Grid>
 
     </Grid>
 
