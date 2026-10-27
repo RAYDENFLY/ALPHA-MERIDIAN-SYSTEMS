@@ -1,8 +1,10 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using SignalGenerator.Desktop.Models;
 
 namespace SignalGenerator.Desktop.Views;
 
@@ -50,5 +52,18 @@ public partial class VelaChartHostView : UserControl
     {
         ErrorText.Text = message;
         ErrorPanel.IsVisible = true;
+    }
+
+    public bool SendSnapshot(VelaBridgeMessage message)
+    {
+        if (message is null || message.Version != 1 || !string.Equals(message.Type, "vela.snapshot", StringComparison.Ordinal)) return false;
+        var json = JsonSerializer.Serialize(message);
+        var escaped = JsonSerializer.Serialize(json);
+        try
+        {
+            Browser.InvokeScript($"window.amsReceiveBridgeMessage && window.amsReceiveBridgeMessage(JSON.parse({escaped}));");
+            return true;
+        }
+        catch { return false; }
     }
 }

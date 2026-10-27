@@ -13,6 +13,21 @@
     let autoRefresh = true;
     let pollInterval = null;
     let currentBars = [];
+    let productionBridge = false;
+    let latestBridgeSequence = -1;
+
+    // Production host contract: C# owns GET polling and injects versioned snapshots.
+    window.amsReceiveBridgeMessage = function (message) {
+        if (!message || message.version !== 1 || message.type !== 'vela.snapshot') return;
+        if (message.sequence <= latestBridgeSequence) return;
+        latestBridgeSequence = message.sequence;
+        productionBridge = true;
+        if (!Array.isArray(message.candles)) return;
+        currentBars = message.candles;
+        if (chartInstance && typeof chartInstance.setData === 'function') chartInstance.setData(currentBars);
+        if (currentBars.length) updateOHLCReadout(currentBars[currentBars.length - 1]);
+        setStatus(message.state === 'LIVE', `C# BRIDGE v${message.version} / ${message.state}`);
+    };
 
     // Indicator handles
     const indicatorHandles = {
@@ -386,6 +401,7 @@
     }
 
     function startPolling() {
+        if (productionBridge) return;
         if (pollInterval) clearInterval(pollInterval);
 
         pollInterval = setInterval(async () => {
