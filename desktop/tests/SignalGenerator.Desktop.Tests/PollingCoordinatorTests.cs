@@ -10,15 +10,12 @@ namespace SignalGenerator.Desktop.Tests;
 
 public class PollingCoordinatorTests
 {
-    private class FakeApiClient : IApiClient
+    private class FakeApiClient : TestMockApiClient
     {
-        public string BaseUrl { get; private set; } = "http://127.0.0.1:8000";
         public bool ShouldFailStatus { get; set; }
         public int StatusPollCount { get; private set; }
 
-        public void SetBaseUrl(string baseUrl) => BaseUrl = baseUrl;
-
-        public Task<ApiResult<SystemStatusDto>> GetStatusAsync(CancellationToken ct = default)
+        public override Task<ApiResult<SystemStatusDto>> GetStatusAsync(CancellationToken ct = default)
         {
             StatusPollCount++;
             if (ShouldFailStatus)
@@ -39,7 +36,7 @@ public class PollingCoordinatorTests
             }));
         }
 
-        public Task<ApiResult<LiveSessionEnvelopeDto>> GetLiveSessionAsync(CancellationToken ct = default)
+        public override Task<ApiResult<LiveSessionEnvelopeDto>> GetLiveSessionAsync(CancellationToken ct = default)
         {
             return Task.FromResult(ApiResult<LiveSessionEnvelopeDto>.Success(new LiveSessionEnvelopeDto
             {
@@ -52,7 +49,7 @@ public class PollingCoordinatorTests
             }));
         }
 
-        public Task<ApiResult<JournalSummaryDto>> GetJournalSummaryAsync(CancellationToken ct = default)
+        public override Task<ApiResult<JournalSummaryDto>> GetJournalSummaryAsync(CancellationToken ct = default)
         {
             return Task.FromResult(ApiResult<JournalSummaryDto>.Success(new JournalSummaryDto
             {
@@ -60,51 +57,6 @@ public class PollingCoordinatorTests
                 TotalClosedTrades = 8,
                 WinRatePct = 25.0m
             }));
-        }
-
-        public Task<ApiResult<ScreenerResponseDto>> GetScreenerMarketsAsync(string? search = null, int page = 1, int pageSize = 25, CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<ScreenerResponseDto>.Success(new ScreenerResponseDto()));
-        }
-
-        public Task<ApiResult<List<string>>> GetSymbolsAsync(CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<List<string>>.Success(new List<string> { "BZUSDT", "PLAYUSDT" }));
-        }
-
-        public Task<ApiResult<AutotraderScreeningLogResponseDto>> GetScreeningLogAsync(CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<AutotraderScreeningLogResponseDto>.Success(new AutotraderScreeningLogResponseDto()));
-        }
-
-        public Task<ApiResult<List<AlertItemDto>>> GetAlertsAsync(CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<List<AlertItemDto>>.Success(new List<AlertItemDto>()));
-        }
-
-        public Task<ApiResult<RetailPositioningResponseDto>> GetRetailPositioningAsync(string symbol, CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<RetailPositioningResponseDto>.Success(new RetailPositioningResponseDto { Symbol = symbol }));
-        }
-
-        public Task<ApiResult<JournalTradesResponseDto>> GetJournalTradesAsync(int limit = 50, CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<JournalTradesResponseDto>.Success(new JournalTradesResponseDto()));
-        }
-
-        public Task<ApiResult<ChartSymbolsResponseDto>> GetChartSymbolsAsync(CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<ChartSymbolsResponseDto>.Success(new ChartSymbolsResponseDto()));
-        }
-
-        public Task<ApiResult<LiquidityLayersResponseDto>> GetLiquidityLayersAsync(string symbol, string timeframe = "1h", CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<LiquidityLayersResponseDto>.Success(new LiquidityLayersResponseDto { Symbol = symbol, Timeframe = timeframe }));
-        }
-
-        public Task<ApiResult<List<KlineDto>>> GetKlinesAsync(string symbol, string timeframe = "1h", int limit = 100, CancellationToken ct = default)
-        {
-            return Task.FromResult(ApiResult<List<KlineDto>>.Success(new List<KlineDto>()));
         }
     }
 

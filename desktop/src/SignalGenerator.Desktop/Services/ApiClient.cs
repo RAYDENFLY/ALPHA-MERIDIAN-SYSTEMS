@@ -11,8 +11,10 @@ using SignalGenerator.Desktop.Serialization;
 namespace SignalGenerator.Desktop.Services;
 
 /// <summary>
-/// Strictly read-only HTTP API client communicating with SignalGenerator FastAPI backend.
-/// Invariant: Only HTTP GET requests are issued.
+/// HTTP API client communicating with Alpha Meridian Systems FastAPI backend.
+/// Safety boundary: Read operations are permitted across market data, telemetry, and research.
+/// Mutation requests are strictly constrained and authorized ONLY for supported Price Alert operations (/api/alerts).
+/// All trading order execution, session lifecycle, risk limits, and AI scan mutations remain inaccessible.
 /// </summary>
 public class ApiClient : IApiClient
 {
@@ -77,12 +79,22 @@ public class ApiClient : IApiClient
         string? search = null,
         int page = 1,
         int pageSize = 25,
+        string? exchanges = null,
+        string? sortBy = "volume_desc",
         CancellationToken ct = default)
     {
         var endpoint = $"/api/screener/markets?page={page}&page_size={pageSize}";
         if (!string.IsNullOrWhiteSpace(search))
         {
             endpoint += $"&search={Uri.EscapeDataString(search.Trim())}";
+        }
+        if (!string.IsNullOrWhiteSpace(exchanges))
+        {
+            endpoint += $"&exchanges={Uri.EscapeDataString(exchanges.Trim())}";
+        }
+        if (!string.IsNullOrWhiteSpace(sortBy))
+        {
+            endpoint += $"&sort_by={Uri.EscapeDataString(sortBy.Trim())}";
         }
         return await ExecuteGetAsync<ScreenerResponseDto>(endpoint, ct);
     }
@@ -97,9 +109,90 @@ public class ApiClient : IApiClient
         return await ExecuteGetAsync<AutotraderScreeningLogResponseDto>("/api/autotrader/screening-log", ct);
     }
 
-    public async Task<ApiResult<List<AlertItemDto>>> GetAlertsAsync(CancellationToken ct = default)
+    public async Task<ApiResult<List<AlertItemDto>>> GetAlertsAsync(string? symbol = null, bool? isActive = null, CancellationToken ct = default)
     {
-        return await ExecuteGetAsync<List<AlertItemDto>>("/api/alerts", ct);
+        var endpoint = "/api/alerts";
+        var queryParams = new List<string>();
+        if (!string.IsNullOrWhiteSpace(symbol))
+        {
+            queryParams.Add($"symbol={Uri.EscapeDataString(symbol.Trim().ToUpperInvariant())}");
+        }
+        if (isActive.HasValue)
+        {
+            queryParams.Add($"is_active={isActive.Value.ToString().ToLowerInvariant()}");
+        }
+        if (queryParams.Count > 0)
+        {
+            endpoint += "?" + string.Join("&", queryParams);
+        }
+        return await ExecuteGetAsync<List<AlertItemDto>>(endpoint, ct);
+    }
+
+    public async Task<ApiResult<AlertItemDto>> CreateAlertAsync(AlertCreateRequestDto req, CancellationToken ct = default)
+    {
+        if (req == null) throw new ArgumentNullException(nameof(req));
+        if (string.IsNullOrWhiteSpace(req.Symbol))
+        {
+            return ApiResult<AlertItemDto>.Failure("Symbol cannot be empty.");
+        }
+        if (req.TargetPrice <= 0)
+        {
+            return ApiResult<AlertItemDto>.Failure("Target price must be greater than zero.");
+        }
+
+        return await ExecuteMutationAsync<AlertItemDto>(HttpMethod.Post, "/api/alerts", req, ct);
+    }
+
+    public async Task<ApiResult<AlertItemDto>> UpdateAlertAsync(string alertId, AlertUpdateRequestDto req, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(alertId)) throw new ArgumentNullException(nameof(alertId));
+        if (req == null) throw new ArgumentNullException(nameof(req));
+        if (req.TargetPrice.HasValue && req.TargetPrice.Value <= 0)
+        {
+            return ApiResult<AlertItemDto>.Failure("Target price must be greater than zero.");
+        }
+
+        return await ExecuteMutationAsync<AlertItemDto>(HttpMethod.Put, $"/api/alerts/{Uri.EscapeDataString(alertId.Trim())}", req, ct);
+    }
+
+    public async Task<ApiResult<AlertItemDto>> ToggleAlertAsync(string alertId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(alertId)) throw new ArgumentNullException(nameof(alertId));
+
+        return await ExecuteMutationAsync<AlertItemDto>(HttpMethod.Patch, $"/api/alerts/{Uri.EscapeDataString(alertId.Trim())}/toggle", null, ct);
+    }
+
+    public async Task<ApiResult<bool>> DeleteAlertAsync(string alertId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(alertId)) throw new ArgumentNullException(nameof(alertId));
+
+        var res = await ExecuteMutationAsync<JsonElement>(HttpMethod.Delete, $"/api/alerts/{Uri.EscapeDataString(alertId.Trim())}", null, ct);
+        if (res.IsSuccess)
+        {
+            return ApiResult<bool>.Success(true, res.StatusCode ?? 200);
+        }
+        return ApiResult<bool>.Failure(res.ErrorMessage ?? "Failed to delete alert.", res.StatusCode);
+    }
+
+    public async Task<ApiResult<List<AlertEventDto>>> GetAlertHistoryAsync(int limit = 50, bool unackOnly = false, CancellationToken ct = default)
+    {
+        var endpoint = $"/api/alerts/history?limit={Math.Clamp(limit, 1, 500)}&unack_only={unackOnly.ToString().ToLowerInvariant()}";
+        return await ExecuteGetAsync<List<AlertEventDto>>(endpoint, ct);
+    }
+
+    public async Task<ApiResult<AlertStatusDto>> GetAlertStatusAsync(CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<AlertStatusDto>("/api/alerts/status", ct);
+    }
+
+    public async Task<ApiResult<List<SymbolCatalogItemDto>>> GetAlertSymbolsAsync(string? query = null, CancellationToken ct = default)
+    {
+        var endpoint = "/api/alerts/symbols";
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            endpoint += $"?q={Uri.EscapeDataString(query.Trim().ToUpperInvariant())}";
+        }
+        return await ExecuteGetAsync<List<SymbolCatalogItemDto>>(endpoint, ct);
     }
 
     public async Task<ApiResult<RetailPositioningResponseDto>> GetRetailPositioningAsync(string symbol = "BTCUSDT", CancellationToken ct = default)
@@ -150,6 +243,58 @@ public class ApiClient : IApiClient
                 return ApiResult<T>.Failure("API returned an empty or unparseable JSON payload.", (int)response.StatusCode);
             }
 
+            return ApiResult<T>.Success(parsed, (int)response.StatusCode);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return ApiResult<T>.Failure("Request was cancelled.");
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<T>.Failure($"Network error connecting to {_baseUrl}: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<T>.Failure($"Unexpected error: {ex.Message}");
+        }
+    }
+
+    private static void ValidateAuthorizedMutationRoute(string relativeUri)
+    {
+        if (!relativeUri.StartsWith("/api/alerts", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Security Boundary Violation: Mutation to '{relativeUri}' is strictly prohibited. Only Price Alert endpoints (/api/alerts/*) are authorized for desktop client.");
+        }
+    }
+
+    private async Task<ApiResult<T>> ExecuteMutationAsync<T>(HttpMethod method, string relativeUri, object? payload, CancellationToken ct)
+    {
+        ValidateAuthorizedMutationRoute(relativeUri);
+        try
+        {
+            var requestUri = $"{_baseUrl}{relativeUri}";
+            using var request = new HttpRequestMessage(method, requestUri);
+            if (payload != null)
+            {
+                var json = JsonSerializer.Serialize(payload, JsonOptions);
+                request.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            }
+
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                return ApiResult<T>.Failure(
+                    $"HTTP {(int)response.StatusCode} ({response.ReasonPhrase}): {errorBody}",
+                    (int)response.StatusCode);
+            }
+
+            var contentStream = await response.Content.ReadAsStreamAsync(ct);
+            var parsed = await JsonSerializer.DeserializeAsync<T>(contentStream, JsonOptions, ct);
+            if (parsed == null)
+            {
+                return ApiResult<T>.Failure("API returned an empty or unparseable JSON payload.", (int)response.StatusCode);
+            }
             return ApiResult<T>.Success(parsed, (int)response.StatusCode);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

@@ -838,6 +838,9 @@ public class AlertItemDto
     [JsonPropertyName("last_checked_price")]
     public decimal? LastCheckedPrice { get; set; }
 
+    [JsonPropertyName("distance_usdt")]
+    public decimal? DistanceUsdt { get; set; }
+
     [JsonPropertyName("distance_pct")]
     public decimal? DistancePct { get; set; }
 
@@ -847,12 +850,158 @@ public class AlertItemDto
     [JsonPropertyName("created_at")]
     public string? CreatedAt { get; set; }
 
+    [JsonPropertyName("updated_at")]
+    public string? UpdatedAt { get; set; }
+
     [JsonPropertyName("note")]
     public string? Note { get; set; }
+
+    [JsonPropertyName("is_stale")]
+    public bool IsStale { get; set; }
 
     public string FormattedTarget => TargetPrice.ToString("F4", CultureInfo.InvariantCulture);
     public string FormattedCurrent => CurrentPrice.HasValue ? CurrentPrice.Value.ToString("F4", CultureInfo.InvariantCulture) : "--";
     public string FormattedDistance => DistancePct.HasValue ? DistancePct.Value.ToString("F2", CultureInfo.InvariantCulture) + "%" : "--";
+    public string StatusBadgeColor => Status?.ToUpperInvariant() switch
+    {
+        "ACTIVE" => "#00E676",
+        "TRIGGERED" => "#448AFF",
+        "DISABLED" => "#8B949E",
+        "STALE" => "#FF9D00",
+        _ => "#FF5252"
+    };
+    public string DirectionBadgeColor => Direction?.ToUpperInvariant() switch
+    {
+        "PRICE_ABOVE" or "ABOVE" => "#00E676",
+        "PRICE_BELOW" or "BELOW" => "#FF5252",
+        _ => "#8B949E"
+    };
+}
+
+public class AlertCreateRequestDto
+{
+    [JsonPropertyName("symbol")]
+    public string Symbol { get; set; } = string.Empty;
+
+    [JsonPropertyName("target_price")]
+    public decimal TargetPrice { get; set; }
+
+    [JsonPropertyName("direction")]
+    public string Direction { get; set; } = "PRICE_ABOVE";
+
+    [JsonPropertyName("price_source")]
+    public string PriceSource { get; set; } = "MARK_PRICE";
+
+    [JsonPropertyName("alert_type")]
+    public string AlertType { get; set; } = "ONE_OFF";
+
+    [JsonPropertyName("note")]
+    public string Note { get; set; } = string.Empty;
+}
+
+public class AlertUpdateRequestDto
+{
+    [JsonPropertyName("target_price")]
+    public decimal? TargetPrice { get; set; }
+
+    [JsonPropertyName("direction")]
+    public string? Direction { get; set; }
+
+    [JsonPropertyName("price_source")]
+    public string? PriceSource { get; set; }
+
+    [JsonPropertyName("alert_type")]
+    public string? AlertType { get; set; }
+
+    [JsonPropertyName("note")]
+    public string? Note { get; set; }
+
+    [JsonPropertyName("is_active")]
+    public bool? IsActive { get; set; }
+}
+
+public class AlertEventDto
+{
+    [JsonPropertyName("event_id")]
+    public int? EventId { get; set; }
+
+    [JsonPropertyName("alert_id")]
+    public string AlertId { get; set; } = string.Empty;
+
+    [JsonPropertyName("symbol")]
+    public string Symbol { get; set; } = string.Empty;
+
+    [JsonPropertyName("target_price")]
+    public decimal TargetPrice { get; set; }
+
+    [JsonPropertyName("trigger_price")]
+    public decimal TriggerPrice { get; set; }
+
+    [JsonPropertyName("direction")]
+    public string Direction { get; set; } = string.Empty;
+
+    [JsonPropertyName("price_source")]
+    public string PriceSource { get; set; } = string.Empty;
+
+    [JsonPropertyName("triggered_at")]
+    public string TriggeredAt { get; set; } = string.Empty;
+
+    [JsonPropertyName("note")]
+    public string Note { get; set; } = string.Empty;
+
+    [JsonPropertyName("acknowledged")]
+    public bool Acknowledged { get; set; }
+
+    [JsonPropertyName("discord_status")]
+    public string DiscordStatus { get; set; } = string.Empty;
+
+    public string FormattedTarget => TargetPrice.ToString("F4", CultureInfo.InvariantCulture);
+    public string FormattedTrigger => TriggerPrice.ToString("F4", CultureInfo.InvariantCulture);
+}
+
+public class AlertStatusDto
+{
+    [JsonPropertyName("total_alerts")]
+    public int TotalAlerts { get; set; }
+
+    [JsonPropertyName("active_alerts")]
+    public int ActiveAlerts { get; set; }
+
+    [JsonPropertyName("triggered_alerts")]
+    public int TriggeredAlerts { get; set; }
+
+    [JsonPropertyName("stale_alerts")]
+    public int StaleAlerts { get; set; }
+
+    [JsonPropertyName("unacknowledged_events")]
+    public int UnacknowledgedEvents { get; set; }
+}
+
+public class SymbolCatalogItemDto
+{
+    [JsonPropertyName("symbol")]
+    public string Symbol { get; set; } = string.Empty;
+
+    [JsonPropertyName("base_asset")]
+    public string BaseAsset { get; set; } = string.Empty;
+
+    [JsonPropertyName("quote_asset")]
+    public string QuoteAsset { get; set; } = "USDT";
+
+    [JsonPropertyName("price_precision")]
+    public int PricePrecision { get; set; } = 2;
+
+    [JsonPropertyName("mark_price")]
+    public decimal? MarkPrice { get; set; }
+
+    [JsonPropertyName("last_price")]
+    public decimal? LastPrice { get; set; }
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "TRADING";
+
+    [JsonPropertyName("is_stale")]
+    public bool IsStale { get; set; }
 }
 
 public class RetailPositioningResponseDto

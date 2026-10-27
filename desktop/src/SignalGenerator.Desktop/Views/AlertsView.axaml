@@ -4,113 +4,542 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
              xmlns:models="using:SignalGenerator.Desktop.Models"
-             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
+             mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="850"
              x:Class="SignalGenerator.Desktop.Views.AlertsView"
              x:DataType="vm:AlertsViewModel"
              Background="#000000">
 
-    <Grid RowDefinitions="Auto,Auto,*" Margin="14">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*" Margin="14">
         
-        <!-- Header Banner -->
+        <!-- Header Banner & Action Ribbon -->
         <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8" Margin="0,0,0,10">
-            <Grid ColumnDefinitions="*,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                
+                <!-- Title & Scope -->
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="■ PRICE ALERTS // REAL-TIME TRIGGER &amp; DISCORD NOTIFICATIONS" 
-                               FontSize="12" 
-                               FontWeight="Bold" 
-                               FontFamily="Consolas, monospace" 
-                               Foreground="#FF9D00" />
-                    <TextBlock Text="Read-only alert monitor: price triggers, Discord webhook dispatch state, and armed levels" 
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="■ PRICE ALERTS WORKSPACE" 
+                                   FontSize="12" 
+                                   FontWeight="Bold" 
+                                   FontFamily="Consolas, monospace" 
+                                   Foreground="#FF9D00" />
+                        <Border Background="#141920" BorderBrush="#00E676" BorderThickness="1" Padding="5,1">
+                            <TextBlock Text="AUTHORIZED ALERT OPERATIONS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Real-time multi-exchange price crossing triggers, armed levels, persistent alert CRUD, and Discord dispatch" 
                                FontSize="10" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#8B949E" 
                                Margin="0,2,0,0" />
                 </StackPanel>
 
-                <Button Grid.Column="1" 
-                        Command="{Binding LoadAlertsCommand}" 
-                        Classes="terminal-btn"
-                        Padding="10,4"
-                        VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
-                        <TextBlock Text="SYNC ALERTS" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
-                    </StackPanel>
-                </Button>
+                <!-- Center Tabs: ACTIVE ALERTS / TRIGGER HISTORY -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="16,0" VerticalAlignment="Center">
+                    <Button Command="{Binding SelectTabCommand}" CommandParameter="ACTIVE" 
+                            Classes="terminal-btn" Padding="10,5">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="●" FontSize="9" Foreground="#00E676" />
+                            <TextBlock Text="ACTIVE ALERTS" FontSize="10" FontWeight="Bold" />
+                            <TextBlock Text="{Binding TotalAlertsCount, StringFormat='({0})'}" FontSize="9" Foreground="#8B949E" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding SelectTabCommand}" CommandParameter="HISTORY" 
+                            Classes="terminal-btn" Padding="10,5">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="⚡" FontSize="9" Foreground="#448AFF" />
+                            <TextBlock Text="TRIGGER HISTORY" FontSize="10" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Right Actions: [+ CREATE ALERT] & [↻ SYNC] -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Button Command="{Binding OpenCreateFormCommand}" 
+                            Classes="terminal-btn" 
+                            Padding="12,5"
+                            Background="#1F1400"
+                            BorderBrush="#FF9D00">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="+" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                            <TextBlock Text="CREATE ALERT" FontSize="10" Foreground="#FF9D00" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding LoadAlertsCommand}" 
+                            Classes="terminal-btn" 
+                            Padding="10,5">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                            <TextBlock Text="SYNC" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
             </Grid>
         </Border>
 
-        <!-- Summary Strip -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" Margin="0,0,0,10">
+        <!-- Summary Telemetry Ribbon -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*,*" Margin="0,0,0,10">
             
-            <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+            <Border Grid.Column="0" Margin="0,0,3,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="DISCORD WEBHOOK STATUS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    <TextBlock Text="{Binding DiscordWebhookStatus}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="TOTAL CONFIGURED" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding TotalAlertsCount}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+            <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="ACTIVE TRIGGER ALERTS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    <TextBlock Text="{Binding ActiveAlertsCount}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    <TextBlock Text="ACTIVE MONITORED" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding ActiveAlertsCount}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="2" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+            <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="LAST SYNC TIME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    <TextBlock Text="{Binding LastRefreshUtc}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                    <TextBlock Text="TRIGGERED EVENTS" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding TriggeredCount}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="3" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="STALE OR MISSING" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding StaleCount}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="4" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="DISCORD DELIVERY" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="ENABLED / WEBHOOK" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="5" Margin="3,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="LAST SYNC TIME" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    <TextBlock Text="{Binding LastRefreshUtc}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                 </StackPanel>
             </Border>
 
         </Grid>
 
-        <!-- Alerts Table Container -->
-        <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
-            <Grid RowDefinitions="Auto,*">
+        <!-- Success Notification Banner -->
+        <Border Grid.Row="2" 
+                Background="#0D2214" 
+                BorderBrush="#00E676" 
+                BorderThickness="1" 
+                Padding="10,6" 
+                Margin="0,0,0,10"
+                IsVisible="{Binding SuccessMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0" Text="✔ SUCCESS:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1" Text="{Binding SuccessMessage}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+            </Grid>
+        </Border>
+
+        <!-- Error Notification Banner -->
+        <Border Grid.Row="3" 
+                Background="#240D0D" 
+                BorderBrush="#FF5252" 
+                BorderThickness="1" 
+                Padding="10,6" 
+                Margin="0,0,0,10"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0" Text="⚠ ERROR:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1" Text="{Binding ErrorMessage}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+            </Grid>
+        </Border>
+
+        <!-- Collapsible Create / Edit Alert Form Drawer -->
+        <Border Grid.Row="4" 
+                Background="#0E1217" 
+                BorderBrush="#FF9D00" 
+                BorderThickness="1" 
+                Padding="12,10" 
+                Margin="0,0,0,10"
+                IsVisible="{Binding IsFormOpen}">
+            <StackPanel Spacing="8">
                 
-                <!-- Table Header -->
-                <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="10,6">
-                    <Grid ColumnDefinitions="120,110,130,120,130,100,*">
-                        <TextBlock Grid.Column="0" Text="ALERT ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Grid.Column="1" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Grid.Column="2" Text="TARGET PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
-                        <TextBlock Grid.Column="3" Text="DIRECTION" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
-                        <TextBlock Grid.Column="4" Text="LAST CHECKED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
-                        <TextBlock Grid.Column="5" Text="STATUS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
-                        <TextBlock Grid.Column="6" Text="NOTES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="10,0,0,0" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="■" FontSize="11" Foreground="#FF9D00" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding FormMode, StringFormat='{}ALERT OPERATION: {0} PRICE ALERT'}" 
+                                   FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding FormAlertId, StringFormat='// {0}'}" 
+                                   FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center"
+                                   IsVisible="{Binding FormAlertId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Command="{Binding CloseFormCommand}" Classes="terminal-btn" Padding="6,2">
+                        <TextBlock Text="✕ CLOSE" FontSize="9" FontWeight="Bold" />
+                    </Button>
+                </Grid>
+
+                <!-- Input Fields Grid -->
+                <Grid ColumnDefinitions="140,140,150,130,130,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                    
+                    <!-- Row 0: Labels -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="SYMBOL *" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="CONDITION *" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="TARGET PRICE (USDT) *" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="3" Text="PRICE SOURCE" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="4" Text="ALERT TYPE" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="5" Text="NOTES / DESCRIPTION" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,0,0,2" />
+
+                    <!-- Row 1: Inputs -->
+                    <TextBox Grid.Row="1" Grid.Column="0" 
+                             Text="{Binding FormSymbol}" 
+                             PlaceholderText="BTCUSDT" 
+                             Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                             FontFamily="Consolas, monospace" FontSize="11" Padding="6,4" Margin="0,0,8,0" />
+
+                    <ComboBox Grid.Row="1" Grid.Column="1" 
+                              SelectedItem="{Binding FormDirection}"
+                              Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                              FontFamily="Consolas, monospace" FontSize="10" Padding="6,4" Margin="0,0,8,0"
+                              HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="PRICE_ABOVE" />
+                        <ComboBoxItem Content="PRICE_BELOW" />
+                    </ComboBox>
+
+                    <TextBox Grid.Row="1" Grid.Column="2" 
+                             Text="{Binding FormTargetPriceText}" 
+                             PlaceholderText="80000.0000" 
+                             Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                             FontFamily="Consolas, monospace" FontSize="11" Padding="6,4" Margin="0,0,8,0" />
+
+                    <ComboBox Grid.Row="1" Grid.Column="3" 
+                              SelectedItem="{Binding FormPriceSource}"
+                              Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                              FontFamily="Consolas, monospace" FontSize="10" Padding="6,4" Margin="0,0,8,0"
+                              HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="MARK_PRICE" />
+                        <ComboBoxItem Content="LAST_PRICE" />
+                    </ComboBox>
+
+                    <ComboBox Grid.Row="1" Grid.Column="4" 
+                              SelectedItem="{Binding FormAlertType}"
+                              Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                              FontFamily="Consolas, monospace" FontSize="10" Padding="6,4" Margin="0,0,8,0"
+                              HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="ONE_OFF" />
+                        <ComboBoxItem Content="RECURRING" />
+                    </ComboBox>
+
+                    <TextBox Grid.Row="1" Grid.Column="5" 
+                             Text="{Binding FormNote}" 
+                             PlaceholderText="Optional memo (e.g. Invalidation exit target)" 
+                             Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                             FontFamily="Consolas, monospace" FontSize="10" Padding="6,4" Margin="0,0,8,0" />
+
+                </Grid>
+
+                <!-- Validation Message & Actions -->
+                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                    <TextBlock Grid.Column="0" 
+                               Text="{Binding FormValidationMessage}" 
+                               FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" 
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding FormValidationMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                        <Button Command="{Binding CloseFormCommand}" Classes="terminal-btn" Padding="12,5">
+                            <TextBlock Text="CANCEL" FontSize="10" Foreground="#8B949E" />
+                        </Button>
+
+                        <Button Command="{Binding SubmitFormCommand}" 
+                                Classes="terminal-btn" 
+                                Padding="16,5"
+                                Background="#1F1400"
+                                BorderBrush="#FF9D00"
+                                IsEnabled="{Binding !IsSubmitting}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="✔" FontSize="10" Foreground="#FF9D00" FontWeight="Bold" />
+                                <TextBlock Text="PERSIST ALERT" FontSize="10" Foreground="#FF9D00" FontWeight="Bold" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+            </StackPanel>
+        </Border>
+
+        <!-- Delete Confirmation Modal Card -->
+        <Border Grid.Row="5" 
+                Background="#1A0808" 
+                BorderBrush="#FF5252" 
+                BorderThickness="1" 
+                Padding="12,8" 
+                Margin="0,0,0,10"
+                IsVisible="{Binding IsDeleteConfirmOpen}">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="⚠ CONFIRM DELETION OF PRICE ALERT" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                    <TextBlock Text="{Binding DeletingAlertSummary, StringFormat='Are you sure you want to delete {0}? This cannot be undone.'}" 
+                               FontSize="10" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Button Command="{Binding CancelDeleteCommand}" Classes="terminal-btn" Padding="10,4">
+                        <TextBlock Text="CANCEL" FontSize="9" Foreground="#8B949E" />
+                    </Button>
+                    <Button Command="{Binding ConfirmDeleteCommand}" 
+                            Classes="terminal-btn" 
+                            Padding="12,4"
+                            Background="#330A0A"
+                            BorderBrush="#FF5252"
+                            IsEnabled="{Binding !IsSubmitting}">
+                        <TextBlock Text="CONFIRM DELETE" FontSize="9" FontWeight="Bold" Foreground="#FF5252" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Content Area: Active Alerts vs Trigger History -->
+        <Grid Grid.Row="6">
+            
+            <!-- Active Alerts Tab -->
+            <Grid RowDefinitions="Auto,*" IsVisible="{Binding IsActiveTab}">
+                
+                <!-- Toolbar: Search & Filters -->
+                <Border Grid.Row="0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6" Margin="0,0,0,8">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        
+                        <!-- Search Box -->
+                        <TextBox Grid.Column="0" 
+                                 Text="{Binding SearchFilter}" 
+                                 PlaceholderText="SEARCH ALERTS BY SYMBOL OR ALERT ID (E.G. BTC, ETH, pa_)..." 
+                                 Background="#000000" 
+                                 BorderBrush="#242A34" 
+                                 Foreground="#F0F4F8" 
+                                 FontFamily="Consolas, monospace" 
+                                 FontSize="11" 
+                                 Padding="8,5" 
+                                 Margin="0,0,12,0" />
+
+                        <!-- Condition Filter -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="DIR:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <ComboBox SelectedItem="{Binding SelectedConditionFilter}"
+                                      Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                                      FontFamily="Consolas, monospace" FontSize="10" Padding="6,3">
+                                <ComboBoxItem Content="ALL" />
+                                <ComboBoxItem Content="PRICE_ABOVE" />
+                                <ComboBoxItem Content="PRICE_BELOW" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Status Filter -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="STATUS:" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <ComboBox SelectedItem="{Binding SelectedStatusFilter}"
+                                      Background="#000000" BorderBrush="#242A34" Foreground="#F0F4F8" 
+                                      FontFamily="Consolas, monospace" FontSize="10" Padding="6,3">
+                                <ComboBoxItem Content="ALL" />
+                                <ComboBoxItem Content="ACTIVE" />
+                                <ComboBoxItem Content="TRIGGERED" />
+                                <ComboBoxItem Content="DISABLED" />
+                                <ComboBoxItem Content="STALE" />
+                            </ComboBox>
+                        </StackPanel>
+
                     </Grid>
                 </Border>
 
-                <!-- Alerts List -->
-                <ListBox Grid.Row="1" 
-                         ItemsSource="{Binding Alerts}" 
-                         Background="Transparent" 
-                         BorderThickness="0">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:AlertItemDto">
-                            <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,6">
-                                <Grid ColumnDefinitions="120,110,130,120,130,100,*">
-                                    <TextBlock Grid.Column="0" Text="{Binding AlertId}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Symbol}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding TargetPrice, StringFormat='${0:F4}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="3" Text="{Binding Direction}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#448AFF" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="4" Text="{Binding LastCheckedPrice, StringFormat='${0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                    
-                                    <Border Grid.Column="5" Background="#141920" BorderBrush="#00E676" BorderThickness="1" Padding="4,1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Status}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                                    </Border>
+                <!-- Full-Width Active Alerts DataGrid / List -->
+                <Border Grid.Row="1" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
+                    <Grid RowDefinitions="Auto,*">
+                        
+                        <!-- Table Header Row -->
+                        <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="10,6">
+                            <Grid ColumnDefinitions="120,90,110,120,110,90,90,80,140,*">
+                                <TextBlock Grid.Column="0" Text="ALERT ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="1" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="2" Text="CONDITION" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="3" Text="TARGET PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="4" Text="MARK PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="5" Text="DISTANCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="6" Text="STATUS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="7" Text="TYPE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="8" Text="NOTE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="8,0,0,0" />
+                                <TextBlock Grid.Column="9" Text="ACTIONS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,10,0" />
+                            </Grid>
+                        </Border>
 
-                                    <TextBlock Grid.Column="6" Text="{Binding Note}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="10,0,0,0" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                        <!-- Alerts Rows -->
+                        <ListBox Grid.Row="1" 
+                                 ItemsSource="{Binding Alerts}" 
+                                 SelectedItem="{Binding SelectedAlert}"
+                                 Background="Transparent" 
+                                 BorderThickness="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:AlertItemDto">
+                                    <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,5">
+                                        <Grid ColumnDefinitions="120,90,110,120,110,90,90,80,140,*">
+                                            
+                                            <!-- Alert ID -->
+                                            <TextBlock Grid.Column="0" Text="{Binding AlertId}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
+
+                                            <!-- Symbol -->
+                                            <TextBlock Grid.Column="1" Text="{Binding Symbol}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
+
+                                            <!-- Condition Badge -->
+                                            <Border Grid.Column="2" Background="#141920" BorderBrush="{Binding DirectionBadgeColor}" BorderThickness="1" Padding="4,1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Direction}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding DirectionBadgeColor}" />
+                                            </Border>
+
+                                            <!-- Target Price -->
+                                            <TextBlock Grid.Column="3" Text="{Binding FormattedTarget, StringFormat='${0}'}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                            <!-- Current Price -->
+                                            <TextBlock Grid.Column="4" Text="{Binding FormattedCurrent, StringFormat='${0}'}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                            <!-- Distance -->
+                                            <TextBlock Grid.Column="5" Text="{Binding FormattedDistance}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Right" VerticalAlignment="Center" />
+
+                                            <!-- Status Badge -->
+                                            <Border Grid.Column="6" Background="#141920" BorderBrush="{Binding StatusBadgeColor}" BorderThickness="1" Padding="4,1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Status}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding StatusBadgeColor}" />
+                                            </Border>
+
+                                            <!-- Alert Type -->
+                                            <TextBlock Grid.Column="7" Text="{Binding AlertType}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                            <!-- Note -->
+                                            <TextBlock Grid.Column="8" Text="{Binding Note}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0,0,0" />
+
+                                            <!-- Action Buttons: TOGGLE | EDIT | DELETE -->
+                                            <StackPanel Grid.Column="9" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                
+                                                <!-- Toggle Enable/Disable -->
+                                                <Button Command="{Binding $parent[UserControl].((vm:AlertsViewModel)DataContext).ToggleAlertCommand}" 
+                                                        CommandParameter="{Binding}"
+                                                        Classes="terminal-btn" 
+                                                        Padding="6,2">
+                                                    <TextBlock Text="{Binding IsActive, Converter={x:Null}}" 
+                                                               FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                                </Button>
+
+                                                <!-- Edit -->
+                                                <Button Command="{Binding $parent[UserControl].((vm:AlertsViewModel)DataContext).OpenEditFormCommand}" 
+                                                        CommandParameter="{Binding}"
+                                                        Classes="terminal-btn" 
+                                                        Padding="6,2">
+                                                    <TextBlock Text="EDIT" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                                                </Button>
+
+                                                <!-- Delete -->
+                                                <Button Command="{Binding $parent[UserControl].((vm:AlertsViewModel)DataContext).PromptDeleteAlertCommand}" 
+                                                        CommandParameter="{Binding}"
+                                                        Classes="terminal-btn" 
+                                                        Padding="6,2"
+                                                        BorderBrush="#FF5252">
+                                                    <TextBlock Text="DEL" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                                                </Button>
+
+                                            </StackPanel>
+
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Empty State Notice -->
+                        <Border Grid.Row="1" 
+                                Background="#080A0D" 
+                                BorderBrush="#242A34" 
+                                BorderThickness="1" 
+                                Padding="20" 
+                                HorizontalAlignment="Center" 
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding !Alerts.Count}">
+                            <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding EmptyMessage}" 
+                                           FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                                <TextBlock Text="Use the '+ CREATE ALERT' button at the top to create price crossing alerts." 
+                                           FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+
+                    </Grid>
+                </Border>
 
             </Grid>
-        </Border>
+
+            <!-- Trigger History Tab -->
+            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" IsVisible="{Binding IsHistoryTab}">
+                <Grid RowDefinitions="Auto,*">
+                    
+                    <!-- History Header Row -->
+                    <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="10,6">
+                        <Grid ColumnDefinitions="70,120,90,110,120,120,160,110,*">
+                            <TextBlock Grid.Column="0" Text="EVENT ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="1" Text="ALERT ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="2" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="3" Text="DIRECTION" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="4" Text="TARGET PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="5" Text="TRIGGER PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="6" Text="TRIGGERED AT (UTC)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="10,0,0,0" />
+                            <TextBlock Grid.Column="7" Text="DISCORD" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                            <TextBlock Grid.Column="8" Text="NOTE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="10,0,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <!-- History List -->
+                    <ListBox Grid.Row="1" 
+                             ItemsSource="{Binding HistoryEvents}" 
+                             Background="Transparent" 
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:AlertEventDto">
+                                <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,5">
+                                    <Grid ColumnDefinitions="70,120,90,110,120,120,160,110,*">
+                                        <TextBlock Grid.Column="0" Text="{Binding EventId, StringFormat='EVT-{0}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding AlertId}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Symbol}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
+                                        
+                                        <Border Grid.Column="3" Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="4,1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Direction}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                        </Border>
+
+                                        <TextBlock Grid.Column="4" Text="{Binding FormattedTarget, StringFormat='${0}'}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="5" Text="{Binding FormattedTrigger, StringFormat='${0}'}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="6" Text="{Binding TriggeredAt}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                        
+                                        <Border Grid.Column="7" Background="#141920" BorderBrush="#242A34" BorderThickness="1" Padding="4,1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DiscordStatus}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                                        </Border>
+
+                                        <TextBlock Grid.Column="8" Text="{Binding Note}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- History Empty State -->
+                    <Border Grid.Row="1" 
+                            Background="#080A0D" 
+                            BorderBrush="#242A34" 
+                            BorderThickness="1" 
+                            Padding="20" 
+                            HorizontalAlignment="Center" 
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding !HistoryEvents.Count}">
+                        <TextBlock Text="NO HISTORICAL TRIGGER EVENTS RECORDED" 
+                                   FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                    </Border>
+
+                </Grid>
+            </Border>
+
+        </Grid>
 
     </Grid>
 

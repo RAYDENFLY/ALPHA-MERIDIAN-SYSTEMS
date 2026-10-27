@@ -140,25 +140,27 @@ public partial class MainViewModel : ViewModelBase
         CurrentViewModel = destination switch
         {
             "Overview" => OverviewVm,
-            "MarketMonitor" => MarketMonitorVm,
-            "Screener" => ScreenerVm,
+            "MarketIntelligence" or "MarketMonitor" => MarketMonitorVm,
+            "Screener" => MarketMonitorVm,
+            "Alerts" => AlertsVm,
             "LiquidityIntel" => LiquidityIntelVm,
             "GroqHunter" => GroqHunterVm,
             "Journal" => JournalVm,
-            "Alerts" => AlertsVm,
             "MarketParticipants" => MarketParticipantsVm,
             "CryptoNews" => CryptoNewsVm,
             "Settings" => SettingsVm,
             _ => OverviewVm
         };
 
-        if (destination == "MarketMonitor" && MarketMonitorVm.Markets.Count == 0)
+        if ((destination == "MarketIntelligence" || destination == "MarketMonitor") && MarketMonitorVm.Markets.Count == 0)
         {
+            MarketMonitorVm.SetMonitorMode();
             _ = MarketMonitorVm.LoadMarketMatrixAsync();
         }
-        else if (destination == "Screener" && ScreenerVm.Markets.Count == 0)
+        else if (destination == "Screener")
         {
-            _ = ScreenerVm.LoadMarketsAsync();
+            MarketMonitorVm.SetScreenerMode();
+            _ = MarketMonitorVm.LoadMarketMatrixAsync();
         }
         else if (destination == "Alerts" && AlertsVm.Alerts.Count == 0)
         {
