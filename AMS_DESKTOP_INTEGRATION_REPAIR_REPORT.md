@@ -29,15 +29,28 @@ Branch: `feature/avalonia-desktop`
 
 The isolated PoC and audit report verify real candle mapping, EMA 20/50/100/200, Stochastic 5,3,3, crosshair, pan/zoom, depth, fullscreen, and attribution. Its measured WebView2 overhead and native Avalonia performance lead to the documented decision to retain the production chart and keep Vela isolated.
 
-## Build/test baseline
+## Phase 2 build/test result
 
-The baseline `dotnet build desktop/SignalGenerator.Desktop.slnx --no-restore` and the targeted desktop test run were blocked by the environment: Avalonia's build task could not write `C:\Users\Administrator\AppData\Local\AvaloniaUI\BuildServices\buildtasks.log` (`UnauthorizedAccessException`). No application or backend process was changed.
+The initial failure was caused by the sandbox identity having only inherited `ReadAndExecute` access to the Avalonia BuildServices directory; the telemetry log did not exist, so this was not a locked-file failure. The build was validated with the narrowly scoped MSBuild property `UsedAvaloniaProducts=` to bypass the optional Avalonia statistics task. No ACLs, files outside the repository, or running processes were modified.
+
+- Solution build: **passed**, 0 warnings, 0 errors.
+- Targeted desktop tests: **12 passed**, 0 failed.
+- Additional settings tests: **4 passed**, 0 failed.
+- Additional order-book/workstation/DTO tests: **28 passed**, 0 failed.
+
+## Phase 2 freshness and customization
+
+- The verified Model B response contains per-venue `timestamp_ms`; it is now mapped into the desktop DTO.
+- A response older than 30 seconds is marked `STALE`; a successful HTTP response alone is not sufficient for `LIVE`.
+- Tiles begin as `LOADING`, unsupported selections become `UNAVAILABLE`, and request failures become `ERROR`.
+- The UI now supports add, remove, replace, and reorder operations in the VM, with persisted symbol order through `DesktopSettings`; the default remains eight tiles in a 4x2 grid.
+- Response time is retained in the tile display. Feed age is not invented when the timestamp is absent.
 
 ## Remaining limitations
 
-- The order-book model still lacks a timestamp field in the Model B response DTO, so freshness is currently limited to request/update state rather than authoritative feed age.
+- The Avalonia template now exposes add-symbol and remove-tile controls; reorder remains available through the VM command and needs a dedicated drag/drop affordance.
 - Spot/perpetual and venue metadata require a richer backend catalog contract before they can be shown without inference.
-- User selection/layout persistence and depth-update animation still need deterministic implementation and tests.
+- Deterministic level-change animation tracking and dedicated delayed/malformed-response tests remain outstanding.
 
 ## Rollback
 

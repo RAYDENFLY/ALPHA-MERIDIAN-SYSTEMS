@@ -190,7 +190,7 @@ public class MarketBookTileModel
     public decimal MajorAskWallPrice { get; set; }
     public decimal MajorAskWallNotional { get; set; }
     public long FeedAgeMs { get; set; }
-    public string ConnectionState { get; set; } = "LIVE"; // LIVE, STALE, DISCONNECTED
+    public string ConnectionState { get; set; } = "LOADING"; // LOADING, LIVE, STALE, UNAVAILABLE, ERROR
     public string LastUpdatedText { get; set; } = "--:--:--";
     public ObservableCollection<OrderBookLevelItem> Bids { get; set; } = new();
     public ObservableCollection<OrderBookLevelItem> Asks { get; set; } = new();
@@ -199,6 +199,8 @@ public class MarketBookTileModel
     public string StatusBadgeColor => ConnectionState switch
     {
         "LIVE" => "#00E676",
+        "LOADING" => "#8B949E",
+        "UNAVAILABLE" => "#FF9D00",
         "STALE" => "#FF9D00",
         _ => "#FF5252"
     };
@@ -303,6 +305,9 @@ public class ModelBExchangeBookDto
 
     [JsonPropertyName("exchange")]
     public string Exchange { get; set; } = string.Empty;
+
+    [JsonPropertyName("timestamp_ms")]
+    public long? TimestampMs { get; set; }
 
     [JsonPropertyName("best_bid")]
     public decimal? BestBid { get; set; }

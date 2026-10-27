@@ -25,6 +25,13 @@
                     </Border>
                 </StackPanel>
 
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <ComboBox ItemsSource="{Binding AvailableSymbols}" SelectedItem="{Binding SelectedSymbolToAdd}" Width="130" PlaceholderText="ADD SYMBOL" />
+                    <Button Command="{Binding AddTileCommand}" CommandParameter="{Binding SelectedSymbolToAdd}" Classes="terminal-btn" Padding="8,4">
+                        <TextBlock Text="+ ADD" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                    </Button>
+                </StackPanel>
+
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                         <TextBlock Text="LAST SYNC:" FontSize="10" Foreground="#8B949E" FontFamily="Consolas, monospace" />
@@ -56,7 +63,7 @@
                                 
                                 <!-- Tile Header: Symbol, Type, Last Price, Status -->
                                 <Border Grid.Row="0" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,6" Margin="0,0,0,6">
-                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                                             <TextBlock Text="{Binding Symbol}" FontSize="12" FontWeight="Bold" Foreground="#FF9D00" FontFamily="Consolas, monospace" VerticalAlignment="Center" />
                                             <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="4,1" VerticalAlignment="Center">
@@ -70,6 +77,7 @@
                                         <Border Grid.Column="2" Background="#12161C" BorderBrush="{Binding StatusBadgeColor}" BorderThickness="1" Padding="4,1" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding ConnectionState}" FontSize="8" FontWeight="Bold" Foreground="{Binding StatusBadgeColor}" FontFamily="Consolas, monospace" />
                                         </Border>
+                                        <Button Grid.Column="3" Content="×" Command="{Binding $parent[UserControl].((vm:MultiMarketOrderBookViewModel)DataContext).RemoveTileCommand}" CommandParameter="{Binding}" Padding="4,0" Margin="4,0,0,0" Classes="terminal-btn" ToolTip.Tip="Remove tile" />
                                     </Grid>
                                 </Border>
 

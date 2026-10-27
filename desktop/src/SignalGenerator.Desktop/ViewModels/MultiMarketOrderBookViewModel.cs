@@ -15,6 +15,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
     private readonly IPaperTradingService _paperTradingService;
+    private readonly ISettingsService? _settingsService;
     private CancellationTokenSource? _pollingCts;
 
     public ObservableCollection<MarketBookTileModel> MarketTiles { get; } = new();
@@ -30,28 +31,35 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
     [ObservableProperty]
     private string _globalFeedStatus = "SYNCED";
 
+    [ObservableProperty]
+    private string? _selectedSymbolToAdd;
+
     // Callbacks to MainViewModel for inter-view coordination
     public Action<string>? OnNavigateToTradingWorkstation { get; set; }
     public Action<decimal>? OnPrefillLimitPrice { get; set; }
 
-    public MultiMarketOrderBookViewModel(IApiClient apiClient, IPaperTradingService paperTradingService)
+    public MultiMarketOrderBookViewModel(IApiClient apiClient, IPaperTradingService paperTradingService, ISettingsService? settingsService = null)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _paperTradingService = paperTradingService ?? throw new ArgumentNullException(nameof(paperTradingService));
+        _settingsService = settingsService;
 
         InitializeTiles();
     }
 
     private void InitializeTiles()
     {
-        var defaultSymbols = new[]
+        var configured = _settingsService?.CurrentSettings.MultiMarketSymbols;
+        var defaultSymbols = configured is { Count: > 0 }
+            ? configured.Take(8).ToArray()
+            : new[]
         {
             "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
             "XRPUSDT", "LINKUSDT", "DOGEUSDT", "AVAXUSDT"
         };
 
         MarketTiles.Clear();
-        foreach (var sym in defaultSymbols)
+        foreach (var sym in defaultSymbols.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var tile = new MarketBookTileModel
             {
@@ -196,8 +204,13 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
                     tile.BestBid = book.BestBid.Value;
                     tile.BestAsk = book.BestAsk.Value;
                     tile.LastPrice = book.MidPrice ?? tile.BestBid;
-                    tile.ConnectionState = "LIVE";
-                    tile.LastUpdatedText = DateTime.UtcNow.ToString("HH:mm:ss");
+                    var responseTimestamp = book.TimestampMs;
+                    var feedAgeMs = responseTimestamp.HasValue
+                        ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - responseTimestamp.Value
+                        : (long?)null;
+                    tile.FeedAgeMs = feedAgeMs ?? 0;
+                    tile.ConnectionState = feedAgeMs.HasValue && feedAgeMs.Value > 30_000 ? "STALE" : "LIVE";
+                    tile.LastUpdatedText = $"RESPONSE {DateTime.UtcNow:HH:mm:ss} UTC";
 
                     // Populate bids
                     tile.Bids.Clear();
@@ -257,7 +270,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         }
         catch
         {
-            tile.ConnectionState = "DISCONNECTED";
+            tile.ConnectionState = "ERROR";
         }
     }
 
@@ -292,5 +305,44 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         tuple.Item1.Asks.Clear();
         tuple.Item1.ConnectionState = "LOADING";
         _ = UpdateTileAsync(tuple.Item1, CancellationToken.None);
+        PersistLayout();
+    }
+
+    [RelayCommand]
+    public void RemoveTile(MarketBookTileModel tile)
+    {
+        if (tile == null) return;
+        MarketTiles.Remove(tile);
+        PersistLayout();
+    }
+
+    [RelayCommand]
+    public void AddTile(string symbol)
+    {
+        if (string.IsNullOrWhiteSpace(symbol) || MarketTiles.Count >= 8 ||
+            !AvailableSymbols.Contains(symbol, StringComparer.OrdinalIgnoreCase) ||
+            MarketTiles.Any(t => t.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase))) return;
+
+        var tile = new MarketBookTileModel { Symbol = symbol.Trim().ToUpperInvariant(), MarketType = "PERP", ConnectionState = "LOADING" };
+        MarketTiles.Add(tile);
+        _ = UpdateTileAsync(tile, CancellationToken.None);
+        PersistLayout();
+    }
+
+    [RelayCommand]
+    public void MoveTile(Tuple<MarketBookTileModel, int> request)
+    {
+        if (request?.Item1 == null) return;
+        var oldIndex = MarketTiles.IndexOf(request.Item1);
+        var newIndex = Math.Clamp(request.Item2, 0, MarketTiles.Count - 1);
+        if (oldIndex >= 0 && oldIndex != newIndex) MarketTiles.Move(oldIndex, newIndex);
+        PersistLayout();
+    }
+
+    private void PersistLayout()
+    {
+        if (_settingsService == null) return;
+        _settingsService.CurrentSettings.MultiMarketSymbols = MarketTiles.Select(t => t.Symbol).ToList();
+        _settingsService.SaveSettings(_settingsService.CurrentSettings);
     }
 }

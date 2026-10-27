@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace SignalGenerator.Desktop.Models;
@@ -21,4 +22,7 @@ public class DesktopSettings
 
     [JsonPropertyName("http_timeout_seconds")]
     public int HttpTimeoutSeconds { get; set; } = 8;
+
+    [JsonPropertyName("multi_market_symbols")]
+    public List<string> MultiMarketSymbols { get; set; } = new();
 }
