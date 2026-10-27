@@ -19,10 +19,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
 
     public ObservableCollection<MarketBookTileModel> MarketTiles { get; } = new();
 
-    public ObservableCollection<string> AvailableSymbols { get; } = new()
-    {
-        "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "LINKUSDT", "DOGEUSDT", "AVAXUSDT", "ASTERUSDT"
-    };
+    public ObservableCollection<string> AvailableSymbols { get; } = new();
 
     [ObservableProperty]
     private bool _isRefreshing;
@@ -60,10 +57,8 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
             {
                 Symbol = sym,
                 MarketType = "PERP",
-                ConnectionState = "LIVE",
-                LastPrice = GetDefaultInitialPrice(sym)
+                ConnectionState = "LOADING"
             };
-            GenerateInitialLadder(tile);
             MarketTiles.Add(tile);
         }
     }
@@ -143,6 +138,7 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         try
         {
             IsRefreshing = true;
+            await RefreshSymbolDirectoryAsync();
             _pollingCts?.Cancel();
             _pollingCts = new CancellationTokenSource();
             var ct = _pollingCts.Token;
@@ -161,6 +157,30 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
         finally
         {
             IsRefreshing = false;
+        }
+    }
+
+    private async Task RefreshSymbolDirectoryAsync()
+    {
+        var result = await _apiClient.GetChartSymbolsAsync(_pollingCts?.Token ?? CancellationToken.None);
+        if (!result.IsSuccess || result.Value?.Symbols == null || result.Value.Symbols.Count == 0)
+            return;
+
+        var symbols = result.Value.Symbols
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s)
+            .ToList();
+
+        AvailableSymbols.Clear();
+        foreach (var symbol in symbols) AvailableSymbols.Add(symbol);
+
+        // Keep the user's current layout, but replace only symbols no longer supported.
+        for (var i = 0; i < MarketTiles.Count; i++)
+        {
+            if (!AvailableSymbols.Contains(MarketTiles[i].Symbol, StringComparer.OrdinalIgnoreCase))
+                MarketTiles[i].ConnectionState = "UNAVAILABLE";
         }
     }
 
@@ -259,9 +279,18 @@ public partial class MultiMarketOrderBookViewModel : ViewModelBase
     public void ChangeSymbol(Tuple<MarketBookTileModel, string> tuple)
     {
         if (tuple?.Item1 == null || string.IsNullOrWhiteSpace(tuple.Item2)) return;
+        if (AvailableSymbols.Count > 0 && !AvailableSymbols.Contains(tuple.Item2, StringComparer.OrdinalIgnoreCase))
+        {
+            tuple.Item1.ConnectionState = "UNAVAILABLE";
+            return;
+        }
         tuple.Item1.Symbol = tuple.Item2;
-        tuple.Item1.LastPrice = GetDefaultInitialPrice(tuple.Item2);
-        GenerateInitialLadder(tuple.Item1);
+        tuple.Item1.LastPrice = 0;
+        tuple.Item1.BestBid = 0;
+        tuple.Item1.BestAsk = 0;
+        tuple.Item1.Bids.Clear();
+        tuple.Item1.Asks.Clear();
+        tuple.Item1.ConnectionState = "LOADING";
         _ = UpdateTileAsync(tuple.Item1, CancellationToken.None);
     }
 }
