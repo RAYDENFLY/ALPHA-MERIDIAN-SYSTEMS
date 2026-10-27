@@ -20,6 +20,7 @@ from src.ai_analyst.types import (
     TradeScenario,
 )
 from src.ai_analyst.risk_calculator import AIRiskCalculator
+from src.ai.groq_key_manager import GroqKeyManager
 from src.core.logger import logger
 from dotenv import load_dotenv
 
@@ -42,17 +43,46 @@ class GroqAnalystClient:
         api_key: Optional[str] = None,
         model_id: Optional[str] = None,
         risk_calculator: Optional[AIRiskCalculator] = None,
+        key_manager: Optional[GroqKeyManager] = None,
+        fallback_a_key: Optional[str] = None,
+        fallback_b_key: Optional[str] = None,
     ) -> None:
         self.api_key = api_key or os.getenv("GROQ_API_KEY") or os.getenv("groq")
         self.model_id = model_id or os.getenv("GROQ_MODEL") or self.DEFAULT_MODEL
         self.risk_calc = risk_calculator or AIRiskCalculator()
+
+        if key_manager is not None:
+            self.key_manager = key_manager
+        else:
+            self.key_manager = GroqKeyManager(
+                primary_key=self.api_key,
+                fallback_a_key=fallback_a_key or os.getenv("GROQ_API_KEY_FALLBACK_A"),
+                fallback_b_key=fallback_b_key or os.getenv("GROQ_API_KEY_FALLBACK_B"),
+            )
+
+        self._client_cache: Dict[str, Any] = {}
         self._groq_client = None
 
         if GROQ_AVAILABLE and self.api_key:
             try:
                 self._groq_client = Groq(api_key=self.api_key)
+                self._client_cache["PRIMARY"] = self._groq_client
             except Exception as e:
                 logger.warning(f"Failed to initialize Groq client: {e}")
+
+    def _get_client_for_entry(self, key_entry: Any) -> Optional[Any]:
+        if not GROQ_AVAILABLE:
+            return None
+        alias = key_entry.alias
+        if alias in self._client_cache and self._client_cache[alias] is not None:
+            return self._client_cache[alias]
+        try:
+            client = Groq(api_key=key_entry.key)
+            self._client_cache[alias] = client
+            return client
+        except Exception as e:
+            logger.warning(f"[GROQ_ANALYST] Failed to initialize Groq SDK client for {key_entry.alias}: {e}")
+            return None
 
     def analyze(
         self,
@@ -67,8 +97,8 @@ class GroqAnalystClient:
         dt_utc = datetime.now(timezone.utc).isoformat()
         analysis_id = f"AI_{snapshot.symbol}_{snapshot.timeframe}_{now_ms}"
 
-        # If Groq client is not available or key is missing, use deterministic fallback
-        if not self._groq_client:
+        # If Groq client is not available or no keys configured:
+        if not GROQ_AVAILABLE or not self.key_manager.has_keys():
             logger.info("Groq client or API key unavailable. Generating deterministic quantitative analysis.")
             return self._generate_fallback_analysis(
                 analysis_id=analysis_id,
@@ -78,51 +108,144 @@ class GroqAnalystClient:
                 error_note="Groq API key not configured or client offline.",
             )
 
-        # Build prompt
-        prompt = self._build_prompt(snapshot, risk_budget_usdt)
-
-        try:
-            chat_completion = self._groq_client.chat.completions.create(
-                model=active_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an institutional cryptocurrency perpetual futures quantitative analyst. "
-                            "You evaluate Smart Money Concepts (SMC), market structure, Level-2 order-book depth, "
-                            "BTC market context, and risk/reward constraints. "
-                            "You must evaluate BOTH the LONG and SHORT scenarios with equal rigor before recommending a dominant path. "
-                            "You must respond STRICTLY with a valid JSON object matching the requested schema. "
-                            "Include a comprehensive institutional analysis in Bahasa Indonesia under 'penjelasan_indonesia'."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.2,
-                max_tokens=950,
-            )
-
-            raw_text = chat_completion.choices[0].message.content
-            parsed_json = json.loads(raw_text)
-            return self._build_result_from_json(
+        # Backward compatibility for tests that explicitly set client._groq_client = None
+        if self._groq_client is None and len(self.key_manager.get_configured_aliases()) == 1:
+            logger.info("Groq client disabled. Generating deterministic quantitative analysis.")
+            return self._generate_fallback_analysis(
                 analysis_id=analysis_id,
                 snapshot=snapshot,
-                data=parsed_json,
                 risk_budget_usdt=risk_budget_usdt,
-                model_id=active_model,
-                raw_response=raw_text,
+                model_id=f"{active_model} (Rule-Based Fallback)",
+                error_note="Groq client disabled.",
             )
 
-        except Exception as e:
-            logger.warning(f"Groq API completion failed ({e}). Falling back to quantitative synthesis.")
+        candidate_keys = self.key_manager.get_available_keys(force_include_cooling=True)
+        if not candidate_keys:
+            logger.warning("[GROQ_ANALYST] All configured Groq API keys are currently exhausted or invalid.")
             return self._generate_fallback_analysis(
                 analysis_id=analysis_id,
                 snapshot=snapshot,
                 risk_budget_usdt=risk_budget_usdt,
                 model_id=f"{active_model} (Fallback)",
-                error_note=f"Groq API error: {str(e)}",
+                error_note="All configured Groq API keys exhausted or invalid.",
             )
+
+        prompt = self._build_prompt(snapshot, risk_budget_usdt)
+        last_error = None
+
+        for key_idx, key_entry in enumerate(candidate_keys):
+            key_alias = key_entry.alias
+            next_key_entry = candidate_keys[key_idx + 1] if key_idx + 1 < len(candidate_keys) else None
+
+            client = self._get_client_for_entry(key_entry)
+            if not client:
+                self.key_manager.mark_invalid(key_alias, "Failed to instantiate Groq SDK client")
+                continue
+
+            try:
+                chat_completion = client.chat.completions.create(
+                    model=active_model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an institutional cryptocurrency perpetual futures quantitative analyst. "
+                                "You evaluate Smart Money Concepts (SMC), market structure, Level-2 order-book depth, "
+                                "BTC market context, and risk/reward constraints. "
+                                "You must evaluate BOTH the LONG and SHORT scenarios with equal rigor before recommending a dominant path. "
+                                "You must respond STRICTLY with a valid JSON object matching the requested schema. "
+                                "Include a comprehensive institutional analysis in Bahasa Indonesia under 'penjelasan_indonesia'."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                    max_tokens=950,
+                )
+
+                raw_text = chat_completion.choices[0].message.content
+                parsed_json = json.loads(raw_text)
+
+                self.key_manager.mark_success(key_alias)
+                if key_alias != "PRIMARY":
+                    logger.info(f"[GROQ_ANALYST] Request succeeded using {GroqKeyManager.friendly_name(key_alias).lower()}")
+
+                return self._build_result_from_json(
+                    analysis_id=analysis_id,
+                    snapshot=snapshot,
+                    data=parsed_json,
+                    risk_budget_usdt=risk_budget_usdt,
+                    model_id=active_model,
+                    raw_response=raw_text,
+                )
+
+            except Exception as e:
+                last_error = str(e)
+                status_code = getattr(e, "status_code", None)
+                response_obj = getattr(e, "response", None)
+                headers = getattr(response_obj, "headers", None) if response_obj else None
+
+                if status_code is None:
+                    err_name = type(e).__name__
+                    if "Timeout" in err_name or "Connection" in err_name:
+                        status_code = 504
+                    elif "429" in last_error or "rate_limit" in last_error.lower():
+                        status_code = 429
+                    elif "413" in last_error:
+                        status_code = 413
+                    elif "401" in last_error or "unauthorized" in last_error.lower():
+                        status_code = 401
+                    elif "400" in last_error:
+                        status_code = 400
+
+                err_type, retry_after = GroqKeyManager.classify_groq_error(
+                    status_code=status_code or 500,
+                    response_text=last_error,
+                    headers=headers,
+                )
+
+                curr_friendly = GroqKeyManager.friendly_name(key_alias)
+                next_friendly = GroqKeyManager.friendly_name(next_key_entry.alias) if next_key_entry else None
+
+                if err_type == "QUOTA_EXHAUSTED":
+                    self.key_manager.mark_quota_exhausted(key_alias, reason=last_error[:120])
+                    if next_friendly:
+                        logger.warning(f"[GROQ_ANALYST] {curr_friendly} failed: quota exhausted -> Switching to {next_friendly.lower()}")
+                    else:
+                        logger.warning(f"[GROQ_ANALYST] {curr_friendly} failed: quota exhausted and no further fallback keys configured.")
+
+                elif err_type == "RATE_LIMITED":
+                    self.key_manager.mark_rate_limited(key_alias, retry_after_sec=retry_after, reason=last_error[:120])
+                    if next_friendly:
+                        logger.info(f"[GROQ_ANALYST] {curr_friendly} failed: rate limited ({retry_after:.1f}s backoff) -> Switching to {next_friendly.lower()}")
+                    else:
+                        logger.warning(f"[GROQ_ANALYST] {curr_friendly} failed: rate limited ({retry_after:.1f}s backoff) and no fallback keys available.")
+
+                elif err_type == "INVALID_KEY":
+                    self.key_manager.mark_invalid(key_alias, reason="HTTP_401_UNAUTHORIZED")
+                    if next_friendly:
+                        logger.error(f"[GROQ_ANALYST] {curr_friendly} invalid (HTTP 401) -> Skipping to {next_friendly.lower()}")
+                    else:
+                        logger.error(f"[GROQ_ANALYST] {curr_friendly} invalid (HTTP 401) and no fallback keys configured.")
+
+                elif err_type == "BAD_REQUEST":
+                    logger.error(f"[GROQ_ANALYST] Request error HTTP {status_code}: {last_error[:120]}. Key rotation will not resolve schema/request errors.")
+                    break
+
+                else:  # PROVIDER_TEMPORARY / UNKNOWN
+                    self.key_manager.mark_temporary_failure(key_alias, error_type=err_type)
+                    if next_friendly:
+                        logger.warning(f"[GROQ_ANALYST] {curr_friendly} temporary failure ({err_type}) -> Trying {next_friendly.lower()}")
+
+        logger.warning(f"[GROQ_ANALYST] Groq API completion failed across all keys ({last_error}). Falling back to quantitative synthesis.")
+        return self._generate_fallback_analysis(
+            analysis_id=analysis_id,
+            snapshot=snapshot,
+            risk_budget_usdt=risk_budget_usdt,
+            model_id=f"{active_model} (Fallback)",
+            error_note=f"Groq API error: {last_error}",
+        )
 
     def _build_prompt(self, s: QuantitativeMarketSnapshot, budget: float) -> str:
         return f"""

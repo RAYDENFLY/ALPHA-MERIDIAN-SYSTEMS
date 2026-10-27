@@ -44,6 +44,8 @@ class AIAnalystService:
             api_key=self.config.groq_api_key,
             model_id=self.config.groq_model_id,
             risk_calculator=self.risk_calc,
+            fallback_a_key=self.config.groq_api_key_fallback_a,
+            fallback_b_key=self.config.groq_api_key_fallback_b,
         )
 
         # In-memory latest analysis cache

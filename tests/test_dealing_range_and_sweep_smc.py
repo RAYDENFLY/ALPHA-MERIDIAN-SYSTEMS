@@ -363,3 +363,374 @@ class TestTickSizeQuantization:
         raw_btc_tp = 67891.2345
         btc_norm_tp = normalize_price_to_tick(raw_btc_tp, 0.1, rounding="NEAREST")
         assert btc_norm_tp == 67891.2
+
+
+# -----------------------------------------------------------------------------
+# 5. Directional Zone Lock Veto Integrity Tests (Preventing Cross-Contamination)
+# -----------------------------------------------------------------------------
+class TestDirectionalZoneLockVetoIntegrity:
+    """Rigorous tests proving that SHORT zone lock vetoes NEVER contaminate LONG candidates,
+    and LONG zone lock vetoes NEVER contaminate SHORT candidates.
+    """
+
+    def test_long_candidate_in_discount_without_sweep_never_returns_short_veto(self):
+        """A LONG setup at 30.2% Dealing Range (Discount) has no sweep trigger formed.
+        It must return 'NO_SWEEP_RECLAIM_TRIGGER'.
+        Under NO circumstances may it return 'HARD_ZONE_LOCK_VETO: Cannot SHORT at 30.2%'!
+        """
+        strat = SweepReclaim15MStrategy()
+        base_ts = 1792900000000
+        # 25 flat candles without any swing sweep
+        candles = [
+            make_candle(base_ts + i * 900000, 2310.0, 2315.0, 2308.0, 2312.0)
+            for i in range(25)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_15m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=30.2,  # Discount <= 38.0%
+            direction="LONG",
+        )
+
+        assert setup is None
+        assert reason == "NO_SWEEP_RECLAIM_TRIGGER"
+        assert "SHORT" not in reason
+        assert "HARD_ZONE_LOCK_VETO" not in reason
+
+    def test_short_candidate_in_discount_strictly_vetoed_by_short_rule(self):
+        """A SHORT setup at 30.2% Dealing Range (Discount) must be strictly vetoed
+        by Hard Law 1 (Premium >= 65.0% required).
+        """
+        strat = SweepReclaim15MStrategy()
+        base_ts = 1792900000000
+        candles = [
+            make_candle(base_ts + i * 900000, 2310.0, 2315.0, 2308.0, 2312.0)
+            for i in range(25)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_15m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=30.2,  # Discount (< 65.0%)
+            direction="SHORT",
+        )
+
+        assert setup is None
+        assert "HARD_ZONE_LOCK_VETO" in reason
+        assert "Cannot SHORT at 30.2%" in reason
+        assert "65.0%" in reason
+
+    def test_short_candidate_in_premium_without_sweep_never_returns_long_veto(self):
+        """A SHORT setup at 75.0% Dealing Range (Premium) has no sweep trigger formed.
+        It must return 'NO_SWEEP_REJECT_TRIGGER'.
+        Under NO circumstances may it return 'HARD_ZONE_LOCK_VETO: Cannot LONG at 75.0%'!
+        """
+        strat = SweepReclaim15MStrategy()
+        base_ts = 1792900000000
+        candles = [
+            make_candle(base_ts + i * 900000, 2400.0, 2405.0, 2395.0, 2402.0)
+            for i in range(25)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_15m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=75.0,  # Premium >= 65.0%
+            direction="SHORT",
+        )
+
+        assert setup is None
+        assert reason == "NO_SWEEP_REJECT_TRIGGER"
+        assert "LONG" not in reason
+        assert "HARD_ZONE_LOCK_VETO" not in reason
+
+    def test_long_candidate_in_premium_strictly_vetoed_by_long_rule(self):
+        """A LONG setup at 75.0% Dealing Range (Premium) without Bull FVG exception
+        must be strictly vetoed by Hard Law 2 (Discount <= 38.0% required).
+        """
+        strat = SweepReclaim15MStrategy()
+        base_ts = 1792900000000
+        candles = [
+            make_candle(base_ts + i * 900000, 2400.0, 2405.0, 2395.0, 2402.0)
+            for i in range(25)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_15m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=75.0,  # Premium (> 38.0%)
+            direction="LONG",
+        )
+
+        assert setup is None
+        assert "HARD_ZONE_LOCK_VETO" in reason
+        assert "Cannot LONG at 75.0%" in reason
+        assert "38.0%" in reason
+
+    def test_bidirectional_scan_discount_returns_no_sweep_reclaim(self):
+        """When direction is None (bidirectional scan) at 30.2% Dealing Range (Discount),
+        if no sweep formed, it returns NO_SWEEP_RECLAIM_TRIGGER, not a SHORT veto.
+        """
+        strat = SweepReclaim15MStrategy()
+        base_ts = 1792900000000
+        candles = [
+            make_candle(base_ts + i * 900000, 2310.0, 2315.0, 2308.0, 2312.0)
+            for i in range(25)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_15m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=30.2,
+            direction=None,
+        )
+
+        assert setup is None
+        assert reason == "NO_SWEEP_RECLAIM_TRIGGER"
+        assert "Cannot SHORT" not in reason
+
+    def test_bidirectional_scan_premium_returns_no_sweep_reject(self):
+        """When direction is None (bidirectional scan) at 75.0% Dealing Range (Premium),
+        if no sweep formed, it returns NO_SWEEP_REJECT_TRIGGER, not a LONG veto.
+        """
+        strat = SweepReclaim15MStrategy()
+        base_ts = 1792900000000
+        candles = [
+            make_candle(base_ts + i * 900000, 2400.0, 2405.0, 2395.0, 2402.0)
+            for i in range(25)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_15m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=75.0,
+            direction=None,
+        )
+
+        assert setup is None
+        assert reason == "NO_SWEEP_REJECT_TRIGGER"
+        assert "Cannot LONG" not in reason
+
+    def test_bidirectional_scan_equilibrium_returns_zone_restriction(self):
+        """When direction is None at 50.0% Dealing Range (Equilibrium),
+        it surfaces ZONE_LOCK_RESTRICTION explaining equilibrium bounds.
+        """
+        strat = SweepReclaim15MStrategy()
+        base_ts = 1792900000000
+        candles = [
+            make_candle(base_ts + i * 900000, 2350.0, 2355.0, 2345.0, 2350.0)
+            for i in range(25)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_15m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=50.0,
+            direction=None,
+        )
+
+        assert setup is None
+        assert "ZONE_LOCK_RESTRICTION" in reason
+        assert "50.0%" in reason
+
+    def test_ema20_directional_isolation(self):
+        """Verify EMA20ReclaimStrategy does not emit SHORT vetoes for LONG evaluations."""
+        from src.strategy.ema20_reclaim_5m import EMA20ReclaimStrategy
+
+        strat = EMA20ReclaimStrategy()
+        base_ts = 1792900000000
+        # 30 flat candles
+        candles = [
+            make_candle(base_ts + i * 300000, 2310.0, 2312.0, 2308.0, 2310.0, timeframe="5m")
+            for i in range(30)
+        ]
+
+        setup, reason = strat.evaluate(
+            symbol="ETHUSDT",
+            candles_5m=candles,
+            tick_size=0.01,
+            step_size=0.001,
+            min_notional=5.0,
+            account_equity=15.0,
+            dealing_range_position_pct=30.2,  # Discount
+            direction="LONG",
+        )
+
+        assert setup is None
+        assert reason == "NO_RECLAIM_TRIGGER"
+        assert "Cannot SHORT" not in reason
+
+    def test_autotrader_evaluate_candidate_directional_consistency(self):
+        """Verify GroqAutoTrader.evaluate_candidate_with_strategy passes direction
+        and never returns a cross-directional veto reason.
+        """
+        from src.ai.groq_autotrader import GroqAutoTrader
+
+        trader = GroqAutoTrader(api_key="test_key")
+        mock_coord = MagicMock()
+        mock_coord.current_equity = 15.0
+        mock_coord.sweep_reclaim_strategy = SweepReclaim15MStrategy()
+
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        base_1h_ts = now_ms - (72 * 3600000)
+        base_15m_ts = now_ms - (30 * 900000)
+
+        candles_1h = [
+            make_candle(base_1h_ts + i * 3600000, 2280.0, 2400.0, 2270.0, 2310.0, timeframe="1h")
+            for i in range(72)
+        ]
+        candles_15m = [
+            make_candle(base_15m_ts + i * 900000, 2310.0, 2315.0, 2308.0, 2312.0, timeframe="15m")
+            for i in range(30)
+        ]
+
+        trader.adapter = MagicMock()
+        trader.adapter.get_klines.side_effect = lambda sym, timeframe, limit: (
+            candles_1h if timeframe == "1h" else candles_15m
+        )
+        mock_specs = MagicMock(symbol="ETHUSDT", tick_size=0.01, step_size=0.001, min_notional=5.0, min_qty=0.001)
+        trader.inspector = MagicMock()
+        trader.inspector.get_symbol_specs.return_value = mock_specs
+
+        setup, reason = trader.evaluate_candidate_with_strategy(
+            symbol="ETHUSDT",
+            coordinator=mock_coord,
+            direction="LONG",
+            strategy_id="15M_SWEEP_RECLAIM_SMC",
+        )
+
+        assert setup is None
+        # Must be NO_SWEEP_RECLAIM_TRIGGER, NEVER a SHORT veto
+        assert reason == "NO_SWEEP_RECLAIM_TRIGGER"
+        assert "Cannot SHORT" not in reason
+        assert "HARD_ZONE_LOCK_VETO" not in reason
+
+    def test_stage3_candidate_to_veto_consistency(self):
+        """Verify that Stage3SetupOutput retains exact candidate-to-veto association:
+        - Symbol: ETHUSDT
+        - Direction: LONG
+        - candidate_id: starts with 'ETHUSDT:LONG:'
+        - strategy_rejection_reason does NOT mention 'Cannot SHORT'
+        - veto_code and veto_source correctly classified
+        """
+        from src.ai.groq_autotrader import (
+            GroqAutoTrader,
+            RiskPreset,
+            ExecutionVenue,
+            Stage1Result,
+            Stage2Result,
+            Stage2FinalistItem,
+        )
+
+        trader = GroqAutoTrader(api_key="test_key")
+        mock_coord = MagicMock()
+        mock_coord.current_equity = 16.0
+        mock_coord.sweep_reclaim_strategy = SweepReclaim15MStrategy()
+
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        base_1h_ts = now_ms - (72 * 3600000)
+        base_15m_ts = now_ms - (30 * 900000)
+
+        candles_1h = [
+            make_candle(base_1h_ts + i * 3600000, 2280.0, 2400.0, 2270.0, 2310.0, timeframe="1h")
+            for i in range(72)
+        ]
+        candles_15m = [
+            make_candle(base_15m_ts + i * 900000, 2310.0, 2315.0, 2308.0, 2312.0, timeframe="15m")
+            for i in range(30)
+        ]
+
+        trader.adapter = MagicMock()
+        trader.adapter.get_klines.side_effect = lambda sym, timeframe, limit: (
+            candles_1h if timeframe == "1h" else candles_15m
+        )
+        mock_specs = MagicMock(symbol="ETHUSDT", tick_size=0.01, step_size=0.001, min_notional=5.0, min_qty=0.001)
+        trader.inspector = MagicMock()
+        trader.inspector.get_symbol_specs.return_value = mock_specs
+        trader.inspector.inspect_coin.return_value = {
+            "symbol": "ETHUSDT",
+            "meta": {"mark_price": 2310.5},
+            "smc_and_liquidity_structure": {"dealing_range_position_pct": 30.2},
+            "orderbook_l2_microstructure": {"orderbook_imbalance_ratio": 0.52},
+            "multi_timeframe_summary": {},
+        }
+
+        stage1 = Stage1Result(
+            market_regime={"regime": "CHOP_RANGE"},
+            top_10=[],
+            total_screened_pairs=10,
+            execution_time_ms=50.0,
+        )
+        stage2 = Stage2Result(
+            top_3=[
+                Stage2FinalistItem(rank=1, symbol="ETHUSDT", category="DEFI", score=9.0, thesis="Strong"),
+            ],
+            selection_rationale="test",
+            model_used="test_model",
+            execution_time_ms=10.0,
+        )
+
+        # Selected setup from LLM is LONG ETHUSDT at 30.2% dealing range
+        selected_setup = {
+            "decision": "EXECUTE",
+            "symbol": "ETHUSDT",
+            "direction": "LONG",
+            "order_type": "LIMIT",
+            "entry_price": 2310.5,
+            "stop_loss_price": 2281.62,
+            "take_profit_price": 2375.49,
+            "notes": "ETHUSDT 15m sweep reclaim candidate",
+        }
+
+        # Mock LLM call to return selected setup
+        with patch.object(trader, "_call_groq_json", return_value=selected_setup):
+            setup_output, receipt, _ = trader.run_stage3_finalist_and_order(
+                stage1=stage1,
+                stage2=stage2,
+                strategy_id="15M_SWEEP_RECLAIM_SMC",
+                risk_preset=RiskPreset.CONSERVATIVE_035,
+                execution_venue=ExecutionVenue.PAPER,
+                auto_fire_limit_order=False,
+                coordinator=mock_coord,
+                selected_setup=selected_setup,
+            )
+
+        assert setup_output.symbol == "ETHUSDT"
+        assert setup_output.direction == "LONG"
+        assert setup_output.candidate_id is not None
+        assert setup_output.candidate_id.startswith("ETHUSDT:LONG:")
+        # Crucial: strategy rejection reason must NOT contain SHORT veto!
+        assert "Cannot SHORT" not in setup_output.strategy_rejection_reason
+        assert "HARD_ZONE_LOCK_VETO: Cannot SHORT" not in setup_output.strategy_rejection_reason
+        assert setup_output.strategy_rejection_reason == "NO_SWEEP_RECLAIM_TRIGGER"
+        assert setup_output.veto_code == "NO_TRIGGER"
+        assert setup_output.veto_source == "STRATEGY_TRIGGER"

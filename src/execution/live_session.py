@@ -392,6 +392,40 @@ class LiveAutoSessionManager:
             logger.error("Failed to load persisted live auto session state: %s", e)
             return None
 
+    def sync_session_metrics_from_journal(self) -> None:
+        """Synchronize session fill count and coordinator daily metrics from journal."""
+        if not self.db or not self.started_at_utc:
+            if self.coordinator and hasattr(self.coordinator, "sync_daily_metrics_from_journal"):
+                self.coordinator.sync_daily_metrics_from_journal()
+            return
+        try:
+            start_iso = self.started_at_utc.replace("Z", "+00:00")
+            with self.db.get_connection() as conn:
+                rows = conn.execute(
+                    """SELECT trade_id, symbol, status, first_fill_timestamp_utc, created_at_utc, filled_quantity
+                       FROM automated_trade_journal
+                       WHERE mode = 'LIVE' AND status IN ('OPEN', 'CLOSED')"""
+                ).fetchall()
+
+            session_filled = 0
+            for r in rows:
+                fill_ts = r[3] or r[4]
+                filled_qty = float(r[5] or 0.0)
+                if fill_ts and filled_qty > 0:
+                    clean_ts = str(fill_ts).replace("Z", "+00:00")
+                    if clean_ts >= start_iso:
+                        if not self.stopped_at_utc or clean_ts <= self.stopped_at_utc.replace("Z", "+00:00"):
+                            session_filled += 1
+
+            self.orders_filled_count = max(self.orders_filled_count, session_filled)
+            self.orders_placed_count = max(self.orders_placed_count, self.orders_filled_count)
+            self._persist_state()
+
+            if self.coordinator and hasattr(self.coordinator, "sync_daily_metrics_from_journal"):
+                self.coordinator.sync_daily_metrics_from_journal()
+        except Exception as exc:
+            logger.warning("Failed to sync session metrics from journal: %s", exc)
+
     def recover_session_after_restart(self) -> Dict[str, Any]:
         """Reconcile exchange positions and orders upon server restart and restore session state."""
         with self._mutex:
@@ -448,6 +482,9 @@ class LiveAutoSessionManager:
                 reconciliation_err = str(e)
                 reconciliation_ok = False
                 logger.error("Exchange reconciliation failed during restart recovery: %s", e)
+
+            # Synchronize session and daily fill metrics from journal
+            self.sync_session_metrics_from_journal()
 
             # Check if an open position exists on exchange
             active_pos_symbol = None
@@ -709,6 +746,43 @@ class LiveAutoSessionManager:
                 exchange_adapter=adapter,
                 allow_tp_submission=True,
             )
+            # 3-Tier Dynamic SL Ratchet & Auto Break-Even Protection
+            is_dry_run = self.mode not in (ExecutionMode.LIVE_AUTO, ExecutionMode.LIVE_MANUAL)
+            if self.coordinator and hasattr(self.coordinator, "monitor_and_update_dynamic_sl"):
+                try:
+                    sl_updates = self.coordinator.monitor_and_update_dynamic_sl(dry_run=is_dry_run)
+                    if sl_updates:
+                        summary["dynamic_sl_updates"] = sl_updates
+                except Exception as sl_err:
+                    logger.warning("Dynamic SL monitoring error: %s", sl_err)
+            elif self.coordinator and hasattr(self.coordinator, "monitor_and_update_breakeven_protection"):
+                try:
+                    be_updates = self.coordinator.monitor_and_update_breakeven_protection()
+                    if be_updates:
+                        summary["breakeven_updates"] = be_updates
+                except Exception as be_err:
+                    logger.warning("Auto break-even monitoring error: %s", be_err)
+
+            # Adaptive Take-Profit Refresh (Phase 1)
+            is_dry_run = self.mode not in (ExecutionMode.LIVE_AUTO, ExecutionMode.LIVE_MANUAL)
+            if self.coordinator and hasattr(self.coordinator, "monitor_and_update_adaptive_tp"):
+                try:
+                    tp_updates = self.coordinator.monitor_and_update_adaptive_tp(dry_run=is_dry_run)
+                    if tp_updates:
+                        summary["adaptive_tp_updates"] = tp_updates
+                except Exception as tp_err:
+                    logger.warning("Adaptive TP monitoring error: %s", tp_err)
+
+            # Liquidity-Sweep & Structural Invalidation Monitoring (Phase 2 Diagnostic)
+            if self.coordinator and hasattr(self.coordinator, "monitor_structural_invalidation"):
+                try:
+                    invalidation_alerts = self.coordinator.monitor_structural_invalidation()
+                    if invalidation_alerts:
+                        summary["structural_invalidation_alerts"] = invalidation_alerts
+                except Exception as inv_err:
+                    logger.warning("Structural invalidation monitoring error: %s", inv_err)
+
+            self.sync_session_metrics_from_journal()
             self._last_reconciliation = {
                 "reconciliation_status": "SUCCESS",
                 "reconciliation_timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -716,6 +790,8 @@ class LiveAutoSessionManager:
                 "active_protective_order_count": sum(1 for o in orders if bool(o.get("reduceOnly", o.get("reduce_only", False))) and str(o.get("type", o.get("orderType", ""))).upper() in ("LIMIT", "STOP", "STOP_MARKET")),
                 "lock_state": self.coordinator.global_lock.state if self.coordinator else "IDLE",
                 "lock_symbol": self.coordinator.global_lock.active_symbol if self.coordinator else None,
+                "adaptive_tp_updates": summary.get("adaptive_tp_updates", []),
+                "structural_invalidation_alerts": summary.get("structural_invalidation_alerts", []),
             }
             self._reconciliation_last_cycle_status = "SUCCESS"
             self._reconciliation_last_result = dict(summary)
@@ -1298,4 +1374,21 @@ class LiveAutoSessionManager:
                 info["kill_switch_triggered"] = self.coordinator.kill_switch_triggered
             info.update(self._last_reconciliation)
             info["protection_reconciliation_worker"] = self.get_reconciliation_worker_status()
+
+            # Phase 2 Semantic Metric Expositions
+            info["entries_placed_session"] = self.orders_placed_count
+            info["entries_filled_session"] = self.orders_filled_count
+            entry_limit = (
+                getattr(self.coordinator.config.risk, "max_filled_entries_per_day", 3)
+                if self.coordinator and hasattr(self.coordinator, "config")
+                else 3
+            )
+            info["entry_limit"] = entry_limit
+            open_pos_count = 0
+            if self._last_reconciliation and self._last_reconciliation.get("position_amt"):
+                open_pos_count = 1 if abs(float(self._last_reconciliation["position_amt"])) > 1e-6 else 0
+            elif self.coordinator and self.coordinator.global_lock.is_locked:
+                open_pos_count = 1
+            info["open_positions_count"] = open_pos_count
+
             return info

@@ -107,10 +107,17 @@ class EMA20ReclaimStrategy:
         candles_1h: Optional[List[Candle]] = None,
         dealing_range_position_pct: Optional[float] = None,
         has_bull_fvg_pullback: bool = False,
+        direction: Optional[str | Direction] = None,
     ) -> Tuple[Optional[EMA20ReclaimSetup], str]:
         """Evaluate recent 5m candle series for EMA20 reclaim setup with Dealing Range Zone Locks."""
         if len(candles_5m) < 25:
             return None, "INSUFFICIENT_DATA: Need at least 25 5m candles"
+
+        target_dir: Optional[str] = None
+        if direction is not None:
+            target_dir = direction.value if hasattr(direction, "value") else str(direction).strip().upper()
+            if target_dir not in ("LONG", "SHORT"):
+                target_dir = None
 
         closes = [c.close for c in candles_5m]
         ema20_series = calc_ema(closes, period=20)
@@ -138,96 +145,104 @@ class EMA20ReclaimStrategy:
         # - Reclaim bar: current candle closed firmly above EMA20 (close > curr_ema20 and close > open)
         # - Dealing Range Lock: NEVER long if position_pct > 38.0% (unless Bull FVG + Bull trend)
         # ---------------------------------------------------------------------
-        can_eval_long = htf_trend is None or htf_trend.upper() in ("BULLISH", "NEUTRAL", "SIDEWAYS")
+        can_eval_long = False
         long_rejection_reason = ""
-        if pos_pct is not None:
-            dr_ok, dr_msg = check_dealing_range_zone_lock(
-                position_pct=pos_pct,
-                direction="LONG",
-                has_bull_fvg_pullback=has_bull_fvg_pullback,
-                trend_1h=htf_trend or "NEUTRAL",
-                long_max_discount_pct=38.0,
-            )
-            if not dr_ok:
-                can_eval_long = False
-                long_rejection_reason = dr_msg
+        if target_dir in (None, "LONG"):
+            can_eval_long = htf_trend is None or htf_trend.upper() in ("BULLISH", "NEUTRAL", "SIDEWAYS")
+            if pos_pct is not None:
+                dr_ok, dr_msg = check_dealing_range_zone_lock(
+                    position_pct=pos_pct,
+                    direction="LONG",
+                    has_bull_fvg_pullback=has_bull_fvg_pullback,
+                    trend_1h=htf_trend or "NEUTRAL",
+                    long_max_discount_pct=38.0,
+                )
+                if not dr_ok:
+                    can_eval_long = False
+                    long_rejection_reason = dr_msg
 
-        if can_eval_long and curr_candle.close > curr_ema20 and curr_candle.close > curr_candle.open:
-            # Check if there was a pullback below EMA20 in the preceding 2 to 6 bars
-            pullback_bars = []
-            lookback = min(len(candles_5m) - 1, 6)
-            for j in range(2, lookback + 1):
-                c = candles_5m[-j]
-                ema_val = ema20_series[-j]
-                if c.low < ema_val or c.close < ema_val:
-                    pullback_bars.append(c)
+            if not can_eval_long and target_dir == "LONG":
+                return None, long_rejection_reason or "TREND_FILTER: HTF trend not bullish/neutral"
 
-            if pullback_bars:
-                # Lowest low of the pullback below EMA20
-                raw_pullback_low = min(c.low for c in pullback_bars)
-                # Anti-chasing limit entry: place limit at pullback support / EMA20 rather than top tick
-                raw_entry_price = min(curr_candle.close, max(raw_pullback_low * 1.002, curr_ema20 * 1.001))
+            if can_eval_long and curr_candle.close > curr_ema20 and curr_candle.close > curr_candle.open:
+                # Check if there was a pullback below EMA20 in the preceding 2 to 6 bars
+                pullback_bars = []
+                lookback = min(len(candles_5m) - 1, 6)
+                for j in range(2, lookback + 1):
+                    c = candles_5m[-j]
+                    ema_val = ema20_series[-j]
+                    if c.low < ema_val or c.close < ema_val:
+                        pullback_bars.append(c)
 
-                # Deterministic tick-size normalization
-                entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
-                stop_loss = normalize_price_to_tick(raw_pullback_low, tick_size, rounding="FLOOR")
+                if pullback_bars:
+                    # Lowest low of the pullback below EMA20
+                    raw_pullback_low = min(c.low for c in pullback_bars)
+                    # Anti-chasing limit entry: place limit at pullback support / EMA20 rather than top tick
+                    raw_entry_price = min(curr_candle.close, max(raw_pullback_low * 1.002, curr_ema20 * 1.001))
 
-                if stop_loss >= entry_price:
-                    return None, f"INVALID_STOP_PRICE: Normalized stop {stop_loss} >= entry {entry_price} for LONG"
+                    # Deterministic tick-size normalization
+                    entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
+                    stop_loss = normalize_price_to_tick(raw_pullback_low, tick_size, rounding="FLOOR")
 
-                stop_dist = entry_price - stop_loss
-                if stop_dist > 0:
-                    stop_dist_pct = stop_dist / entry_price
-                    # Check stop bounds [0.40%, 0.80%]
-                    min_stop = self.costs_cfg.min_stop_distance_pct
-                    max_stop = self.costs_cfg.max_stop_distance_pct
+                    if stop_loss >= entry_price:
+                        return None, f"INVALID_STOP_PRICE: Normalized stop {stop_loss} >= entry {entry_price} for LONG"
 
-                    if min_stop <= stop_dist_pct <= max_stop:
-                        # Set Target Price: Default 2.25x gross RR
-                        target_dist = stop_dist * 2.25
-                        raw_tp = entry_price + target_dist
-                        take_profit = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST")
+                    stop_dist = entry_price - stop_loss
+                    if stop_dist > 0:
+                        stop_dist_pct = stop_dist / entry_price
+                        # Check stop bounds [0.40%, 0.80%]
+                        min_stop = self.costs_cfg.min_stop_distance_pct
+                        max_stop = self.costs_cfg.max_stop_distance_pct
 
-                        if take_profit <= entry_price:
-                            return None, f"INVALID_TAKE_PROFIT: Normalized TP {take_profit} <= entry {entry_price} for LONG"
+                        if min_stop <= stop_dist_pct <= max_stop:
+                            # Set Target Price: Default 2.25x gross RR
+                            target_dist = stop_dist * 2.25
+                            raw_tp = entry_price + target_dist
+                            take_profit = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST")
 
-                        sizing = self.sizing_engine.size_position(
-                            entry_price=entry_price,
-                            stop_loss=stop_loss,
-                            take_profit=take_profit,
-                            direction="LONG",
-                            step_size=step_size,
-                            min_notional=min_notional,
-                            account_equity=account_equity,
-                            funding_rate_est=funding_rate_est,
-                        )
+                            if take_profit <= entry_price:
+                                return None, f"INVALID_TAKE_PROFIT: Normalized TP {take_profit} <= entry {entry_price} for LONG"
 
-                        if sizing.is_feasible:
-                            setup = EMA20ReclaimSetup(
-                                symbol=symbol,
-                                direction=Direction.LONG,
+                            sizing = self.sizing_engine.size_position(
                                 entry_price=entry_price,
                                 stop_loss=stop_loss,
                                 take_profit=take_profit,
-                                stop_distance_pct=round(stop_dist_pct * 100, 3),
-                                sizing=sizing,
-                                trigger_candle_time_ms=curr_candle.close_time_ms,
-                                ema20_val=curr_ema20,
-                                pullback_bars_count=len(pullback_bars),
-                                reasons=[
-                                    f"5m EMA20 Reclaim: Close ${entry_price:.4f} > EMA20 ${curr_ema20:.4f}",
-                                    f"Pullback Low: ${stop_loss:.4f} ({stop_dist_pct * 100:.2f}% distance)",
-                                    f"Net-RR: {sizing.expected_net_rr:.2f} >= 1.50 gate (Loss: ${sizing.expected_conservative_loss_usd:.2f})",
-                                ],
+                                direction="LONG",
+                                step_size=step_size,
+                                min_notional=min_notional,
+                                account_equity=account_equity,
+                                funding_rate_est=funding_rate_est,
                             )
-                            return setup, "SETUP_VALID"
+
+                            if sizing.is_feasible:
+                                setup = EMA20ReclaimSetup(
+                                    symbol=symbol,
+                                    direction=Direction.LONG,
+                                    entry_price=entry_price,
+                                    stop_loss=stop_loss,
+                                    take_profit=take_profit,
+                                    stop_distance_pct=round(stop_dist_pct * 100, 3),
+                                    sizing=sizing,
+                                    trigger_candle_time_ms=curr_candle.close_time_ms,
+                                    ema20_val=curr_ema20,
+                                    pullback_bars_count=len(pullback_bars),
+                                    reasons=[
+                                        f"5m EMA20 Reclaim: Close ${entry_price:.4f} > EMA20 ${curr_ema20:.4f}",
+                                        f"Pullback Low: ${stop_loss:.4f} ({stop_dist_pct * 100:.2f}% distance)",
+                                        f"Net-RR: {sizing.expected_net_rr:.2f} >= 1.50 gate (Loss: ${sizing.expected_conservative_loss_usd:.2f})",
+                                    ],
+                                )
+                                return setup, "SETUP_VALID"
+                            else:
+                                return None, f"SIZING_REJECTED: {sizing.rejection_reason}"
                         else:
-                            return None, f"SIZING_REJECTED: {sizing.rejection_reason}"
-                    else:
-                        return None, (
-                            f"STOP_DISTANCE_OUT_OF_BOUNDS: Stop distance {stop_dist_pct * 100:.3f}% "
-                            f"not in [{min_stop * 100:.2f}%, {max_stop * 100:.2f}%]"
-                        )
+                            return None, (
+                                f"STOP_DISTANCE_OUT_OF_BOUNDS: Stop distance {stop_dist_pct * 100:.3f}% "
+                                f"not in [{min_stop * 100:.2f}%, {max_stop * 100:.2f}%]"
+                            )
+
+            if target_dir == "LONG":
+                return None, "NO_RECLAIM_TRIGGER"
 
         # ---------------------------------------------------------------------
         # 2. Evaluate SHORT Reclaim
@@ -236,94 +251,105 @@ class EMA20ReclaimStrategy:
         # - Reclaim bar: current candle closed firmly below EMA20 (close < curr_ema20 and close < open)
         # - Dealing Range Lock: NEVER short if position_pct < 65.0% (Hard Law 1)
         # ---------------------------------------------------------------------
-        can_eval_short = htf_trend is None or htf_trend.upper() in ("BEARISH", "NEUTRAL", "SIDEWAYS")
+        can_eval_short = False
         short_rejection_reason = ""
-        if pos_pct is not None:
-            dr_ok, dr_msg = check_dealing_range_zone_lock(
-                position_pct=pos_pct,
-                direction="SHORT",
-                short_min_premium_pct=65.0,
-            )
-            if not dr_ok:
-                can_eval_short = False
-                short_rejection_reason = dr_msg
+        if target_dir in (None, "SHORT"):
+            can_eval_short = htf_trend is None or htf_trend.upper() in ("BEARISH", "NEUTRAL", "SIDEWAYS")
+            if pos_pct is not None:
+                dr_ok, dr_msg = check_dealing_range_zone_lock(
+                    position_pct=pos_pct,
+                    direction="SHORT",
+                    short_min_premium_pct=65.0,
+                )
+                if not dr_ok:
+                    can_eval_short = False
+                    short_rejection_reason = dr_msg
 
-        if can_eval_short and curr_candle.close < curr_ema20 and curr_candle.close < curr_candle.open:
-            pullback_bars = []
-            lookback = min(len(candles_5m) - 1, 6)
-            for j in range(2, lookback + 1):
-                c = candles_5m[-j]
-                ema_val = ema20_series[-j]
-                if c.high > ema_val or c.close > ema_val:
-                    pullback_bars.append(c)
+            if not can_eval_short and target_dir == "SHORT":
+                return None, short_rejection_reason or "TREND_FILTER: HTF trend not bearish/neutral"
 
-            if pullback_bars:
-                raw_pullback_high = max(c.high for c in pullback_bars)
-                # Anti-chasing limit entry: place limit at pullback resistance / EMA20 rather than bottom tick
-                raw_entry_price = max(curr_candle.close, min(raw_pullback_high * 0.998, curr_ema20 * 0.999))
+            if can_eval_short and curr_candle.close < curr_ema20 and curr_candle.close < curr_candle.open:
+                pullback_bars = []
+                lookback = min(len(candles_5m) - 1, 6)
+                for j in range(2, lookback + 1):
+                    c = candles_5m[-j]
+                    ema_val = ema20_series[-j]
+                    if c.high > ema_val or c.close > ema_val:
+                        pullback_bars.append(c)
 
-                # Deterministic tick-size normalization
-                entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
-                stop_loss = normalize_price_to_tick(raw_pullback_high, tick_size, rounding="CEIL")
+                if pullback_bars:
+                    raw_pullback_high = max(c.high for c in pullback_bars)
+                    # Anti-chasing limit entry: place limit at pullback resistance / EMA20 rather than bottom tick
+                    raw_entry_price = max(curr_candle.close, min(raw_pullback_high * 0.998, curr_ema20 * 0.999))
 
-                if stop_loss <= entry_price:
-                    return None, f"INVALID_STOP_PRICE: Normalized stop {stop_loss} <= entry {entry_price} for SHORT"
+                    # Deterministic tick-size normalization
+                    entry_price = normalize_price_to_tick(raw_entry_price, tick_size, rounding="NEAREST")
+                    stop_loss = normalize_price_to_tick(raw_pullback_high, tick_size, rounding="CEIL")
 
-                stop_dist = stop_loss - entry_price
-                if stop_dist > 0:
-                    stop_dist_pct = stop_dist / entry_price
-                    min_stop = self.costs_cfg.min_stop_distance_pct
-                    max_stop = self.costs_cfg.max_stop_distance_pct
+                    if stop_loss <= entry_price:
+                        return None, f"INVALID_STOP_PRICE: Normalized stop {stop_loss} <= entry {entry_price} for SHORT"
 
-                    if min_stop <= stop_dist_pct <= max_stop:
-                        target_dist = stop_dist * 2.25
-                        raw_tp = entry_price - target_dist
-                        take_profit = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST")
+                    stop_dist = stop_loss - entry_price
+                    if stop_dist > 0:
+                        stop_dist_pct = stop_dist / entry_price
+                        min_stop = self.costs_cfg.min_stop_distance_pct
+                        max_stop = self.costs_cfg.max_stop_distance_pct
 
-                        if take_profit >= entry_price:
-                            return None, f"INVALID_TAKE_PROFIT: Normalized TP {take_profit} >= entry {entry_price} for SHORT"
+                        if min_stop <= stop_dist_pct <= max_stop:
+                            target_dist = stop_dist * 2.25
+                            raw_tp = entry_price - target_dist
+                            take_profit = normalize_price_to_tick(raw_tp, tick_size, rounding="NEAREST")
 
-                        sizing = self.sizing_engine.size_position(
-                            entry_price=entry_price,
-                            stop_loss=stop_loss,
-                            take_profit=take_profit,
-                            direction="SHORT",
-                            step_size=step_size,
-                            min_notional=min_notional,
-                            account_equity=account_equity,
-                            funding_rate_est=funding_rate_est,
-                        )
+                            if take_profit >= entry_price:
+                                return None, f"INVALID_TAKE_PROFIT: Normalized TP {take_profit} >= entry {entry_price} for SHORT"
 
-                        if sizing.is_feasible:
-                            setup = EMA20ReclaimSetup(
-                                symbol=symbol,
-                                direction=Direction.SHORT,
+                            sizing = self.sizing_engine.size_position(
                                 entry_price=entry_price,
                                 stop_loss=stop_loss,
                                 take_profit=take_profit,
-                                stop_distance_pct=round(stop_dist_pct * 100, 3),
-                                sizing=sizing,
-                                trigger_candle_time_ms=curr_candle.close_time_ms,
-                                ema20_val=curr_ema20,
-                                pullback_bars_count=len(pullback_bars),
-                                reasons=[
-                                    f"5m EMA20 Short Reclaim: Close ${entry_price:.4f} < EMA20 ${curr_ema20:.4f}",
-                                    f"Pullback High: ${stop_loss:.4f} ({stop_dist_pct * 100:.2f}% distance)",
-                                    f"Net-RR: {sizing.expected_net_rr:.2f} >= 1.50 gate (Loss: ${sizing.expected_conservative_loss_usd:.2f})",
-                                ],
+                                direction="SHORT",
+                                step_size=step_size,
+                                min_notional=min_notional,
+                                account_equity=account_equity,
+                                funding_rate_est=funding_rate_est,
                             )
-                            return setup, "SETUP_VALID"
-                        else:
-                            return None, f"SIZING_REJECTED: {sizing.rejection_reason}"
-                    else:
-                        return None, (
-                            f"STOP_DISTANCE_OUT_OF_BOUNDS: Stop distance {stop_dist_pct * 100:.3f}% "
-                            f"not in [{min_stop * 100:.2f}%, {max_stop * 100:.2f}%]"
-                        )
 
-        if short_rejection_reason and not can_eval_short:
-            return None, short_rejection_reason
-        if long_rejection_reason and not can_eval_long:
-            return None, long_rejection_reason
+                            if sizing.is_feasible:
+                                setup = EMA20ReclaimSetup(
+                                    symbol=symbol,
+                                    direction=Direction.SHORT,
+                                    entry_price=entry_price,
+                                    stop_loss=stop_loss,
+                                    take_profit=take_profit,
+                                    stop_distance_pct=round(stop_dist_pct * 100, 3),
+                                    sizing=sizing,
+                                    trigger_candle_time_ms=curr_candle.close_time_ms,
+                                    ema20_val=curr_ema20,
+                                    pullback_bars_count=len(pullback_bars),
+                                    reasons=[
+                                        f"5m EMA20 Short Reclaim: Close ${entry_price:.4f} < EMA20 ${curr_ema20:.4f}",
+                                        f"Pullback High: ${stop_loss:.4f} ({stop_dist_pct * 100:.2f}% distance)",
+                                        f"Net-RR: {sizing.expected_net_rr:.2f} >= 1.50 gate (Loss: ${sizing.expected_conservative_loss_usd:.2f})",
+                                    ],
+                                )
+                                return setup, "SETUP_VALID"
+                            else:
+                                return None, f"SIZING_REJECTED: {sizing.rejection_reason}"
+                        else:
+                            return None, (
+                                f"STOP_DISTANCE_OUT_OF_BOUNDS: Stop distance {stop_dist_pct * 100:.3f}% "
+                                f"not in [{min_stop * 100:.2f}%, {max_stop * 100:.2f}%]"
+                            )
+
+            if target_dir == "SHORT":
+                return None, "NO_RECLAIM_TRIGGER"
+
+        # Bidirectional scan fallthrough
+        if not can_eval_long and not can_eval_short:
+            if pos_pct is not None and (long_rejection_reason and short_rejection_reason):
+                return None, f"ZONE_LOCK_RESTRICTION: Equilibrium position ({pos_pct:.1f}%) not eligible for Long (<=38%) or Short (>=65%)"
+            return None, long_rejection_reason or short_rejection_reason or "TREND_FILTER: HTF trend in conflict"
+
+        return None, "NO_RECLAIM_TRIGGER"
 
         return None, "NO_RECLAIM_TRIGGER"

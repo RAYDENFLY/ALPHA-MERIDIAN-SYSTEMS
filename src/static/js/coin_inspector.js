@@ -832,8 +832,11 @@ function updateLiveSessionUI(data) {
             : `UNVERIFIED / $${Number(lossSnapshot.limit_usdt || 0.45).toFixed(2)}${tzLabel}`;
     }
     if (metricEntries) {
-        const entriesVal = data.daily_filled_entries !== undefined ? data.daily_filled_entries : 0;
-        metricEntries.textContent = `${entriesVal} / 3`;
+        const placed = data.entries_placed_session !== undefined ? data.entries_placed_session : (data.orders_placed_count !== undefined ? data.orders_placed_count : (data.daily_filled_entries || 0));
+        const limit = data.entry_limit !== undefined ? data.entry_limit : 3;
+        const filled = data.entries_filled_session !== undefined ? data.entries_filled_session : (data.orders_filled_count || 0);
+        metricEntries.textContent = `${placed} / ${limit}`;
+        metricEntries.title = `Session: ${placed} placed, ${filled} filled | Daily: ${data.daily_filled_entries || 0} / ${limit} max`;
     }
     if (metricLock) {
         const recStatus = data.reconciliation_status || 'UNVERIFIED';

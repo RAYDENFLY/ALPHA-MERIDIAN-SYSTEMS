@@ -44,7 +44,7 @@ def base_web_intelligence():
                 "distance_pct": 0.35,
             },
             "nearest_ask_wall": {
-                "price": 102.10,
+                "price": 103.50,
                 "size_usdt": 350000.0,
                 "distance_pct": 1.95,  # > 0.50% away (clear)
             },

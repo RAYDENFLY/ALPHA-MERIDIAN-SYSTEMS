@@ -270,6 +270,25 @@ def evaluate_dashboard_confluence_gates(
                         ),
                     )
 
+        # Room-to-Resistance Gate (< 1.25R): Opposing ask wall or 15m swing high
+        planned_risk = entry_price - stop_loss_price
+        if planned_risk > 0:
+            if ask_wall and isinstance(ask_wall, dict):
+                ask_p = float(ask_wall.get("price", 0.0) or 0.0)
+                ask_size = float(ask_wall.get("size_usdt", 0.0) or 0.0)
+                if ask_p > entry_price:
+                    dist_rr = (ask_p - entry_price) / planned_risk
+                    if dist_rr < 1.25 and ask_size >= 5000.0:
+                        return ConfluenceGateResult(
+                            passed=False,
+                            gate_name="ROOM_TO_RESISTANCE_GATE",
+                            rejection_reason=(
+                                f"INSUFFICIENT_ROOM_TO_RESISTANCE: Massive L2 ask wall of ${ask_size:,.0f} at {ask_p} "
+                                f"blocks LONG path at {dist_rr:.2f}R (< 1.25R minimum room-to-resistance)."
+                            ),
+                        )
+
+
         bid_wall_str = f"with ${bid_wall.get('size_usdt', 0):,.0f} bid wall at {bid_wall.get('price')}" if bid_wall else "with healthy bid depth"
         orderflow_evidence = f"L2 orderbook has supportive {imb*100:.1f}% bid imbalance {bid_wall_str}; no ask wall within 0.50% ceiling"
     else:  # SHORT
@@ -295,6 +314,25 @@ def evaluate_dashboard_confluence_gates(
                             f"SHORT entry within {dist_below:.2f}% (< 0.50% floor)."
                         ),
                     )
+
+        # Room-to-Resistance Gate (< 1.25R): Opposing bid wall or 15m swing low
+        planned_risk = stop_loss_price - entry_price
+        if planned_risk > 0:
+            if bid_wall and isinstance(bid_wall, dict):
+                bid_p = float(bid_wall.get("price", 0.0) or 0.0)
+                bid_size = float(bid_wall.get("size_usdt", 0.0) or 0.0)
+                if bid_p < entry_price:
+                    dist_rr = (entry_price - bid_p) / planned_risk
+                    if dist_rr < 1.25 and bid_size >= 5000.0:
+                        return ConfluenceGateResult(
+                            passed=False,
+                            gate_name="ROOM_TO_RESISTANCE_GATE",
+                            rejection_reason=(
+                                f"INSUFFICIENT_ROOM_TO_RESISTANCE: Massive L2 bid wall of ${bid_size:,.0f} at {bid_p} "
+                                f"blocks SHORT path at {dist_rr:.2f}R (< 1.25R minimum room-to-resistance)."
+                            ),
+                        )
+
 
         ask_wall_str = f"with ${ask_wall.get('size_usdt', 0):,.0f} ask wall at {ask_wall.get('price')}" if ask_wall else "with healthy ask depth"
         orderflow_evidence = f"L2 orderbook has bearish {imb*100:.1f}% bid imbalance ({(1.0-imb)*100:.1f}% asks) {ask_wall_str}; no bid wall within 0.50% floor"

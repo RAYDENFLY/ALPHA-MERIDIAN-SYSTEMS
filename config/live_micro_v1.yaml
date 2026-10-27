@@ -27,5 +27,5 @@ costs:
   slippage_rate: 0.0005
   funding_fee_rate_est: 0.0001
   min_net_rr: 1.50
-  min_stop_distance_pct: 0.0115  # 1.15% (Strict Structural Safety Floor)
-  max_stop_distance_pct: 0.0150  # 1.50%
+  min_stop_distance_pct: 0.0120  # 1.20% (Strict Structural Safety Floor)
+  max_stop_distance_pct: 0.0220  # 2.20% (Maximum Structural Width Cap)

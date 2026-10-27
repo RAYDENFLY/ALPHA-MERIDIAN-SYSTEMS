@@ -392,11 +392,17 @@ class ModelDConfig(BaseModel):
 class GroqAutoTraderConfig(BaseModel):
     """Configuration for Groq AI 10 -> 3 -> 1 Funnel Screener & Auto-Execution Pipeline."""
     api_key: Optional[str] = Field(default=None, description="Groq API Key (Free tier)")
+    api_key_fallback_a: Optional[str] = Field(default=None, description="Fallback Groq API Key A")
+    api_key_fallback_b: Optional[str] = Field(default=None, description="Fallback Groq API Key B")
     model: str = Field(default="qwen/qwen3.8-27b", description="Primary Groq model ID")
     base_url: str = Field(default="https://api.groq.com/openai/v1", description="Groq API endpoint URL")
     auto_execution_venue: str = Field(default="PAPER", description="Default execution venue: PAPER or LIVE")
     temperature: float = Field(default=0.1, ge=0.0, le=1.0)
     timeout_sec: float = Field(default=25.0, ge=5.0, le=60.0)
+    allow_quant_verified_fallback_on_tpd_exhaustion: bool = Field(
+        default=True,
+        description="Allow 100% Python-verified quant setups when Groq TPD is exhausted",
+    )
 
 
 class LiveMicroRiskConfig(BaseModel):
@@ -462,8 +468,8 @@ class LiveMicroCostsConfig(BaseModel):
     slippage_rate: float = Field(default=0.0005)
     funding_fee_rate_est: float = Field(default=0.0001)
     min_net_rr: float = Field(default=1.50)
-    min_stop_distance_pct: float = Field(default=0.0040)
-    max_stop_distance_pct: float = Field(default=0.0150)
+    min_stop_distance_pct: float = Field(default=0.0120)
+    max_stop_distance_pct: float = Field(default=0.0220)
 
 
 class LiveMicroV1Config(BaseModel):
@@ -651,6 +657,12 @@ def _apply_env_overrides(cfg: AppConfig) -> AppConfig:
     env_groq_key = os.getenv("GROQ_API_KEY") or os.getenv("groq")
     if env_groq_key:
         cfg.groq_autotrader.api_key = env_groq_key.strip()
+    env_groq_fa = os.getenv("GROQ_API_KEY_FALLBACK_A")
+    if env_groq_fa:
+        cfg.groq_autotrader.api_key_fallback_a = env_groq_fa.strip()
+    env_groq_fb = os.getenv("GROQ_API_KEY_FALLBACK_B")
+    if env_groq_fb:
+        cfg.groq_autotrader.api_key_fallback_b = env_groq_fb.strip()
     env_groq_model = os.getenv("GROQ_MODEL")
     if env_groq_model:
         cfg.groq_autotrader.model = env_groq_model.strip()

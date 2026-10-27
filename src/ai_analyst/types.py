@@ -203,6 +203,8 @@ class AIAnalystResult:
 class AIAnalystConfig:
     """Runtime configuration for Groq AI Trading Analyst."""
     groq_api_key: Optional[str] = None
+    groq_api_key_fallback_a: Optional[str] = None
+    groq_api_key_fallback_b: Optional[str] = None
     groq_model_id: str = "qwen/qwen3.8-27b"
     cache_ttl_sec: float = 60.0            # Cache deduplication window
     default_risk_budget_usdt: float = 1.00 # Standard advisory trade risk
@@ -214,6 +216,10 @@ class AIAnalystConfig:
     def __post_init__(self):
         if not self.groq_api_key:
             self.groq_api_key = os.getenv("GROQ_API_KEY") or os.getenv("groq")
+        if not self.groq_api_key_fallback_a:
+            self.groq_api_key_fallback_a = os.getenv("GROQ_API_KEY_FALLBACK_A")
+        if not self.groq_api_key_fallback_b:
+            self.groq_api_key_fallback_b = os.getenv("GROQ_API_KEY_FALLBACK_B")
         if not self.groq_model_id or self.groq_model_id == "qwen/qwen3.8-27b":
             self.groq_model_id = os.getenv("GROQ_MODEL") or "qwen/qwen3.8-27b"
 

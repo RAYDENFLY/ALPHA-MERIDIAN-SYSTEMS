@@ -108,14 +108,16 @@ class CoinInspectorService:
                 specs.tick_size = 10 ** (-p_prec)
             return specs
 
-        # 1. Check AsterAdapter's catalog cache
-        if not getattr(self.adapter, "_catalog_cache", None):
+        # 1. Check AsterAdapter's catalog cache or discover_instruments
+        catalog = getattr(self.adapter, "_catalog_cache", None)
+        if not isinstance(catalog, dict) or not catalog:
             try:
-                self.adapter.discover_instruments()
+                discovered = self.adapter.discover_instruments()
+                if isinstance(discovered, list):
+                    catalog = {getattr(i, "symbol", getattr(i, "name", "")): i for i in discovered if getattr(i, "symbol", None)}
             except Exception:
                 pass
-
-        inst = getattr(self.adapter, "_catalog_cache", {}).get(clean)
+        inst = catalog.get(clean) if isinstance(catalog, dict) else None
         if inst:
             ref_px = float(inst.last_price or mark_price or 1.0)
             p_prec = get_dynamic_precision(ref_px, inst.tick_size)
