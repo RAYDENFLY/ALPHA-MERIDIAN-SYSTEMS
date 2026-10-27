@@ -70,6 +70,42 @@ public class LiveSessionDataDto
 
     [JsonPropertyName("global_lock_symbol")]
     public string? GlobalLockSymbol { get; set; }
+
+    [JsonPropertyName("latest_screening")]
+    public ScreeningCycleDto? LatestScreening { get; set; }
+
+    [JsonPropertyName("protection_reconciliation_worker")]
+    public ProtectionWorkerDto? ProtectionReconciliationWorker { get; set; }
+}
+
+public class ProtectionWorkerDto
+{
+    [JsonPropertyName("worker_enabled")]
+    public bool WorkerEnabled { get; set; }
+
+    [JsonPropertyName("worker_alive")]
+    public bool WorkerAlive { get; set; }
+
+    [JsonPropertyName("last_cycle_status")]
+    public string? LastCycleStatus { get; set; }
+
+    [JsonPropertyName("last_cycle_result")]
+    public ProtectionWorkerCycleResultDto? LastCycleResult { get; set; }
+}
+
+public class ProtectionWorkerCycleResultDto
+{
+    [JsonPropertyName("timestamp_utc")]
+    public string? TimestampUtc { get; set; }
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "OK";
+
+    [JsonPropertyName("new_fills_imported")]
+    public int NewFillsImported { get; set; }
+
+    [JsonPropertyName("reconciled_trades")]
+    public int ReconciledTrades { get; set; }
 }
 
 public class PreflightAuditDto

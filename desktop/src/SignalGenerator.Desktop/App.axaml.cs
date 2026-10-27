@@ -58,6 +58,7 @@ public partial class App : Application
         services.AddSingleton<IPollingCoordinator, PollingCoordinator>();
         services.AddSingleton<IPersonalJournalService, PersonalJournalService>();
         services.AddSingleton<IRssNewsService, RssNewsService>();
+        services.AddSingleton<IFxRateService, FxRateService>();
 
         // ViewModels
         services.AddSingleton<OverviewViewModel>();

@@ -763,3 +763,82 @@ public class NewsArticleDto
 }
 
 #endregion
+
+#region 7. Overview Command Center (FX, Market Pulse & Operational Stream)
+
+public class FxDataPointDto
+{
+    public DateTime Date { get; set; }
+    public decimal Rate { get; set; }
+}
+
+public class FxHistoricalSeriesDto
+{
+    public string Period { get; set; } = "1M";
+    public decimal CurrentRate { get; set; }
+    public decimal StartRate { get; set; }
+    public decimal ChangePct { get; set; }
+    public decimal MinRate { get; set; }
+    public decimal MaxRate { get; set; }
+    public List<FxDataPointDto> Points { get; set; } = new();
+    public DateTime FetchedAtUtc { get; set; } = DateTime.UtcNow;
+    public string Source { get; set; } = "European Central Bank (ECB) via Frankfurter API";
+    public bool IsStale { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    public string FormattedCurrentRate => $"Rp {CurrentRate.ToString("N2", CultureInfo.InvariantCulture)}";
+    public string FormattedChange => (ChangePct >= 0 ? "+" : "") + $"{ChangePct.ToString("F2", CultureInfo.InvariantCulture)}% ({Period})";
+    public string ChangeColor => ChangePct > 0 ? "#00E676" : (ChangePct < 0 ? "#FF5252" : "#8B949E");
+    public string FormattedUsdtEstimate => $"~Rp {CurrentRate.ToString("N2", CultureInfo.InvariantCulture)} (1:1 USD Peg Est.)";
+    public string DisplayFetchedTime => FetchedAtUtc.ToString("HH:mm:ss") + " UTC";
+}
+
+public class FxRateSnapshotDto
+{
+    public decimal Rate { get; set; }
+    public DateTime Date { get; set; }
+    public string Source { get; set; } = "European Central Bank (ECB)";
+    public bool IsStale { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+public class MarketPulseItemDto
+{
+    public string Symbol { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal Change24hPct { get; set; }
+    public decimal Volume24hUsdt { get; set; }
+    public decimal? FundingRatePct { get; set; }
+    public decimal? OpenInterestUsdt { get; set; }
+    public string Venue { get; set; } = "AsterDEX / Multi";
+    public string TimestampDisplay { get; set; } = "--";
+
+    public string ChangeColor => Change24hPct > 0 ? "#00E676" : (Change24hPct < 0 ? "#FF5252" : "#8B949E");
+    public string FormattedChange => (Change24hPct >= 0 ? "+" : "") + Change24hPct.ToString("F2", CultureInfo.InvariantCulture) + "%";
+    public string FormattedPrice => Price >= 100 ? $"${Price:N2}" : $"${Price:N4}";
+    public string FormattedVolume => Volume24hUsdt >= 1_000_000_000 ? $"${Volume24hUsdt / 1_000_000_000:F2}B" : $"${Volume24hUsdt / 1_000_000:F2}M";
+    public string FormattedOi => OpenInterestUsdt.HasValue 
+        ? (OpenInterestUsdt.Value >= 1_000_000_000 ? $"${OpenInterestUsdt.Value / 1_000_000_000:F2}B" : $"${OpenInterestUsdt.Value / 1_000_000:F2}M")
+        : "--";
+    public string FormattedFunding => FundingRatePct.HasValue ? $"{FundingRatePct.Value:F4}%" : "--";
+}
+
+public class RecentOperationalActivityDto
+{
+    public string TimestampDisplay { get; set; } = "--";
+    public string Category { get; set; } = string.Empty;
+    public string Symbol { get; set; } = "--";
+    public string Status { get; set; } = string.Empty;
+    public string Explanation { get; set; } = string.Empty;
+    public string Source { get; set; } = string.Empty;
+
+    public string StatusColor => Status.ToUpperInvariant() switch
+    {
+        "SUCCESS" or "OK" or "APPROVED" or "CLOSED_WIN" => "#00E676",
+        "REJECTED" or "FAILED" or "CLOSED_LOSS" => "#FF5252",
+        "RUNNING" or "ACTIVE" or "OPEN" => "#FFB300",
+        _ => "#8B949E"
+    };
+}
+
+#endregion

@@ -83,6 +83,15 @@ public class MainViewModelTests
         public void UpdateAutoPolling(bool enable) { CurrentSettings.EnableAutoPolling = enable; }
     }
 
+    private class MockFxRateService : IFxRateService
+    {
+        public Task<FxRateSnapshotDto> GetLatestRateAsync(CancellationToken ct = default) =>
+            Task.FromResult(new FxRateSnapshotDto { Rate = 18139m, Date = DateTime.UtcNow });
+
+        public Task<FxHistoricalSeriesDto> GetHistoricalSeriesAsync(string period, CancellationToken ct = default) =>
+            Task.FromResult(new FxHistoricalSeriesDto { Period = period, CurrentRate = 18139m, StartRate = 18000m, ChangePct = 0.77m, MinRate = 17950m, MaxRate = 18200m });
+    }
+
     private (MainViewModel Vm, MockPollingCoordinator Coord, MockApiClient Client) CreateMainVm()
     {
         var coord = new MockPollingCoordinator();
@@ -90,8 +99,9 @@ public class MainViewModelTests
         var settings = new MockSettingsService();
         var personalJournal = new MockPersonalJournalService();
         var newsService = new MockRssNewsService();
+        var fxService = new MockFxRateService();
 
-        var overviewVm = new OverviewViewModel(coord, client);
+        var overviewVm = new OverviewViewModel(coord, client, fxService, newsService);
         var monitorVm = new MarketMonitorViewModel(client, coord);
         var screenerVm = new ScreenerViewModel(client);
         var liquidityVm = new LiquidityIntelViewModel(client);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace SignalGenerator.Desktop.Models;
@@ -72,8 +73,136 @@ public class AccountSnapshotDto
     [JsonPropertyName("last_sync_utc")]
     public string? LastSyncUtc { get; set; }
 
+    [JsonPropertyName("last_sync_age_seconds")]
+    public int? LastSyncAgeSeconds { get; set; }
+
     [JsonPropertyName("source")]
     public string? Source { get; set; }
+
+    [JsonPropertyName("positions_summary")]
+    public List<OpenPositionDto> PositionsSummary { get; set; } = new();
+}
+
+public class OpenPositionDto
+{
+    [JsonPropertyName("symbol")]
+    public string Symbol { get; set; } = string.Empty;
+
+    [JsonPropertyName("side")]
+    public string Side { get; set; } = "LONG";
+
+    [JsonPropertyName("position_amt")]
+    public decimal PositionAmt { get; set; }
+
+    [JsonPropertyName("raw_position_amt")]
+    public decimal RawPositionAmt { get; set; }
+
+    [JsonPropertyName("entry_price")]
+    public decimal EntryPrice { get; set; }
+
+    [JsonPropertyName("mark_price")]
+    public decimal MarkPrice { get; set; }
+
+    [JsonPropertyName("notional_usdt")]
+    public decimal NotionalUsdt { get; set; }
+
+    [JsonPropertyName("leverage")]
+    public int Leverage { get; set; } = 1;
+
+    [JsonPropertyName("margin_mode")]
+    public string MarginMode { get; set; } = "CROSS";
+
+    [JsonPropertyName("take_profit_price")]
+    public decimal? TakeProfitPrice { get; set; }
+
+    [JsonPropertyName("take_profit_label")]
+    public string? TakeProfitLabel { get; set; }
+
+    [JsonPropertyName("stop_loss_price")]
+    public decimal? StopLossPrice { get; set; }
+
+    [JsonPropertyName("stop_loss_label")]
+    public string? StopLossLabel { get; set; }
+
+    [JsonPropertyName("liquidation_price")]
+    public decimal? LiquidationPrice { get; set; }
+
+    [JsonPropertyName("liquidation_label")]
+    public string? LiquidationLabel { get; set; }
+
+    [JsonPropertyName("unrealized_pnl_usdt")]
+    public decimal UnrealizedPnlUsdt { get; set; }
+
+    [JsonPropertyName("roe_pct")]
+    public decimal RoePct { get; set; }
+
+    [JsonPropertyName("roi_pct")]
+    public decimal RoiPct { get; set; }
+
+    [JsonPropertyName("source")]
+    public string? Source { get; set; }
+
+    [JsonPropertyName("last_sync_utc")]
+    public string? LastSyncUtc { get; set; }
+
+    [JsonPropertyName("last_sync_age_seconds")]
+    public int? LastSyncAgeSeconds { get; set; }
+
+    [JsonPropertyName("tp_orders")]
+    public List<PositionOrderBracketDto> TpOrders { get; set; } = new();
+
+    [JsonPropertyName("sl_orders")]
+    public List<PositionOrderBracketDto> SlOrders { get; set; } = new();
+
+    // UI Formatting Helpers
+    public string DirectionColor => Side.Equals("LONG", StringComparison.OrdinalIgnoreCase) ? "#00E676" : "#FF5252";
+    public string PnlColor => UnrealizedPnlUsdt > 0 ? "#00E676" : (UnrealizedPnlUsdt < 0 ? "#FF5252" : "#8B949E");
+    public string FormattedPnl => (UnrealizedPnlUsdt >= 0 ? "+$" : "-$") + Math.Abs(UnrealizedPnlUsdt).ToString("F2", CultureInfo.InvariantCulture) + $" ({RoePct:F2}%)";
+    public string FormattedEntry => EntryPrice.ToString("F4", CultureInfo.InvariantCulture);
+    public string FormattedMark => MarkPrice.ToString("F4", CultureInfo.InvariantCulture);
+    public string FormattedSize => PositionAmt.ToString("F4", CultureInfo.InvariantCulture);
+    public string FormattedLiq => LiquidationPrice.HasValue ? $"${LiquidationPrice.Value.ToString("F4", CultureInfo.InvariantCulture)}" : (LiquidationLabel ?? "Unavailable");
+    public string FormattedSl => StopLossPrice.HasValue ? $"${StopLossPrice.Value.ToString("N4", CultureInfo.InvariantCulture)}" : (StopLossLabel ?? "None");
+    public string FormattedTp => TakeProfitPrice.HasValue ? $"${TakeProfitPrice.Value.ToString("N4", CultureInfo.InvariantCulture)}" : (TakeProfitLabel ?? "None");
+}
+
+public class PositionOrderBracketDto
+{
+    [JsonPropertyName("order_id")]
+    public object? OrderId { get; set; }
+
+    [JsonPropertyName("price")]
+    public decimal Price { get; set; }
+
+    [JsonPropertyName("orig_qty")]
+    public decimal OrigQty { get; set; }
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "LIMIT";
+
+    [JsonPropertyName("reduce_only")]
+    public bool ReduceOnly { get; set; }
+
+    [JsonPropertyName("close_position")]
+    public bool ClosePosition { get; set; }
+}
+
+public class OpenOrderDto
+{
+    public string Symbol { get; set; } = string.Empty;
+    public string Side { get; set; } = "BUY";
+    public string OrderType { get; set; } = "LIMIT";
+    public decimal Price { get; set; }
+    public decimal OrigQty { get; set; }
+    public decimal RemainingQty { get; set; }
+    public string Status { get; set; } = "OPEN";
+    public bool ReduceOnly { get; set; }
+    public string AssociatedPosition { get; set; } = "--";
+    public string TimestampUtc { get; set; } = "--";
+
+    public string SideColor => Side.Equals("BUY", StringComparison.OrdinalIgnoreCase) || Side.Equals("LONG", StringComparison.OrdinalIgnoreCase) ? "#00E676" : "#FF5252";
+    public string FormattedPrice => Price.ToString("F4", CultureInfo.InvariantCulture);
+    public string FormattedQty => OrigQty.ToString("F4", CultureInfo.InvariantCulture);
 }
 
 public class CapitalDto
