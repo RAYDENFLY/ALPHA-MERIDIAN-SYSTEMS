@@ -14,7 +14,7 @@
     let pollInterval = null;
     let currentBars = [];
     let productionBridge = new URLSearchParams(window.location.search).get('host') === 'production';
-    const harnessMode = new URLSearchParams(window.location.search).get('host') === 'harness';
+    const harnessMode = window.__AMS_VELA_HARNESS__ === true || new URLSearchParams(window.location.search).get('host') === 'harness';
     let latestBridgeSequence = -1;
 
     // Production host contract: C# owns GET polling and injects versioned snapshots.
