@@ -3,7 +3,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
+             xmlns:models="using:SignalGenerator.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="800"
              x:Class="SignalGenerator.Desktop.Views.LiquidityIntelView"
              x:DataType="vm:LiquidityIntelViewModel"
              Background="#000000">
@@ -15,91 +16,200 @@
             <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="■ LIQUIDITY INTELLIGENCE // L2 BOOK DEPTH &amp; WHALE WALLS" 
-                                   FontSize="12" 
-                                   FontWeight="Bold" 
-                                   FontFamily="Consolas, monospace" 
-                                   Foreground="#FF9D00" />
-                        <TextBlock Text="Cross-book order flow depth, protecting bid/ask walls, and institutional whale cluster detection" 
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="■ LIQUIDITY &amp; ORDER FLOW WORKSTATION" 
+                                       FontSize="12" 
+                                       FontWeight="Bold" 
+                                       FontFamily="Consolas, monospace" 
+                                       Foreground="#FF9D00" />
+                            <Border Background="#1C2128" BorderBrush="#242A34" BorderThickness="1" Padding="6,1" CornerRadius="2">
+                                <TextBlock Text="{Binding Status}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                            </Border>
+                            <TextBlock Text="{Binding FeedProvenance}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="Unified workspace: Candlestick price action, cross-exchange L2 depth, protecting wall telemetry, and SMC sweep events" 
                                    FontSize="10" 
                                    FontFamily="Consolas, monospace" 
                                    Foreground="#8B949E" 
                                    Margin="0,2,0,0" />
                     </StackPanel>
 
-                    <Button Grid.Column="1" 
-                            Command="{Binding RefreshIntelCommand}" 
-                            Classes="terminal-btn"
-                            Padding="10,4"
-                            VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
-                            <TextBlock Text="SYNC DEPTH" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
-                        </StackPanel>
-                    </Button>
+                    <!-- Symbol & Timeframe Selectors -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="PAIR:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding AvailableSymbols}" 
+                                  SelectedItem="{Binding Symbol}" 
+                                  FontSize="10" 
+                                  FontFamily="Consolas, monospace"
+                                  Background="#161B22"
+                                  Foreground="#FF9D00"
+                                  BorderBrush="#242A34"
+                                  Width="110" />
+
+                        <TextBlock Text="TF:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="6,0,0,0" />
+                        <ComboBox ItemsSource="{Binding AvailableTimeframes}" 
+                                  SelectedItem="{Binding Timeframe}" 
+                                  FontSize="10" 
+                                  FontFamily="Consolas, monospace"
+                                  Background="#161B22"
+                                  Foreground="#00E676"
+                                  BorderBrush="#242A34"
+                                  Width="70" />
+
+                        <Button Command="{Binding RefreshIntelCommand}" 
+                                Classes="terminal-btn"
+                                Padding="10,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                                <TextBlock Text="SYNC" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Major Defense Walls (2-Column Grid) -->
-            <Grid ColumnDefinitions="*,*" Margin="0,2,0,0">
-                
-                <!-- Bid Wall (Support Shield) -->
-                <Border Grid.Column="0" Margin="0,0,5,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
-                    <StackPanel Spacing="8">
-                        <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
-                            <TextBlock Text="■ MAJOR BID WALL // DEMAND CLUSTER (SUPPORT)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                        </Border>
-                        
-                        <TextBlock Text="{Binding BidWallLevel}" FontSize="18" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                        <TextBlock Text="Active demand cluster identified across Aster DEX Level-2 orderbook. Serves as Anchor 3 protective shield for LONG invalidation." 
-                                   FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
-
-                        <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="8,4">
-                            <Grid ColumnDefinitions="*,*">
-                                <TextBlock Grid.Column="0" Text="WALL FILTER: [0.40%, 1.60%]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                <TextBlock Grid.Column="1" Text="STATUS: VERIFIED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
-                            </Grid>
-                        </Border>
+            <!-- Order Book Depth & Wall Telemetry (4 Tiles) -->
+            <Grid ColumnDefinitions="*,*,*,*" Margin="0,2,0,0">
+                <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="CROSS-BOOK SPREAD" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding SpreadBpsText}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        <TextBlock Text="Tight Basis Confluence" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
                     </StackPanel>
                 </Border>
 
-                <!-- Ask Wall (Resistance Shield) -->
-                <Border Grid.Column="1" Margin="5,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
-                    <StackPanel Spacing="8">
-                        <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
-                            <TextBlock Text="■ MAJOR ASK WALL // SUPPLY OVERHANG (RESISTANCE)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
-                        </Border>
-
-                        <TextBlock Text="{Binding AskWallLevel}" FontSize="18" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
-                        <TextBlock Text="Active supply ceiling identified across Aster DEX Level-2 orderbook. Serves as Anchor 3 protective shield for SHORT invalidation." 
-                                   FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" TextWrapping="Wrap" />
-
-                        <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="8,4">
-                            <Grid ColumnDefinitions="*,*">
-                                <TextBlock Grid.Column="0" Text="WALL FILTER: [0.40%, 1.60%]" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                <TextBlock Grid.Column="1" Text="STATUS: VERIFIED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
-                            </Grid>
-                        </Border>
+                <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="TOP PROTECTING BID WALL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding BidWallLevel}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        <TextBlock Text="{Binding BidDepthText, StringFormat='Total Depth: {0}'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
                     </StackPanel>
                 </Border>
 
+                <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="TOP PROTECTING ASK WALL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding AskWallLevel}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                        <TextBlock Text="{Binding AskDepthText, StringFormat='Total Depth: {0}'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="3" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="ORDER BOOK FEED AGE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding OrderBookAgeText}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                        <TextBlock Text="{Binding OrderBookStatus, StringFormat='Status: {0}'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                    </StackPanel>
+                </Border>
             </Grid>
 
-            <!-- Whale Order Flow & Institutional Accumulation Stream -->
-            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
+            <!-- ORDER BOOK DEPTH & LIQUIDITY MAP (WALLS TABLE) -->
+            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,10">
                 <StackPanel Spacing="8">
-                    <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
-                        <TextBlock Text="■ INSTITUTIONAL WHALE ACTIVITY &amp; ACCUMULATION FLOW" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    <TextBlock Text="▶ ORDER BOOK DEPTH &amp; LIQUIDITY MAP (SIGNIFICANT WALL CANDIDATES)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    
+                    <!-- Table Header -->
+                    <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                        <Grid ColumnDefinitions="80,120,140,100,120,*">
+                            <TextBlock Grid.Column="0" Text="SIDE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="1" Text="PRICE LEVEL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="2" Text="NOTIONAL (USDT)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="3" Text="DISTANCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="4" Text="QUANTITY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="5" Text="CONTRIBUTING VENUE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="10,0,0,0" />
+                        </Grid>
                     </Border>
 
-                    <Border Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8">
-                        <TextBlock Text="{Binding WhaleEventSummary}" FontSize="12" FontFamily="Consolas, monospace" Foreground="#448AFF" TextWrapping="Wrap" />
+                    <ListBox ItemsSource="{Binding OrderBookWalls}" Background="Transparent" BorderThickness="0" MaxHeight="180">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:OrderBookWallDto">
+                                <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="4,4">
+                                    <Grid ColumnDefinitions="80,120,140,100,120,*">
+                                        <TextBlock Grid.Column="0" Text="{Binding Side}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding FormattedPrice}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#F0F4F8" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding FormattedNotional}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding FormattedDistance}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#FFB300" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="4" Text="{Binding Quantity, StringFormat='{}{0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="5" Text="{Binding Venue, TargetNullValue='Combined'}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+
+            <!-- 15M / 1H SWEEP & RECLAIM EVENTS -->
+            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,10">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="▶ DETECTED LIQUIDITY SWEEPS &amp; RECLAIMS (SOURCE: /api/chart/liquidity_layers)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                    
+                    <!-- Table Header -->
+                    <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                        <Grid ColumnDefinitions="110,160,80,120,120,*">
+                            <TextBlock Grid.Column="0" Text="TIME (UTC)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="1" Text="EVENT ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="2" Text="SIDE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="3" Text="SWEEP PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="4" Text="RECLAIM PRICE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="5" Text="SWEEP VOLUME (USDT)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,10,0" />
+                        </Grid>
                     </Border>
 
-                    <Grid ColumnDefinitions="*,*">
-                        <TextBlock Grid.Column="0" Text="SOURCE: Aster DEX L2 Feed &amp; Binance Reference Aggregator" FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                        <TextBlock Grid.Column="1" Text="INVARIANT: READ-ONLY INTELLIGENCE" FontSize="9" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" />
-                    </Grid>
+                    <ListBox ItemsSource="{Binding SweepEvents}" Background="Transparent" BorderThickness="0" MaxHeight="160">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:SweepEventDto">
+                                <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="4,4">
+                                    <Grid ColumnDefinitions="110,160,80,120,120,*">
+                                        <TextBlock Grid.Column="0" Text="{Binding EventTimeUtc}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding EventId}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Side}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding SweepPrice, StringFormat='${0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#FFB300" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="4" Text="{Binding ReclaimPrice, StringFormat='${0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="5" Text="{Binding VolumeUsdt, StringFormat='${0:N0}'}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+
+            <!-- Candlestick Bar Overview -->
+            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,10">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="▶ HISTORICAL CANDLESTICK BARS (RECENT 100 OHLCV SAMPLES)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                    
+                    <!-- Table Header -->
+                    <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                        <Grid ColumnDefinitions="180,100,100,100,100,110,*">
+                            <TextBlock Grid.Column="0" Text="TIME (UTC)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="1" Text="OPEN" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="2" Text="HIGH" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="3" Text="LOW" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="4" Text="CLOSE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="5" Text="VOLUME" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="6" Text="QUOTE VOLUME (USDT)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" Margin="0,0,10,0" />
+                        </Grid>
+                    </Border>
+
+                    <ListBox ItemsSource="{Binding Candles}" Background="Transparent" BorderThickness="0" MaxHeight="180">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:KlineDto">
+                                <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="4,4">
+                                    <Grid ColumnDefinitions="180,100,100,100,100,110,*">
+                                        <TextBlock Grid.Column="0" Text="{Binding DatetimeUtc}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Open, StringFormat='${0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding High, StringFormat='${0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#00E676" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Low, StringFormat='${0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#FF5252" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="4" Text="{Binding Close, StringFormat='${0:F4}'}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="5" Text="{Binding Volume, StringFormat='{}{0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="6" Text="{Binding QuoteVolume, StringFormat='${0:N0}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#448AFF" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </StackPanel>
             </Border>
 

@@ -86,6 +86,26 @@ public class PollingCoordinatorTests
         {
             return Task.FromResult(ApiResult<RetailPositioningResponseDto>.Success(new RetailPositioningResponseDto { Symbol = symbol }));
         }
+
+        public Task<ApiResult<JournalTradesResponseDto>> GetJournalTradesAsync(int limit = 50, CancellationToken ct = default)
+        {
+            return Task.FromResult(ApiResult<JournalTradesResponseDto>.Success(new JournalTradesResponseDto()));
+        }
+
+        public Task<ApiResult<ChartSymbolsResponseDto>> GetChartSymbolsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(ApiResult<ChartSymbolsResponseDto>.Success(new ChartSymbolsResponseDto()));
+        }
+
+        public Task<ApiResult<LiquidityLayersResponseDto>> GetLiquidityLayersAsync(string symbol, string timeframe = "1h", CancellationToken ct = default)
+        {
+            return Task.FromResult(ApiResult<LiquidityLayersResponseDto>.Success(new LiquidityLayersResponseDto { Symbol = symbol, Timeframe = timeframe }));
+        }
+
+        public Task<ApiResult<List<KlineDto>>> GetKlinesAsync(string symbol, string timeframe = "1h", int limit = 100, CancellationToken ct = default)
+        {
+            return Task.FromResult(ApiResult<List<KlineDto>>.Success(new List<KlineDto>()));
+        }
     }
 
     private class FakeSettingsService : ISettingsService

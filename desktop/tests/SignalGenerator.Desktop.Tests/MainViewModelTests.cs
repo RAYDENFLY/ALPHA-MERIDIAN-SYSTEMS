@@ -49,6 +49,28 @@ public class MainViewModelTests
         public Task<ApiResult<AutotraderScreeningLogResponseDto>> GetScreeningLogAsync(CancellationToken ct = default) => Task.FromResult(ApiResult<AutotraderScreeningLogResponseDto>.Success(new AutotraderScreeningLogResponseDto()));
         public Task<ApiResult<List<AlertItemDto>>> GetAlertsAsync(CancellationToken ct = default) => Task.FromResult(ApiResult<List<AlertItemDto>>.Success(new List<AlertItemDto>()));
         public Task<ApiResult<RetailPositioningResponseDto>> GetRetailPositioningAsync(string symbol = "BTCUSDT", CancellationToken ct = default) => Task.FromResult(ApiResult<RetailPositioningResponseDto>.Success(new RetailPositioningResponseDto()));
+        public Task<ApiResult<JournalTradesResponseDto>> GetJournalTradesAsync(int limit = 50, CancellationToken ct = default) => Task.FromResult(ApiResult<JournalTradesResponseDto>.Success(new JournalTradesResponseDto()));
+        public Task<ApiResult<ChartSymbolsResponseDto>> GetChartSymbolsAsync(CancellationToken ct = default) => Task.FromResult(ApiResult<ChartSymbolsResponseDto>.Success(new ChartSymbolsResponseDto()));
+        public Task<ApiResult<LiquidityLayersResponseDto>> GetLiquidityLayersAsync(string symbol, string timeframe = "1h", CancellationToken ct = default) => Task.FromResult(ApiResult<LiquidityLayersResponseDto>.Success(new LiquidityLayersResponseDto()));
+        public Task<ApiResult<List<KlineDto>>> GetKlinesAsync(string symbol, string timeframe = "1h", int limit = 100, CancellationToken ct = default) => Task.FromResult(ApiResult<List<KlineDto>>.Success(new List<KlineDto>()));
+    }
+
+    private class MockPersonalJournalService : IPersonalJournalService
+    {
+        public string DatabasePath => "test.db";
+        public Task InitializeAsync() => Task.CompletedTask;
+        public Task<List<PersonalTradeRecord>> GetAllTradesAsync() => Task.FromResult(new List<PersonalTradeRecord>());
+        public Task<PersonalTradeRecord?> GetTradeByIdAsync(string tradeId) => Task.FromResult<PersonalTradeRecord?>(null);
+        public Task<bool> SaveTradeAsync(PersonalTradeRecord trade) => Task.FromResult(true);
+        public Task<bool> DeleteTradeAsync(string tradeId) => Task.FromResult(true);
+        public Task<Dictionary<DateTime, decimal>> GetDailyNetPnlAsync(int year, int month) => Task.FromResult(new Dictionary<DateTime, decimal>());
+        public Task<decimal> GetMonthlyNetPnlAsync(int year, int month) => Task.FromResult(0m);
+    }
+
+    private class MockRssNewsService : IRssNewsService
+    {
+        public Task<List<NewsArticleDto>> FetchLatestNewsAsync(CancellationToken ct = default) => Task.FromResult(new List<NewsArticleDto>());
+        public Task<NewsArticleDto?> SummarizeArticleAsync(string articleId, CancellationToken ct = default) => Task.FromResult<NewsArticleDto?>(null);
     }
 
     private class MockSettingsService : ISettingsService
@@ -66,16 +88,18 @@ public class MainViewModelTests
         var coord = new MockPollingCoordinator();
         var client = new MockApiClient();
         var settings = new MockSettingsService();
+        var personalJournal = new MockPersonalJournalService();
+        var newsService = new MockRssNewsService();
 
         var overviewVm = new OverviewViewModel(coord, client);
         var monitorVm = new MarketMonitorViewModel(client, coord);
         var screenerVm = new ScreenerViewModel(client);
-        var liquidityVm = new LiquidityIntelViewModel();
+        var liquidityVm = new LiquidityIntelViewModel(client);
         var hunterVm = new GroqHunterViewModel(client);
-        var journalVm = new JournalViewModel(coord, client);
+        var journalVm = new JournalViewModel(coord, client, personalJournal);
         var alertsVm = new AlertsViewModel(client);
         var participantsVm = new MarketParticipantsViewModel(client);
-        var newsVm = new CryptoNewsViewModel(coord);
+        var newsVm = new CryptoNewsViewModel(newsService, coord);
         var settingsVm = new SettingsViewModel(settings, client, coord);
 
         var mainVm = new MainViewModel(

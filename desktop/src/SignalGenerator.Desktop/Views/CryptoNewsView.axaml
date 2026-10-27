@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
+             xmlns:models="using:SignalGenerator.Desktop.Models"
              mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
              x:Class="SignalGenerator.Desktop.Views.CryptoNewsView"
              x:DataType="vm:CryptoNewsViewModel"
@@ -14,12 +15,12 @@
         <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8" Margin="0,0,0,10">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="■ CRYPTO NEWS &amp; OPERATIONAL INTELLIGENCE WIRE" 
+                    <TextBlock Text="■ GLOBAL MARKET INTELLIGENCE // MULTI-MARKET RSS WIRE &amp; AI SUMMARIES" 
                                FontSize="12" 
                                FontWeight="Bold" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#FF9D00" />
-                    <TextBlock Text="Real-time macro headlines, exchange operational alerts, and strategy execution dispatches" 
+                    <TextBlock Text="Public free RSS feeds (Federal Reserve, CoinDesk, CoinTelegraph) with isolated server-side Groq news summarization" 
                                FontSize="10" 
                                FontFamily="Consolas, monospace" 
                                Foreground="#8B949E" 
@@ -27,82 +28,122 @@
                 </StackPanel>
 
                 <Button Grid.Column="1" 
-                        Command="{Binding ClearWireCommand}" 
+                        Command="{Binding RefreshNewsCommand}" 
                         Classes="terminal-btn"
                         Padding="10,4"
                         VerticalAlignment="Center">
-                    <TextBlock Text="CLEAR WIRE" FontSize="10" Foreground="#8B949E" FontWeight="Bold" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
+                        <TextBlock Text="REFRESH NEWS" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                    </StackPanel>
                 </Button>
             </Grid>
         </Border>
 
-        <!-- Summary Strip -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" Margin="0,0,0,10">
-            
-            <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                <StackPanel Spacing="2">
-                    <TextBlock Text="TOTAL WIRE DISPATCHES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    <TextBlock Text="{Binding ItemCount}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+        <!-- Category Filter & Security Notice Ribbon -->
+        <Border Grid.Row="1" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="8,4" Margin="0,0,0,10">
+            <Grid ColumnDefinitions="Auto,*">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="ALL" Classes="terminal-btn" Padding="8,2">
+                        <TextBlock Text="ALL FEEDS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    </Button>
+                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="CRYPTO" Classes="terminal-btn" Padding="8,2">
+                        <TextBlock Text="CRYPTO / ALTS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                    </Button>
+                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="CENTRAL_BANK" Classes="terminal-btn" Padding="8,2">
+                        <TextBlock Text="CENTRAL BANK / RATES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                    </Button>
+                    <Button Command="{Binding FilterByCategoryCommand}" CommandParameter="DERIVATIVES" Classes="terminal-btn" Padding="8,2">
+                        <TextBlock Text="DERIVATIVES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
+                    </Button>
                 </StackPanel>
-            </Border>
 
-            <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                <StackPanel Spacing="2">
-                    <TextBlock Text="LAST WIRE TRANSMISSION" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    <TextBlock Text="{Binding LastWireTimeUtc}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="2" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                <StackPanel Spacing="2">
-                    <TextBlock Text="WIRE SOURCE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    <TextBlock Text="SYSTEM &amp; STRATEGY FEEDS" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                </StackPanel>
-            </Border>
-
-        </Grid>
-
-        <!-- Wire Newsfeed Container -->
-        <Border Grid.Row="2" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1">
-            <Grid RowDefinitions="Auto,*">
-                
-                <!-- Table Header -->
-                <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="10,6">
-                    <Grid ColumnDefinitions="90,110,160,*">
-                        <TextBlock Grid.Column="0" Text="TIMESTAMP" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Grid.Column="1" Text="CATEGORY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Grid.Column="2" Text="SOURCE FEED" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Grid.Column="3" Text="HEADLINE // TELEMETRY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                    </Grid>
-                </Border>
-
-                <!-- News Items List -->
-                <ListBox Grid.Row="1" 
-                         ItemsSource="{Binding NewsItems}" 
-                         Background="Transparent" 
-                         BorderThickness="0">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:NewsWireItem">
-                            <Border BorderBrush="#141920" BorderThickness="0,0,0,1" Padding="6,6">
-                                <Grid ColumnDefinitions="90,110,160,*">
-                                    <TextBlock Grid.Column="0" Text="{Binding TimestampUtc}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
-                                    
-                                    <Border Grid.Column="1" Background="#141920" BorderBrush="{Binding CategoryColor}" BorderThickness="1" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Category}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding CategoryColor}" />
-                                    </Border>
-
-                                    <TextBlock Grid.Column="2" Text="{Binding Source}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
-
-                                    <TextBlock Grid.Column="3" Text="{Binding Headline}" FontSize="11" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextWrapping="Wrap" VerticalAlignment="Center" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
+                <TextBlock Grid.Column="1" Text="{Binding GroqSummaryNotice}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
         </Border>
 
-    </Grid>
+        <!-- Main 2-Column Split: Articles Stream + Detailed Panel -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,400">
+            
+            <!-- Left: Articles List -->
+            <Border Grid.Column="0" Margin="0,0,6,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="▶ INCOMING FINANCIAL WIRE STREAM" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                    
+                    <ListBox ItemsSource="{Binding NewsArticles}"
+                             SelectedItem="{Binding SelectedArticle}"
+                             Background="Transparent"
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:NewsArticleDto">
+                                <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="6,6">
+                                    <Grid RowDefinitions="Auto,Auto">
+                                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto">
+                                            <Border Grid.Column="0" Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="4,1" Margin="0,0,6,0">
+                                                <TextBlock Text="{Binding Category}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                                            <TextBlock Grid.Column="2" Text="{Binding DisplayTime}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,0,6,0" />
+                                            <Border Grid.Column="3" Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="4,1">
+                                                <TextBlock Text="{Binding SentimentBias}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                            </Border>
+                                        </Grid>
 
+                                        <TextBlock Grid.Row="1" Text="{Binding Title}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+
+            <!-- Right: Article Detail & AI Summarization -->
+            <Border Grid.Column="1" Margin="6,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="■ ARTICLE INTELLIGENCE &amp; CONTEXT" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                        
+                        <TextBlock Text="{Binding SelectedArticle.Title, TargetNullValue='No article selected'}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" TextWrapping="Wrap" />
+                        
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="SOURCE: " FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Grid.Column="1" Text="{Binding SelectedArticle.Publisher, TargetNullValue='--'}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="PUBLISHED: " FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Grid.Column="1" Text="{Binding SelectedArticle.PublishDateUtc, TargetNullValue='--'}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="AFFECTED ASSETS: " FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Grid.Column="1" Text="{Binding SelectedArticle.AffectedAssets, TargetNullValue='--'}" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                        </Grid>
+
+                        <Separator Background="#242A34" Margin="0,4" />
+
+                        <TextBlock Text="SOURCE EXCERPT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        <TextBlock Text="{Binding SelectedArticle.Excerpt, TargetNullValue='Select an article to view content.'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" TextWrapping="Wrap" />
+
+                        <Button Command="{Binding GenerateSummaryCommand}" 
+                                Classes="terminal-btn"
+                                Padding="10,6"
+                                Margin="0,8,0,0"
+                                HorizontalAlignment="Stretch">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+                                <TextBlock Text="⚡" FontSize="11" Foreground="#FF9D00" />
+                                <TextBlock Text="GENERATE CONTEXTUAL SUMMARY" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                            </StackPanel>
+                        </Button>
+
+                        <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="8" Margin="0,4,0,0">
+                            <TextBlock Text="{Binding SummaryStatusText}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FFB300" TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+        </Grid>
+    </Grid>
 </UserControl>

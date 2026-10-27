@@ -160,9 +160,29 @@ public partial class MainViewModel : ViewModelBase
         {
             _ = ScreenerVm.LoadMarketsAsync();
         }
+        else if (destination == "Alerts" && AlertsVm.Alerts.Count == 0)
+        {
+            _ = AlertsVm.LoadAlertsAsync();
+        }
+        else if (destination == "LiquidityIntel" && LiquidityIntelVm.Candles.Count == 0)
+        {
+            _ = LiquidityIntelVm.RefreshIntelAsync();
+        }
+        else if (destination == "GroqHunter")
+        {
+            _ = GroqHunterVm.RefreshScreeningLogAsync();
+        }
+        else if (destination == "Journal")
+        {
+            _ = JournalVm.RefreshAllJournalsAsync();
+        }
         else if (destination == "MarketParticipants" && MarketParticipantsVm.Observations.Count == 0)
         {
             _ = MarketParticipantsVm.LoadPositioningAsync();
+        }
+        else if (destination == "CryptoNews" && CryptoNewsVm.NewsArticles.Count == 0)
+        {
+            _ = CryptoNewsVm.RefreshNewsAsync();
         }
     }
 
@@ -178,9 +198,29 @@ public partial class MainViewModel : ViewModelBase
         {
             await ScreenerVm.LoadMarketsAsync();
         }
+        else if (CurrentViewModel == AlertsVm)
+        {
+            await AlertsVm.LoadAlertsAsync();
+        }
+        else if (CurrentViewModel == LiquidityIntelVm)
+        {
+            await LiquidityIntelVm.RefreshIntelAsync();
+        }
+        else if (CurrentViewModel == GroqHunterVm)
+        {
+            await GroqHunterVm.RefreshScreeningLogAsync();
+        }
+        else if (CurrentViewModel == JournalVm)
+        {
+            await JournalVm.RefreshAllJournalsAsync();
+        }
         else if (CurrentViewModel == MarketParticipantsVm)
         {
             await MarketParticipantsVm.LoadPositioningAsync();
+        }
+        else if (CurrentViewModel == CryptoNewsVm)
+        {
+            await CryptoNewsVm.RefreshNewsAsync();
         }
     }
 

@@ -14,6 +14,9 @@ public partial class MarketParticipantsViewModel : ViewModelBase
     private readonly IApiClient _apiClient;
 
     [ObservableProperty]
+    private string _terminalTitle = "MARKET POSITIONING";
+
+    [ObservableProperty]
     private string _symbol = "BTCUSDT";
 
     [ObservableProperty]
@@ -29,10 +32,13 @@ public partial class MarketParticipantsViewModel : ViewModelBase
     private string _datasetStatus = "AVAILABLE";
 
     [ObservableProperty]
-    private string _cotDataSourceStatus = "CFTC_COT_WEEKLY (INGESTION_PENDING)";
+    private string _cotDataSourceStatus = "UNAVAILABLE — SOURCE NOT VERIFIED";
 
     [ObservableProperty]
-    private string _cotReportSummary = "CFTC Commitment of Traders (COT) Disaggregated Futures data ingestion is scheduled for weekly Friday settlement.";
+    private string _cotReportSummary = "No verified public CFTC COT automated ingestion feed configured. Institutional positioning subpanel is safely disabled until a reliable, verified data source is integrated.";
+
+    [ObservableProperty]
+    private bool _isCotEnabled = false;
 
     [ObservableProperty]
     private string _currentBuyRatio = "--%";
@@ -61,6 +67,7 @@ public partial class MarketParticipantsViewModel : ViewModelBase
     public MarketParticipantsViewModel(IApiClient apiClient)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+        _ = LoadPositioningAsync();
     }
 
     [RelayCommand]
@@ -89,15 +96,18 @@ public partial class MarketParticipantsViewModel : ViewModelBase
                 if (Observations.Count > 0)
                 {
                     var latest = Observations[^1];
-                    CurrentBuyRatio = (latest.BuyRatio * 100).ToString("F1", CultureInfo.InvariantCulture) + "%";
-                    CurrentSellRatio = (latest.SellRatio * 100).ToString("F1", CultureInfo.InvariantCulture) + "%";
+                    var buyRatio = latest.EffectiveBuyRatio;
+                    var sellRatio = latest.EffectiveSellRatio;
 
-                    if (latest.BuyRatio > 0.55m)
+                    CurrentBuyRatio = (buyRatio * 100).ToString("F1", CultureInfo.InvariantCulture) + "%";
+                    CurrentSellRatio = (sellRatio * 100).ToString("F1", CultureInfo.InvariantCulture) + "%";
+
+                    if (buyRatio > 0.55m)
                     {
                         RetailSentimentBias = "RETAIL BULLISH (LONG HEAVY)";
                         RetailSentimentColor = "#00E676";
                     }
-                    else if (latest.SellRatio > 0.55m)
+                    else if (sellRatio > 0.55m)
                     {
                         RetailSentimentBias = "RETAIL BEARISH (SHORT HEAVY)";
                         RetailSentimentColor = "#FF5252";

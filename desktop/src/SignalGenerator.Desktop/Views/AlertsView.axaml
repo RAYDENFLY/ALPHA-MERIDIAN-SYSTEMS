@@ -15,7 +15,7 @@
         <Border Grid.Row="0" Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8" Margin="0,0,0,10">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0">
-                    <TextBlock Text="■ SIGNAL ALERTS // REAL-TIME DISCORD NOTIFICATIONS" 
+                    <TextBlock Text="■ PRICE ALERTS // REAL-TIME TRIGGER &amp; DISCORD NOTIFICATIONS" 
                                FontSize="12" 
                                FontWeight="Bold" 
                                FontFamily="Consolas, monospace" 

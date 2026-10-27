@@ -94,6 +94,26 @@ public class ApiClient : IApiClient
         return await ExecuteGetAsync<RetailPositioningResponseDto>($"/api/research/retail_positioning?symbol={Uri.EscapeDataString(symbol)}", ct);
     }
 
+    public async Task<ApiResult<JournalTradesResponseDto>> GetJournalTradesAsync(int limit = 50, CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<JournalTradesResponseDto>($"/api/v1/journal/trades?limit={limit}", ct);
+    }
+
+    public async Task<ApiResult<ChartSymbolsResponseDto>> GetChartSymbolsAsync(CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<ChartSymbolsResponseDto>("/api/chart/symbols", ct);
+    }
+
+    public async Task<ApiResult<LiquidityLayersResponseDto>> GetLiquidityLayersAsync(string symbol, string timeframe = "1h", CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<LiquidityLayersResponseDto>($"/api/chart/liquidity_layers?symbol={Uri.EscapeDataString(symbol)}&timeframe={Uri.EscapeDataString(timeframe)}", ct);
+    }
+
+    public async Task<ApiResult<List<KlineDto>>> GetKlinesAsync(string symbol, string timeframe = "1h", int limit = 100, CancellationToken ct = default)
+    {
+        return await ExecuteGetAsync<List<KlineDto>>($"/api/chart/klines?symbol={Uri.EscapeDataString(symbol)}&timeframe={Uri.EscapeDataString(timeframe)}&limit={limit}", ct);
+    }
+
     private async Task<ApiResult<T>> ExecuteGetAsync<T>(string relativeUri, CancellationToken ct)
     {
         try

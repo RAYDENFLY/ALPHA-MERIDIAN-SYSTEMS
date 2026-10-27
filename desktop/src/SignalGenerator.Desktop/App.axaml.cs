@@ -56,6 +56,8 @@ public partial class App : Application
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IApiClient, ApiClient>();
         services.AddSingleton<IPollingCoordinator, PollingCoordinator>();
+        services.AddSingleton<IPersonalJournalService, PersonalJournalService>();
+        services.AddSingleton<IRssNewsService, RssNewsService>();
 
         // ViewModels
         services.AddSingleton<OverviewViewModel>();

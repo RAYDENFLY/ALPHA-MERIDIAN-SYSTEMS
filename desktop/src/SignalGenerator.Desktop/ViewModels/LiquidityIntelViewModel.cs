@@ -1,28 +1,212 @@
+using System;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SignalGenerator.Desktop.Models;
+using SignalGenerator.Desktop.Services;
 
 namespace SignalGenerator.Desktop.ViewModels;
 
 public partial class LiquidityIntelViewModel : ViewModelBase
 {
-    [ObservableProperty]
-    private string _symbol = "BZUSDT";
+    private readonly IApiClient _apiClient;
+    private CancellationTokenSource? _cts;
 
     [ObservableProperty]
-    private string _status = "Monitoring L2 Cross-Book & Whale Clusters";
+    private string _symbol = "BTCUSDT";
 
     [ObservableProperty]
-    private string _bidWallLevel = "$108.50 (24.5 BTC)";
+    private string _timeframe = "1h";
 
     [ObservableProperty]
-    private string _askWallLevel = "$112.80 (38.2 BTC)";
+    private ObservableCollection<string> _availableSymbols = new() { "BTCUSDT", "ETHUSDT", "SOLUSDT", "ZECUSDT", "BZUSDT", "ASTERUSDT" };
 
     [ObservableProperty]
-    private string _whaleEventSummary = "No recent spoofing detected. Cumulative delta neutral.";
+    private ObservableCollection<string> _availableTimeframes = new() { "15m", "1h", "4h", "1d" };
+
+    [ObservableProperty]
+    private string _status = "AVAILABLE";
+
+    [ObservableProperty]
+    private string _feedProvenance = "LIVE /api/chart/liquidity_layers";
+
+    [ObservableProperty]
+    private string _orderBookStatus = "AVAILABLE";
+
+    [ObservableProperty]
+    private string _spreadBpsText = "0.01 bps";
+
+    [ObservableProperty]
+    private string _bidDepthText = "$0 USDT";
+
+    [ObservableProperty]
+    private string _askDepthText = "$0 USDT";
+
+    [ObservableProperty]
+    private string _bidWallLevel = "--";
+
+    [ObservableProperty]
+    private string _askWallLevel = "--";
+
+    [ObservableProperty]
+    private string _orderBookAgeText = "0.0s";
+
+    [ObservableProperty]
+    private string _whaleEventSummary = "Order flow cross-exchange aggregation active. Bids/Asks monitored across Aster, Binance, Bybit.";
+
+    [ObservableProperty]
+    private ObservableCollection<KlineDto> _candles = new();
+
+    [ObservableProperty]
+    private ObservableCollection<OrderBookWallDto> _orderBookWalls = new();
+
+    [ObservableProperty]
+    private ObservableCollection<SweepEventDto> _sweepEvents = new();
+
+    [ObservableProperty]
+    private bool _isLoading;
+
+    public LiquidityIntelViewModel(IApiClient apiClient)
+    {
+        _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+        _ = InitializeWorkstationAsync();
+    }
+
+    // Parameterless fallback for legacy designer
+    public LiquidityIntelViewModel() : this(new ApiClient(new System.Net.Http.HttpClient(), "http://127.0.0.1:8000"))
+    {
+    }
+
+    public async Task InitializeWorkstationAsync()
+    {
+        await LoadSymbolsAsync();
+        await RefreshIntelAsync();
+    }
 
     [RelayCommand]
-    public void RefreshIntel()
+    public async Task LoadSymbolsAsync()
     {
-        // Standalone depth monitor refresh trigger
+        try
+        {
+            var res = await _apiClient.GetChartSymbolsAsync();
+            if (res.IsSuccess && res.Value?.Symbols != null && res.Value.Symbols.Count > 0)
+            {
+                AvailableSymbols.Clear();
+                foreach (var s in res.Value.Symbols)
+                {
+                    AvailableSymbols.Add(s);
+                }
+                if (!AvailableSymbols.Contains(Symbol))
+                {
+                    Symbol = res.Value.DefaultSymbol ?? "BTCUSDT";
+                }
+            }
+        }
+        catch { }
+    }
+
+    [RelayCommand]
+    public async Task SelectSymbolAsync(string newSymbol)
+    {
+        if (string.IsNullOrWhiteSpace(newSymbol) || newSymbol == Symbol) return;
+        Symbol = newSymbol;
+        await RefreshIntelAsync();
+    }
+
+    [RelayCommand]
+    public async Task SelectTimeframeAsync(string newTf)
+    {
+        if (string.IsNullOrWhiteSpace(newTf) || newTf == Timeframe) return;
+        Timeframe = newTf;
+        await RefreshIntelAsync();
+    }
+
+    [RelayCommand]
+    public async Task RefreshIntelAsync()
+    {
+        if (IsLoading) return;
+        IsLoading = true;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            var res = await _apiClient.GetLiquidityLayersAsync(Symbol, Timeframe, _cts.Token);
+            if (res.IsSuccess && res.Value != null)
+            {
+                Status = res.Value.FeedStatus?.Status ?? "AVAILABLE";
+                FeedProvenance = $"LIVE /api/chart/liquidity_layers ({res.Value.FeedStatus?.Source ?? "AsterDEX + Combined L2"})";
+
+                Candles.Clear();
+                foreach (var c in res.Value.Candles)
+                {
+                    Candles.Add(c);
+                }
+
+                SweepEvents.Clear();
+                foreach (var sw in res.Value.SweepEvents)
+                {
+                    SweepEvents.Add(sw);
+                }
+
+                var ob = res.Value.OrderBookOverlay;
+                if (ob != null)
+                {
+                    OrderBookStatus = ob.Status;
+                    SpreadBpsText = (ob.SpreadBps ?? 0).ToString("F2", CultureInfo.InvariantCulture) + " bps";
+                    BidDepthText = ob.TotalBidDepthUsdt.HasValue 
+                        ? "$" + ob.TotalBidDepthUsdt.Value.ToString("N0", CultureInfo.InvariantCulture) 
+                        : "--";
+                    AskDepthText = ob.TotalAskDepthUsdt.HasValue 
+                        ? "$" + ob.TotalAskDepthUsdt.Value.ToString("N0", CultureInfo.InvariantCulture) 
+                        : "--";
+                    OrderBookAgeText = ob.AgeSeconds.ToString("F1", CultureInfo.InvariantCulture) + "s";
+
+                    OrderBookWalls.Clear();
+                    OrderBookWallDto? topBid = null;
+                    OrderBookWallDto? topAsk = null;
+
+                    foreach (var w in ob.Walls)
+                    {
+                        OrderBookWalls.Add(w);
+                        if (w.Side.Equals("BID", StringComparison.OrdinalIgnoreCase) && (topBid == null || w.NotionalUsdt > topBid.NotionalUsdt))
+                        {
+                            topBid = w;
+                        }
+                        else if (w.Side.Equals("ASK", StringComparison.OrdinalIgnoreCase) && (topAsk == null || w.NotionalUsdt > topAsk.NotionalUsdt))
+                        {
+                            topAsk = w;
+                        }
+                    }
+
+                    BidWallLevel = topBid != null 
+                        ? $"${topBid.Price:F4} (${topBid.NotionalUsdt:N0})" 
+                        : "--";
+                    AskWallLevel = topAsk != null 
+                        ? $"${topAsk.Price:F4} (${topAsk.NotionalUsdt:N0})" 
+                        : "--";
+                }
+            }
+            else
+            {
+                Status = "UNAVAILABLE";
+                FeedProvenance = "UNAVAILABLE: " + (res.ErrorMessage ?? "Unknown");
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Status = "ERROR";
+            FeedProvenance = $"ERROR: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 }

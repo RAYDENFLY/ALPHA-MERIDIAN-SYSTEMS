@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SignalGenerator.Desktop.Models;
@@ -7,22 +10,21 @@ using SignalGenerator.Desktop.Services;
 
 namespace SignalGenerator.Desktop.ViewModels;
 
-public class NewsWireItem
-{
-    public string TimestampUtc { get; set; } = string.Empty;
-    public string Category { get; set; } = "SYSTEM";
-    public string CategoryColor { get; set; } = "#FF9D00";
-    public string Headline { get; set; } = string.Empty;
-    public string Source { get; set; } = "SIGNAL_GEN_TELEMETRY";
-    public string Urgency { get; set; } = "NORMAL";
-}
-
 public partial class CryptoNewsViewModel : ViewModelBase
 {
-    private readonly IPollingCoordinator _pollingCoordinator;
+    private readonly IRssNewsService _newsService;
+    private readonly IPollingCoordinator? _pollingCoordinator;
+    private CancellationTokenSource? _cts;
+    private List<NewsArticleDto> _allArticles = new();
 
     [ObservableProperty]
-    private ObservableCollection<NewsWireItem> _newsItems = new();
+    private string _terminalTitle = "GLOBAL MARKET INTELLIGENCE";
+
+    [ObservableProperty]
+    private ObservableCollection<NewsArticleDto> _newsArticles = new();
+
+    [ObservableProperty]
+    private NewsArticleDto? _selectedArticle;
 
     [ObservableProperty]
     private string _filterCategory = "ALL";
@@ -33,63 +35,98 @@ public partial class CryptoNewsViewModel : ViewModelBase
     [ObservableProperty]
     private string _lastWireTimeUtc = "--:--:--";
 
-    public CryptoNewsViewModel(IPollingCoordinator pollingCoordinator)
+    [ObservableProperty]
+    private bool _isLoading;
+
+    [ObservableProperty]
+    private string _groqSummaryNotice = "GROQ_NEWS_SUMMARY: Isolated Server-Side Secret Architecture Configured";
+
+    [ObservableProperty]
+    private string _summaryStatusText = "Select an article to view excerpt or generate safe contextual summary.";
+
+    public CryptoNewsViewModel(IRssNewsService newsService, IPollingCoordinator? pollingCoordinator = null)
     {
-        _pollingCoordinator = pollingCoordinator ?? throw new ArgumentNullException(nameof(pollingCoordinator));
-        _pollingCoordinator.OnStatusUpdated += HandleStatusUpdated;
-        _pollingCoordinator.OnLiveSessionUpdated += HandleLiveSessionUpdated;
+        _newsService = newsService ?? throw new ArgumentNullException(nameof(newsService));
+        _pollingCoordinator = pollingCoordinator;
 
-        // Seed initial operational wire items
-        AddNewsItem("SYSTEM", "#FF9D00", "SignalGenerator Live Micro V1 runtime active on Aster DEX Perpetual Mainnet", "CORE_DAEMON", "HIGH");
-        AddNewsItem("RISK", "#00E676", "Risk gates verified: Daily loss limit $0.50 USDT with 1.20% structural stop enforcement", "RISK_ENGINE", "NORMAL");
-        AddNewsItem("AI", "#448AFF", "Groq AI Auto-Hunter 10->3->1 Llama-3.3-70b inference pipeline initialized", "GROQ_AUTOHUNTER", "NORMAL");
-        AddNewsItem("STRATEGY", "#FFB300", "15M_SWEEP_RECLAIM_SMC active: 3-Tier Dynamic Invalidation SL & Ratchet engaged", "STRATEGY_RUNNER", "HIGH");
-    }
-
-    private void HandleStatusUpdated(SystemStatusDto status)
-    {
-        if (status == null) return;
-        var ts = DateTime.UtcNow.ToString("HH:mm:ss");
-        AddNewsItem("TELEMETRY", "#448AFF", $"Scanner State: {status.Scanner?.State ?? "IDLE"} | Active Strategy: {status.Scanner?.ConfiguredLiveStrategyId ?? "SMC"} | Scan Cycles: {status.Scanner?.ScanCount ?? 0}", "SCANNER_ENGINE", "NORMAL");
-        LastWireTimeUtc = ts + " UTC";
-    }
-
-    private void HandleLiveSessionUpdated(LiveSessionEnvelopeDto envelope)
-    {
-        if (envelope?.Data == null) return;
-        var ts = DateTime.UtcNow.ToString("HH:mm:ss");
-        if (!string.IsNullOrWhiteSpace(envelope.Data.LastStatusMessage))
-        {
-            AddNewsItem("SESSION", "#FF9D00", envelope.Data.LastStatusMessage, "LIVE_SESSION", "HIGH");
-        }
-        LastWireTimeUtc = ts + " UTC";
-    }
-
-    public void AddNewsItem(string category, string color, string headline, string source, string urgency)
-    {
-        var item = new NewsWireItem
-        {
-            TimestampUtc = DateTime.UtcNow.ToString("HH:mm:ss"),
-            Category = category,
-            CategoryColor = color,
-            Headline = headline,
-            Source = source,
-            Urgency = urgency
-        };
-
-        // Insert at beginning of wire
-        NewsItems.Insert(0, item);
-        while (NewsItems.Count > 100)
-        {
-            NewsItems.RemoveAt(NewsItems.Count - 1);
-        }
-        ItemCount = NewsItems.Count;
+        _ = RefreshNewsAsync();
     }
 
     [RelayCommand]
-    public void ClearWire()
+    public async Task RefreshNewsAsync()
     {
-        NewsItems.Clear();
-        ItemCount = 0;
+        if (IsLoading) return;
+        IsLoading = true;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            var articles = await _newsService.FetchLatestNewsAsync(_cts.Token);
+            _allArticles = articles;
+            ApplyFilter();
+            LastWireTimeUtc = DateTime.UtcNow.ToString("HH:mm:ss") + " UTC";
+            if (NewsArticles.Count > 0 && SelectedArticle == null)
+            {
+                SelectedArticle = NewsArticles[0];
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            SummaryStatusText = $"Error refreshing news feed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    public void FilterByCategory(string category)
+    {
+        FilterCategory = category;
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    public void SelectArticle(NewsArticleDto article)
+    {
+        SelectedArticle = article;
+        if (article != null)
+        {
+            SummaryStatusText = article.IsAiSummarized 
+                ? $"[AI SUMMARY - {article.SummaryGeneratedUtc:HH:mm:ss}] {article.AiSummary}" 
+                : $"[SOURCE EXCERPT] {article.Excerpt}";
+        }
+    }
+
+    [RelayCommand]
+    public async Task GenerateSummaryAsync()
+    {
+        if (SelectedArticle == null) return;
+        SummaryStatusText = "Synthesizing safe summary (preserving GROQ_NEWS_SUMMARY isolation)...";
+
+        var updated = await _newsService.SummarizeArticleAsync(SelectedArticle.Id);
+        if (updated != null)
+        {
+            SelectedArticle = updated;
+            SummaryStatusText = $"[AI SUMMARY] {updated.AiSummary}";
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        NewsArticles.Clear();
+        foreach (var a in _allArticles)
+        {
+            if (FilterCategory == "ALL" || a.Category.Equals(FilterCategory, StringComparison.OrdinalIgnoreCase))
+            {
+                NewsArticles.Add(a);
+            }
+        }
+        ItemCount = NewsArticles.Count;
     }
 }

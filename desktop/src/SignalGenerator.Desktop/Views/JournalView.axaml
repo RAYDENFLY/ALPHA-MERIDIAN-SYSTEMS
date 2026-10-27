@@ -3,7 +3,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SignalGenerator.Desktop.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="750"
+             xmlns:models="using:SignalGenerator.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="800"
              x:Class="SignalGenerator.Desktop.Views.JournalView"
              x:DataType="vm:JournalViewModel"
              Background="#000000">
@@ -15,12 +16,12 @@
             <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,8">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="■ PERFORMANCE JOURNAL // EXECUTED TRADES &amp; ATTRIBUTION" 
+                        <TextBlock Text="■ PERFORMANCE &amp; TRADE JOURNAL WORKSPACE" 
                                    FontSize="12" 
                                    FontWeight="Bold" 
                                    FontFamily="Consolas, monospace" 
                                    Foreground="#FF9D00" />
-                        <TextBlock Text="Verified closed trades, R-multiple attribution, exchange fill ledger, and daily capacity utilization" 
+                        <TextBlock Text="Strictly independent journals: AI automated execution ledger vs user personal trading ledger" 
                                    FontSize="10" 
                                    FontFamily="Consolas, monospace" 
                                    Foreground="#8B949E" 
@@ -28,118 +29,218 @@
                     </StackPanel>
 
                     <Button Grid.Column="1" 
-                            Command="{Binding RefreshSummaryCommand}" 
+                            Command="{Binding RefreshAllJournalsCommand}" 
                             Classes="terminal-btn"
                             Padding="10,4"
                             VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Text="↻" FontSize="11" Foreground="#FF9D00" FontWeight="Bold" />
-                            <TextBlock Text="SYNC JOURNAL" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
+                            <TextBlock Text="SYNC JOURNALS" FontSize="10" Foreground="#F0F4F8" FontWeight="Bold" />
                         </StackPanel>
                     </Button>
                 </Grid>
             </Border>
 
-            <!-- Metrics Summary Cards (4 Columns) -->
-            <Grid ColumnDefinitions="*,*,*,*" Margin="0,2,0,0">
+            <!-- SECTION 1: AI EXECUTION JOURNAL -->
+            <StackPanel Spacing="10">
                 
-                <!-- Tile 1: Win Rate -->
-                <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="WIN RATE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding WinRatePct, StringFormat='{}{0:F1}%'}" FontSize="16" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="{Binding WinsCount}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                            <TextBlock Text="W /" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                            <TextBlock Text="{Binding LossesCount}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
-                            <TextBlock Text="L /" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                            <TextBlock Text="{Binding BreakevenCount}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
-                            <TextBlock Text="BE" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                <!-- Performance KPI Tiles (AI) -->
+                <Grid ColumnDefinitions="*,*,*,*,*">
+                    <Border Grid.Column="0" Margin="0,0,4,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="AI WIN RATE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding WinRatePct, StringFormat='{}{0:F1}%'}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                            <TextBlock Text="Exchange Verified" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
                         </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Tile 2: Total Net PnL -->
-                <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="TOTAL NET PNL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding TotalNetPnlUsd, StringFormat='${0:F4}'}" FontSize="16" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
-                        <TextBlock Text="{Binding TotalGrossPnlUsd, StringFormat='Gross: ${0:F4}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Tile 3: Profit Factor & Avg R -->
-                <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="PROFIT FACTOR" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding ProfitFactor, StringFormat='{}{0:F2}'}" FontSize="16" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
-                        <TextBlock Text="{Binding AverageRealizedR, StringFormat='Avg R: {0:F3}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Tile 4: Daily Entries Remaining -->
-                <Border Grid.Column="3" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="DAILY ENTRIES REMAINING" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                        <TextBlock Text="{Binding RemainingEntries}" FontSize="16" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                        <TextBlock Text="{Binding DailyFilledEntries, StringFormat='FILLED: {0} / 3'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                    </StackPanel>
-                </Border>
-
-            </Grid>
-
-            <!-- Detailed Invariants & Risk Panel -->
-            <Border Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="12">
-                <StackPanel Spacing="10">
-                    <Border BorderBrush="#242A34" BorderThickness="0,0,0,1" Padding="0,0,0,4">
-                        <TextBlock Text="■ RECONCILIATION &amp; RISK BUDGET CAPACITY" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                     </Border>
 
-                    <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto">
+                    <Border Grid.Column="1" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="AI NET PnL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding TotalNetPnlUsd, StringFormat='${0:F4}'}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF5252" />
+                            <TextBlock Text="Realized Closed" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="PROFIT FACTOR" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding ProfitFactor, StringFormat='{}{0:F2}'}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                            <TextBlock Text="Gross Wins / Losses" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="3" Margin="2,0,2,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="FEES PAID (AI)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding TotalFeesPaidUsd, StringFormat='${0:F4}'}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
+                            <TextBlock Text="Taker + Maker" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="4" Margin="4,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10,6">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="DAILY REMAINING" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                            <TextBlock Text="{Binding RemainingEntries, StringFormat='{}{0} / 3 ENTRIES'}" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                            <TextBlock Text="Hard Gate Protection" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- AI Trades Table -->
+                <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,10">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="▶ AI AUTOMATED CLOSED TRADES (SOURCE: /api/v1/journal/trades)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
                         
-                        <Border Grid.Row="0" Grid.Column="0" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8" Margin="0,0,4,6">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Total Closed Trades" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding TotalClosedTrades}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
-                            </StackPanel>
+                        <!-- Table Header -->
+                        <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                            <Grid ColumnDefinitions="150,90,70,90,90,90,90,110,160,*">
+                                <TextBlock Grid.Column="0" Text="TRADE ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="1" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="2" Text="SIDE" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="3" Text="ENTRY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="4" Text="EXIT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="5" Text="NET PnL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="6" Text="REALIZED R" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="7" Text="EXIT REASON" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Center" />
+                                <TextBlock Grid.Column="8" Text="STRATEGY ID" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                <TextBlock Grid.Column="9" Text="NOTES &amp; THESIS" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="10,0,0,0" />
+                            </Grid>
                         </Border>
 
-                        <Border Grid.Row="0" Grid.Column="1" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8" Margin="2,0,2,6">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Total Fees Paid" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding TotalFeesPaidUsd, StringFormat='${0:F4}'}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                            </StackPanel>
-                        </Border>
+                        <ListBox ItemsSource="{Binding AiTrades}"
+                                 SelectedItem="{Binding SelectedAiTrade}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 MaxHeight="220">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:JournalTradeDto">
+                                    <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="4,4">
+                                        <Grid ColumnDefinitions="150,90,70,90,90,90,90,110,160,*">
+                                            <TextBlock Grid.Column="0" Text="{Binding TradeId}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Symbol}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Side}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="3" Text="{Binding FormattedEntry}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="4" Text="{Binding FormattedExit}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="5" Text="{Binding FormattedNetPnl}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding PnlColor}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="6" Text="{Binding FormattedRealizedR}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#FFB300" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="7" Text="{Binding ExitReason}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FF5252" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="8" Text="{Binding StrategyId}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="9" Text="{Binding Notes}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
 
-                        <Border Grid.Row="0" Grid.Column="2" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8" Margin="4,0,0,6">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Reconciliation Integrity" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                                <TextBlock Text="EXCHANGE_VERIFIED" FontSize="13" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
-                            </StackPanel>
-                        </Border>
+            </StackPanel>
 
-                        <Border Grid.Row="1" Grid.Column="0" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8" Margin="0,0,4,0">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Daily Loss Used" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding DailyLossUsageUsd, StringFormat='${0:F2}'}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="1" Grid.Column="1" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8" Margin="2,0,2,0">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Daily Loss Hard Limit" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                                <TextBlock Text="{Binding DailyLossLimitUsd, StringFormat='${0:F2}'}" FontSize="14" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Row="1" Grid.Column="2" Background="#0E1217" BorderBrush="#1C212A" BorderThickness="1" Padding="10,8" Margin="4,0,0,0">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Max Trade Risk Cap" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
-                                <TextBlock Text="$0.22 USDT (TARGET $0.20)" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FFB300" />
-                            </StackPanel>
-                        </Border>
-
+            <!-- SECTION 2: PERSONAL TRADING JOURNAL -->
+            <Border Background="#0E1217" BorderBrush="#242A34" BorderThickness="1" Padding="12,10">
+                <StackPanel Spacing="10">
+                    
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="■ PERSONAL TRADING JOURNAL (ISOLATED LOCAL STORAGE)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                            <TextBlock Text="Stored securely in %APPDATA%\SignalGeneratorDesktop\personal-journal.db. Zero exchange execution calls." FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="PERSONAL NET PnL:" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding PersonalTotalNetPnl, StringFormat='${0:F2}'}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" VerticalAlignment="Center" />
+                        </StackPanel>
                     </Grid>
+
+                    <!-- Personal Trade Input Form -->
+                    <Border Background="#080B0E" BorderBrush="#242A34" BorderThickness="1" Padding="10">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="RECORD MANUAL TRADE" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            
+                            <Grid ColumnDefinitions="*,*,*,*,*,*,Auto" Margin="0,4,0,0">
+                                <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                    <TextBlock Text="SYMBOL" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBox Text="{Binding InputSymbol}" FontSize="10" FontFamily="Consolas, monospace" Background="#161B22" Foreground="#F0F4F8" BorderBrush="#242A34" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Margin="2,0,2,0">
+                                    <TextBlock Text="DIRECTION" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBox Text="{Binding InputDirection}" FontSize="10" FontFamily="Consolas, monospace" Background="#161B22" Foreground="#F0F4F8" BorderBrush="#242A34" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" Margin="2,0,2,0">
+                                    <TextBlock Text="ENTRY PRICE" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBox Text="{Binding InputEntryPrice}" FontSize="10" FontFamily="Consolas, monospace" Background="#161B22" Foreground="#F0F4F8" BorderBrush="#242A34" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="3" Margin="2,0,2,0">
+                                    <TextBlock Text="EXIT PRICE" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBox Text="{Binding InputExitPrice}" FontSize="10" FontFamily="Consolas, monospace" Background="#161B22" Foreground="#F0F4F8" BorderBrush="#242A34" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="4" Margin="2,0,2,0">
+                                    <TextBlock Text="QTY" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBox Text="{Binding InputQuantity}" FontSize="10" FontFamily="Consolas, monospace" Background="#161B22" Foreground="#F0F4F8" BorderBrush="#242A34" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="5" Margin="2,0,4,0">
+                                    <TextBlock Text="FEES ($)" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
+                                    <TextBox Text="{Binding InputFees}" FontSize="10" FontFamily="Consolas, monospace" Background="#161B22" Foreground="#F0F4F8" BorderBrush="#242A34" />
+                                </StackPanel>
+
+                                <Button Grid.Column="6" 
+                                        Command="{Binding SavePersonalTradeCommand}" 
+                                        Classes="terminal-btn" 
+                                        Padding="12,6" 
+                                        VerticalAlignment="Bottom">
+                                    <TextBlock Text="SAVE TRADE" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                </Button>
+                            </Grid>
+
+                            <TextBlock Text="{Binding PersonalFormMessage}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#FFB300" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Personal Trades Table Header -->
+                    <Border Background="#161B22" BorderBrush="#242A34" BorderThickness="1" Padding="8,5">
+                        <Grid ColumnDefinitions="120,90,60,90,90,80,70,100,*">
+                            <TextBlock Grid.Column="0" Text="DATE (UTC)" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="1" Text="SYMBOL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="2" Text="DIR" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                            <TextBlock Grid.Column="3" Text="ENTRY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="4" Text="EXIT" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="5" Text="QTY" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="6" Text="FEES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="7" Text="NET PnL" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" HorizontalAlignment="Right" />
+                            <TextBlock Grid.Column="8" Text="STRATEGY / NOTES" FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" Margin="10,0,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <ListBox ItemsSource="{Binding PersonalTrades}"
+                             SelectedItem="{Binding SelectedPersonalTrade}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             MaxHeight="200">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:PersonalTradeRecord">
+                                <Border BorderBrush="#1C212A" BorderThickness="0,0,0,1" Padding="4,4">
+                                    <Grid ColumnDefinitions="120,90,60,90,90,80,70,100,*">
+                                        <TextBlock Grid.Column="0" Text="{Binding TradeDateUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Symbol}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Direction}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding FormattedEntry}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="4" Text="{Binding FormattedExit}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#C9D1D9" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="5" Text="{Binding Quantity}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="6" Text="{Binding Fees, StringFormat='${0:F2}'}" FontSize="10" FontFamily="Consolas, monospace" Foreground="#8B949E" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="7" Text="{Binding FormattedNetPnl}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding PnlColor}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="8" Text="{Binding Strategy}" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
                 </StackPanel>
             </Border>
 

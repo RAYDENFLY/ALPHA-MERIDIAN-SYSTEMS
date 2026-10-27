@@ -149,12 +149,21 @@
                                 </Grid>
                             </Button>
 
-                            <Button Command="{Binding NavigateCommand}" CommandParameter="LiquidityIntel" 
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="Alerts" 
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
                                     Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
                                 <Grid ColumnDefinitions="32,*">
                                     <TextBlock Grid.Column="0" Text="&lt;F4&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="LIQUIDITY INTEL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    <TextBlock Grid.Column="1" Text="PRICE ALERTS" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                </Grid>
+                            </Button>
+
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="LiquidityIntel" 
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
+                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
+                                <Grid ColumnDefinitions="32,*">
+                                    <TextBlock Grid.Column="0" Text="&lt;F5&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="LIQUIDITY &amp; ORDER FLOW" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
@@ -162,8 +171,8 @@
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
                                     Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
                                 <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F5&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="GROQ AUTO-HUNTER" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    <TextBlock Grid.Column="0" Text="&lt;F6&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
+                                    <TextBlock Grid.Column="1" Text="AI SIGNAL &amp; EXECUTION" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
@@ -171,17 +180,8 @@
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
                                     Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
                                 <Grid ColumnDefinitions="32,*">
-                                    <TextBlock Grid.Column="0" Text="&lt;F6&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="TRADING JOURNAL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
-                                </Grid>
-                            </Button>
-
-                            <Button Command="{Binding NavigateCommand}" CommandParameter="Alerts" 
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" 
-                                    Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
-                                <Grid ColumnDefinitions="32,*">
                                     <TextBlock Grid.Column="0" Text="&lt;F7&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="SIGNAL ALERTS" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    <TextBlock Grid.Column="1" Text="TRADE JOURNAL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
@@ -190,7 +190,7 @@
                                     Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
                                 <Grid ColumnDefinitions="32,*">
                                     <TextBlock Grid.Column="0" Text="&lt;F8&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="PARTICIPANTS (COT)" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    <TextBlock Grid.Column="1" Text="MARKET POSITIONING" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
@@ -199,7 +199,7 @@
                                     Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="12,8">
                                 <Grid ColumnDefinitions="32,*">
                                     <TextBlock Grid.Column="0" Text="&lt;F9&gt;" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Grid.Column="1" Text="NEWS WIRE" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
+                                    <TextBlock Grid.Column="1" Text="GLOBAL NEWS INTEL" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#F0F4F8" />
                                 </Grid>
                             </Button>
 
