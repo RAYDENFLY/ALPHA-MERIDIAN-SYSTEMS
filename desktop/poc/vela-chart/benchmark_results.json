@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-10-27T21:07:26.972Z",
+  "coldStartBrowserMs": 678,
+  "chartLoadMs": 1891,
+  "baselineHeapMb": 0.58,
+  "postRenderHeapMb": 5.71,
+  "postInteractHeapMb": 5.84,
+  "heapGrowthMb": 0.13,
+  "avgInteractionMs": 81.1,
+  "backend": {
+    "hasWebGL2": true,
+    "hasWebGL1": false,
+    "hasCanvas2D": false,
+    "activeCanvases": 7
+  },
+  "status": "BENCHMARK_COMPLETED_SUCCESSFULLY"
+}

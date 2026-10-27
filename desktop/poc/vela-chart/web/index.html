@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALPHA MERIDIAN SYSTEMS — Vela Chart Workstation PoC</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app-root">
+        <!-- TOP COMMAND BAR -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="brand-badge">
+                    <div class="brand-dot"></div>
+                    <span>AMS CAPITAL</span>
+                </div>
+                <select id="symbol-select" class="select-control">
+                    <option value="BTCUSDT">BTCUSDT</option>
+                    <option value="ETHUSDT">ETHUSDT</option>
+                    <option value="SOLUSDT">SOLUSDT</option>
+                </select>
+                <div class="btn-group">
+                    <button class="btn-tf" data-tf="15m">15M</button>
+                    <button class="btn-tf active" data-tf="1h">1H</button>
+                    <button class="btn-tf" data-tf="4h">4H</button>
+                    <button class="btn-tf" data-tf="1d">1D</button>
+                </div>
+            </div>
+
+            <div class="topbar-center">
+                <button class="btn-indicator active" data-ind="ema20">
+                    <div class="ind-dot"></div> EMA 20
+                </button>
+                <button class="btn-indicator active" data-ind="ema50">
+                    <div class="ind-dot"></div> EMA 50
+                </button>
+                <button class="btn-indicator active" data-ind="ema100">
+                    <div class="ind-dot"></div> EMA 100
+                </button>
+                <button class="btn-indicator active" data-ind="ema200">
+                    <div class="ind-dot"></div> EMA 200
+                </button>
+                <button class="btn-indicator active" data-ind="stoch">
+                    <div class="ind-dot"></div> STOCH (5,3,3)
+                </button>
+            </div>
+
+            <div class="topbar-right">
+                <button id="btn-reset-zoom" class="btn-action" title="Reset Chart Zoom [R]">RESET</button>
+                <button id="btn-auto-refresh" class="btn-action" title="Toggle Auto-Refresh">PAUSE</button>
+                <button id="btn-fullscreen" class="btn-action" title="Toggle Fullscreen">[ ⛶ FULLSCREEN ]</button>
+                <div id="status-pill" class="status-pill">
+                    <span id="status-text">● LIVE</span>
+                </div>
+                <!-- REQUIRED VELA ATTRIBUTION -->
+                <div class="attribution-badge">
+                    <span>Powered by</span>
+                    <a href="https://velacharts.dev" target="_blank" rel="noopener">Vela™ by LuxAlgo</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- OHLC METRIC STRIP -->
+        <div class="ohlc-strip">
+            <div class="ohlc-item">BAR: <span id="ohlc-time" class="val">--</span></div>
+            <div class="ohlc-item">O: <span id="ohlc-open" class="val">--</span></div>
+            <div class="ohlc-item">H: <span id="ohlc-high" class="val">--</span></div>
+            <div class="ohlc-item">L: <span id="ohlc-low" class="val">--</span></div>
+            <div class="ohlc-item">C: <span id="ohlc-close" class="val">--</span></div>
+            <div class="ohlc-item">CHG: <span id="ohlc-chg" class="val">--</span></div>
+            <div class="ohlc-item">VOL: <span id="ohlc-vol" class="val">--</span></div>
+        </div>
+
+        <!-- MAIN WORKSPACE -->
+        <main class="main-workspace">
+            <!-- CHART CONTAINER -->
+            <div class="chart-pane">
+                <div id="chart"></div>
+
+                <!-- OVERLAYS -->
+                <div id="loading-overlay" class="overlay-state hidden">
+                    <div class="spinner"></div>
+                    <div class="overlay-text">LOADING MARKET CANDLES...</div>
+                </div>
+
+                <div id="error-overlay" class="overlay-state hidden">
+                    <div class="overlay-text overlay-error" id="error-message">BACKEND DISCONNECTED</div>
+                    <button id="btn-retry" class="btn-action" style="margin-top: 10px; color: var(--ams-amber);">RETRY CONNECTION</button>
+                </div>
+
+                <div id="empty-overlay" class="overlay-state hidden">
+                    <div class="overlay-text">NO CANDLE DATA AVAILABLE</div>
+                </div>
+            </div>
+
+            <!-- RIGHT ORDER BOOK PANEL -->
+            <aside class="orderbook-pane">
+                <div class="ob-header">
+                    <span>ORDER BOOK DEPTH</span>
+                    <span class="venue-tag">CROSS-VENUE</span>
+                </div>
+                <div class="ob-table-header">
+                    <div>PRICE (USDT)</div>
+                    <div>SIZE</div>
+                    <div>TOTAL ($)</div>
+                </div>
+
+                <!-- Asks -->
+                <div id="ob-asks" class="ob-list asks"></div>
+
+                <!-- Spread & Mid -->
+                <div class="ob-spread-bar">
+                    <span id="ob-spread">SPREAD: 0.01 bps</span>
+                    <span id="ob-mid" class="mid-val">80,736.00</span>
+                </div>
+
+                <!-- Bids -->
+                <div id="ob-bids" class="ob-list bids"></div>
+
+                <!-- Distinction Disclosure -->
+                <div class="ob-disclosure">
+                    ORDER BOOK DEPTH: Visible resting maker orders. DISTINCT from historical structural liquidity.
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="lib/vela.global.js"></script>
+    <script src="adapter.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
