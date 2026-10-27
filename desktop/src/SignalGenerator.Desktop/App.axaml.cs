@@ -37,6 +37,10 @@ public partial class App : Application
                     {
                         mainVm.Navigate(desktop.Args[i + 1]);
                     }
+                    if (desktop.Args[i].Equals("--fx-pair", StringComparison.OrdinalIgnoreCase) && i + 1 < desktop.Args.Length)
+                    {
+                        mainVm.OverviewVm.SelectedFxPair = desktop.Args[i + 1];
+                    }
                 }
             }
 

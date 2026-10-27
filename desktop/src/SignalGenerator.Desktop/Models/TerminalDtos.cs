@@ -1120,14 +1120,53 @@ public class FeedSourceStatusDto
 
 #region 7. Overview Command Center (FX, Market Pulse & Operational Stream)
 
+public class FxPairConfig
+{
+    public string PairKey { get; set; } = "USD/IDR";
+    public string BaseCurrency { get; set; } = "USD";
+    public string QuoteCurrency { get; set; } = "IDR";
+    public string DisplayName { get; set; } = "USD/IDR";
+    public string RatePrefix { get; set; } = "Rp ";
+    public int Decimals { get; set; } = 2;
+    public decimal FallbackRate { get; set; } = 18139m;
+    public string RateType { get; set; } = "Daily Reference Rate (ECB Official Fix)";
+
+    public static readonly IReadOnlyList<FxPairConfig> DefaultPairs = new List<FxPairConfig>
+    {
+        new() { PairKey = "USD/IDR", BaseCurrency = "USD", QuoteCurrency = "IDR", DisplayName = "USD/IDR", RatePrefix = "Rp ", Decimals = 2, FallbackRate = 18139m, RateType = "Daily Reference Rate (ECB Fix)" },
+        new() { PairKey = "USD/JPY", BaseCurrency = "USD", QuoteCurrency = "JPY", DisplayName = "USD/JPY", RatePrefix = "¥ ", Decimals = 2, FallbackRate = 157.82m, RateType = "Daily Reference Rate (ECB Fix)" },
+        new() { PairKey = "IDR/JPY", BaseCurrency = "IDR", QuoteCurrency = "JPY", DisplayName = "IDR/JPY", RatePrefix = "¥ ", Decimals = 6, FallbackRate = 0.008701m, RateType = "Daily Reference Cross-Rate (ECB Fix)" },
+        new() { PairKey = "EUR/USD", BaseCurrency = "EUR", QuoteCurrency = "USD", DisplayName = "EUR/USD", RatePrefix = "$ ", Decimals = 4, FallbackRate = 1.1150m, RateType = "Daily Reference Rate (ECB Fix)" },
+        new() { PairKey = "GBP/USD", BaseCurrency = "GBP", QuoteCurrency = "USD", DisplayName = "GBP/USD", RatePrefix = "$ ", Decimals = 4, FallbackRate = 1.3328m, RateType = "Daily Reference Rate (ECB Fix)" },
+        new() { PairKey = "AUD/USD", BaseCurrency = "AUD", QuoteCurrency = "USD", DisplayName = "AUD/USD", RatePrefix = "$ ", Decimals = 4, FallbackRate = 0.7032m, RateType = "Daily Reference Rate (ECB Fix)" }
+    };
+
+    public static FxPairConfig GetConfig(string? pair)
+    {
+        var normalized = string.IsNullOrWhiteSpace(pair) ? "USD/IDR" : pair.Trim().ToUpperInvariant();
+        for (int i = 0; i < DefaultPairs.Count; i++)
+        {
+            if (DefaultPairs[i].PairKey.Equals(normalized, StringComparison.OrdinalIgnoreCase))
+                return DefaultPairs[i];
+        }
+        return new FxPairConfig { PairKey = normalized, DisplayName = normalized };
+    }
+}
+
 public class FxDataPointDto
 {
     public DateTime Date { get; set; }
     public decimal Rate { get; set; }
+    public decimal? Open { get; set; }
+    public decimal? High { get; set; }
+    public decimal? Low { get; set; }
+    public decimal? Close { get; set; }
+    public bool IsOhlc => Open.HasValue && High.HasValue && Low.HasValue && Close.HasValue;
 }
 
 public class FxHistoricalSeriesDto
 {
+    public string Pair { get; set; } = "USD/IDR";
     public string Period { get; set; } = "1M";
     public decimal CurrentRate { get; set; }
     public decimal StartRate { get; set; }
@@ -1139,19 +1178,43 @@ public class FxHistoricalSeriesDto
     public string Source { get; set; } = "European Central Bank (ECB) via Frankfurter API";
     public bool IsStale { get; set; }
     public string? ErrorMessage { get; set; }
+    public string RateType { get; set; } = "Daily Reference Rate (ECB Official Fix)";
+    public int Decimals { get; set; } = 2;
+    public string Prefix { get; set; } = "Rp ";
 
-    public string FormattedCurrentRate => $"Rp {CurrentRate.ToString("N2", CultureInfo.InvariantCulture)}";
+    public string FormattedCurrentRate => $"{Prefix}{CurrentRate.ToString(GetFormatString(), CultureInfo.InvariantCulture)}";
     public string FormattedChange => (ChangePct >= 0 ? "+" : "") + $"{ChangePct.ToString("F2", CultureInfo.InvariantCulture)}% ({Period})";
     public string ChangeColor => ChangePct > 0 ? "#00E676" : (ChangePct < 0 ? "#FF5252" : "#8B949E");
-    public string FormattedUsdtEstimate => $"~Rp {CurrentRate.ToString("N2", CultureInfo.InvariantCulture)} (1:1 USD Peg Est.)";
+    public string FormattedUsdtEstimate => Pair switch
+    {
+        "USD/IDR" => $"~Rp {CurrentRate.ToString("N2", CultureInfo.InvariantCulture)} (1:1 USD Peg Est.)",
+        "USD/JPY" => $"~¥ {CurrentRate.ToString("N2", CultureInfo.InvariantCulture)} (1:1 USD Peg Est.)",
+        "EUR/USD" => $"~${CurrentRate.ToString("N4", CultureInfo.InvariantCulture)} USDT/EUR",
+        "GBP/USD" => $"~${CurrentRate.ToString("N4", CultureInfo.InvariantCulture)} USDT/GBP",
+        "AUD/USD" => $"~${CurrentRate.ToString("N4", CultureInfo.InvariantCulture)} USDT/AUD",
+        "IDR/JPY" => "Cross: (USD/JPY)/(USD/IDR)",
+        _ => $"~{CurrentRate.ToString(GetFormatString(), CultureInfo.InvariantCulture)}"
+    };
     public string DisplayFetchedTime => FetchedAtUtc.ToString("HH:mm:ss") + " UTC";
+
+    public string GetFormatString() => Decimals switch
+    {
+        2 => "N2",
+        3 => "N3",
+        4 => "N4",
+        5 => "N5",
+        6 => "N6",
+        _ => "N4"
+    };
 }
 
 public class FxRateSnapshotDto
 {
+    public string Pair { get; set; } = "USD/IDR";
     public decimal Rate { get; set; }
     public DateTime Date { get; set; }
     public string Source { get; set; } = "European Central Bank (ECB)";
+    public string RateType { get; set; } = "Daily Reference Rate (ECB Fix)";
     public bool IsStale { get; set; }
     public string? ErrorMessage { get; set; }
 }

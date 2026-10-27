@@ -75,10 +75,18 @@ public class MainViewModelTests
     private class MockFxRateService : IFxRateService
     {
         public Task<FxRateSnapshotDto> GetLatestRateAsync(CancellationToken ct = default) =>
-            Task.FromResult(new FxRateSnapshotDto { Rate = 18139m, Date = DateTime.UtcNow });
+            GetLatestRateAsync("USD/IDR", ct);
+
+        public Task<FxRateSnapshotDto> GetLatestRateAsync(string pair, CancellationToken ct = default) =>
+            Task.FromResult(new FxRateSnapshotDto { Pair = pair, Rate = 18139m, Date = DateTime.UtcNow });
 
         public Task<FxHistoricalSeriesDto> GetHistoricalSeriesAsync(string period, CancellationToken ct = default) =>
-            Task.FromResult(new FxHistoricalSeriesDto { Period = period, CurrentRate = 18139m, StartRate = 18000m, ChangePct = 0.77m, MinRate = 17950m, MaxRate = 18200m });
+            GetHistoricalSeriesAsync("USD/IDR", period, ct);
+
+        public Task<FxHistoricalSeriesDto> GetHistoricalSeriesAsync(string pair, string period, CancellationToken ct = default) =>
+            Task.FromResult(new FxHistoricalSeriesDto { Pair = pair, Period = period, CurrentRate = 18139m, StartRate = 18000m, ChangePct = 0.77m, MinRate = 17950m, MaxRate = 18200m });
+
+        public IReadOnlyList<FxPairConfig> GetSupportedPairs() => FxPairConfig.DefaultPairs;
     }
 
     private (MainViewModel Vm, MockPollingCoordinator Coord, MockApiClient Client) CreateMainVm()

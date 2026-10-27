@@ -317,22 +317,40 @@
                     </StackPanel>
                 </Border>
 
-                <!-- SECTION 3B: USD/IDR FX MONITOR -->
+                <!-- SECTION 3B: MULTI-PAIR FX MONITOR -->
                 <Border Grid.Column="1" Margin="5,0,0,0" Background="#0A0D10" BorderBrush="#242A34" BorderThickness="1" Padding="10">
                     <StackPanel Spacing="6">
                         
                         <Grid ColumnDefinitions="*,Auto">
                             <StackPanel Grid.Column="0">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="■ USD/IDR FX MONITOR" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" />
-                                    <TextBlock Text="//" FontSize="11" FontFamily="Consolas, monospace" Foreground="#545D68" />
-                                    <TextBlock Text="{Binding FxSeries.FormattedCurrentRate, FallbackValue='Rp 18,139.00'}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" />
+                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding FxMonitorTitle, FallbackValue='■ USD/IDR FX MONITOR'}" FontSize="11" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#FF9D00" VerticalAlignment="Center" />
+                                    
+                                    <!-- Currency Pair Selector Dropdown -->
+                                    <ComboBox ItemsSource="{Binding AvailableFxPairs}"
+                                              SelectedItem="{Binding SelectedFxPair}"
+                                              Background="#12161C" 
+                                              Foreground="#F0F4F8" 
+                                              BorderBrush="#242A34" 
+                                              FontFamily="Consolas, monospace" 
+                                              FontSize="9" 
+                                              FontWeight="Bold"
+                                              Padding="6,2" 
+                                              Height="22"
+                                              VerticalAlignment="Center" />
+
+                                    <TextBlock Text="//" FontSize="11" FontFamily="Consolas, monospace" Foreground="#545D68" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding FxSeries.FormattedCurrentRate, FallbackValue='Rp 18,139.00'}" FontSize="12" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding FxSeries.FormattedChange, FallbackValue='+0.00% (1M)'}" FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="{Binding FxSeries.ChangeColor}" VerticalAlignment="Center" />
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,3,0,0">
                                     <TextBlock Text="{Binding FxSeries.FormattedUsdtEstimate, FallbackValue='~Rp 18,139.00 (1:1 USD Peg Est.)'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
                                     <TextBlock Text="|" FontSize="8" FontFamily="Consolas, monospace" Foreground="#242A34" />
+                                    <TextBlock Text="{Binding FxSeries.RateType, FallbackValue='DAILY REFERENCE RATE'}" FontSize="8" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#448AFF" />
+                                    <TextBlock Text="|" FontSize="8" FontFamily="Consolas, monospace" Foreground="#242A34" />
                                     <TextBlock Text="{Binding FxSeries.Source, FallbackValue='European Central Bank (ECB) fix'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#545D68" />
+                                    <TextBlock Text="|" FontSize="8" FontFamily="Consolas, monospace" Foreground="#242A34" />
+                                    <TextBlock Text="{Binding FxSeries.DisplayFetchedTime, StringFormat='SYNC: {0}'}" FontSize="8" FontFamily="Consolas, monospace" Foreground="#8B949E" />
                                 </StackPanel>
                             </StackPanel>
 
@@ -346,11 +364,15 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Historical Line Chart Canvas -->
+                        <!-- Historical Line Chart Canvas with Interactive Crosshair -->
                         <Border Background="#080B0E" BorderBrush="#1C212A" BorderThickness="1" Height="130" Margin="0,2,0,0">
                             <controls:FxLineChart Points="{Binding FxSeries.Points}" 
                                                   MinRate="{Binding FxSeries.MinRate}" 
-                                                  MaxRate="{Binding FxSeries.MaxRate}" />
+                                                  MaxRate="{Binding FxSeries.MaxRate}"
+                                                  Decimals="{Binding FxSeries.Decimals}"
+                                                  RatePrefix="{Binding FxSeries.Prefix}"
+                                                  PairName="{Binding SelectedFxPair}"
+                                                  RateType="{Binding FxSeries.RateType}" />
                         </Border>
 
                     </StackPanel>

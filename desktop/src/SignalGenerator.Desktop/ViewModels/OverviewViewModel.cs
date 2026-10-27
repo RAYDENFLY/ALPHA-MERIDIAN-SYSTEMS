@@ -168,7 +168,23 @@ public partial class OverviewViewModel : ViewModelBase
 
     #endregion
 
-    #region 3. USD/IDR FX Monitor Observables
+    #region 3. Multi-Pair FX Monitor Observables
+
+    [ObservableProperty]
+    private ObservableCollection<string> _availableFxPairs = new()
+    {
+        "USD/IDR",
+        "USD/JPY",
+        "IDR/JPY",
+        "EUR/USD",
+        "GBP/USD",
+        "AUD/USD"
+    };
+
+    [ObservableProperty]
+    private string _selectedFxPair = "USD/IDR";
+
+    public string FxMonitorTitle => $"■ {SelectedFxPair} FX MONITOR";
 
     [ObservableProperty]
     private FxHistoricalSeriesDto? _fxSeries;
@@ -372,6 +388,21 @@ public partial class OverviewViewModel : ViewModelBase
         }
     }
 
+    partial void OnSelectedFxPairChanged(string value)
+    {
+        OnPropertyChanged(nameof(FxMonitorTitle));
+        _ = LoadFxHistoricalAsync(SelectedFxPeriod);
+    }
+
+    [RelayCommand]
+    public async Task SelectFxPairAsync(string pair)
+    {
+        if (string.IsNullOrWhiteSpace(pair) || pair == SelectedFxPair) return;
+        SelectedFxPair = pair;
+        OnPropertyChanged(nameof(FxMonitorTitle));
+        await LoadFxHistoricalAsync(SelectedFxPeriod);
+    }
+
     [RelayCommand]
     public async Task SelectFxPeriodAsync(string period)
     {
@@ -386,7 +417,7 @@ public partial class OverviewViewModel : ViewModelBase
         FxErrorMessage = null;
         try
         {
-            var series = await _fxRateService.GetHistoricalSeriesAsync(period);
+            var series = await _fxRateService.GetHistoricalSeriesAsync(SelectedFxPair, period);
             FxSeries = series;
             if (series.IsStale && !string.IsNullOrWhiteSpace(series.ErrorMessage))
             {
@@ -395,7 +426,7 @@ public partial class OverviewViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            FxErrorMessage = $"Failed to load FX rate: {ex.Message}";
+            FxErrorMessage = $"Failed to load FX rate for {SelectedFxPair}: {ex.Message}";
         }
         finally
         {
