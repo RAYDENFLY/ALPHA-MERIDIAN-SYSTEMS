@@ -242,7 +242,7 @@
         <!-- Bottom Terminal Status Strip -->
         <Border Grid.Row="2" Background="#080B0E" BorderBrush="#242A34" BorderThickness="0,1,0,0" Padding="12,4">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Column="0" Text="■ ALPHA MERIDIAN SYSTEMS // QUANTITATIVE INTELLIGENCE — BY AMS CAPITAL" 
+                <TextBlock Grid.Column="0" Text="© 2026 PT Authentic Media Services. Alpha Meridian Systems is a product of AMS Capital." 
                            FontSize="10" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#8B949E" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="2" Text="READ-ONLY FINANCIAL CLIENT — ZERO MUTATION INVARIANT ENFORCED" 
                            FontSize="9" FontWeight="Bold" FontFamily="Consolas, monospace" Foreground="#00E676" VerticalAlignment="Center" />

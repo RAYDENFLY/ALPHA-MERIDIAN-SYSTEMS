@@ -192,6 +192,18 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void MainWindow_ContainsOfficialCorporateCopyrightFooter()
+    {
+        const string expectedFooter = "© 2026 PT Authentic Media Services. Alpha Meridian Systems is a product of AMS Capital.";
+        string altPath = System.IO.Path.GetFullPath("desktop/src/SignalGenerator.Desktop/Views/MainWindow.axaml");
+        if (System.IO.File.Exists(altPath))
+        {
+            string content = System.IO.File.ReadAllText(altPath);
+            Assert.Contains(expectedFooter, content);
+        }
+    }
+
+    [Fact]
     public void MainViewModel_NavigatesAcrossTerminalViews()
     {
         var (vm, _, _) = CreateMainVm();

@@ -8,9 +8,9 @@
     <Title>Alpha Meridian Systems</Title>
     <Product>Alpha Meridian Systems</Product>
     <Description>Alpha Meridian Systems — Quantitative Intelligence Workstation by AMS Capital</Description>
-    <Company>AMS Capital</Company>
+    <Company>PT Authentic Media Services</Company>
     <Authors>AMS Capital</Authors>
-    <Copyright>© 2026 AMS Capital. All rights reserved.</Copyright>
+    <Copyright>© 2026 PT Authentic Media Services. Alpha Meridian Systems is a product of AMS Capital.</Copyright>
     <PackageId>AlphaMeridianSystems</PackageId>
     <ApplicationIcon>Assets\ams-logo.ico</ApplicationIcon>
   </PropertyGroup>

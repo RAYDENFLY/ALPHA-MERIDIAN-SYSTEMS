@@ -117,7 +117,7 @@
                             <TextBlock Grid.Row="2" Grid.Column="1" Text="Avalonia UI 11.2 (Skia-rendered)" FontSize="9" FontFamily="Consolas, monospace" Foreground="#C9D1D9" Margin="0,3,0,0" />
 
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="LEGAL &amp; COPYRIGHT:" FontSize="9" FontFamily="Consolas, monospace" Foreground="#8B949E" Margin="0,3,0,0" />
-                            <TextBlock Grid.Row="3" Grid.Column="1" Text="© 2026 AMS Capital. Proprietary &amp; Confidential." FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" Margin="0,3,0,0" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="© 2026 PT Authentic Media Services. Alpha Meridian Systems is a product of AMS Capital." FontSize="9" FontFamily="Consolas, monospace" Foreground="#545D68" Margin="0,3,0,0" />
                         </Grid>
                     </Border>
                 </StackPanel>
